@@ -33,6 +33,8 @@ def test_matcher_returns_explainable_full_score_for_supported_job() -> None:
     result = match_resume_to_job(parse_resume_text(RESUME_TEXT), job)
 
     assert result.score == 100
+    assert result.eligible is True
+    assert result.disqualifiers == ()
     assert result.minimum_score_applied is False
     assert result.breakdown.total == 100
     assert result.job_skills == ("Python", "FastAPI", "PostgreSQL", "Docker")
@@ -143,3 +145,124 @@ B.Sc. Computer Science
     assert result.breakdown.experience.points == 0
     assert result.breakdown.projects.points == 0
     assert result.score == 65
+
+
+def test_phd_role_is_ineligible_for_bachelors_resume() -> None:
+    resume = parse_resume_text(RESUME_TEXT)
+    job = JobPosting(
+        title="Software Engineering Intern PhD",
+        company="Example",
+        location="Remote",
+        job_url="https://example.com/jobs/phd",
+        requirements="Python and FastAPI",
+    )
+
+    result = match_resume_to_job(resume, job)
+
+    assert result.eligible is False
+    assert result.score <= 25
+    assert "PhD" in result.disqualifiers[0]
+
+
+def test_bsms_role_accepts_bachelors_resume() -> None:
+    resume = parse_resume_text(RESUME_TEXT)
+    job = JobPosting(
+        title="Software Engineering BSMS Intern",
+        company="Example",
+        location="Remote",
+        job_url="https://example.com/jobs/bsms",
+        requirements="Python",
+    )
+
+    assert match_resume_to_job(resume, job).eligible is True
+
+
+def test_bsms_role_accepts_university_student_without_explicit_degree_label() -> None:
+    resume = parse_resume_text(
+        """Dana Developer
+Third-year Software Engineering student.
+SKILLS
+Python
+EDUCATION
+Software Engineering | Example University
+2024-2027
+"""
+    )
+    job = JobPosting(
+        title="Software Engineering BSMS Intern",
+        company="Example",
+        location="Remote",
+        job_url="https://example.com/jobs/bsms-student",
+        requirements="Python",
+    )
+
+    assert match_resume_to_job(resume, job).eligible is True
+
+
+def test_required_degree_is_not_confused_with_preferred_degree() -> None:
+    resume = parse_resume_text(RESUME_TEXT)
+    job = JobPosting(
+        title="Software Intern",
+        company="Example",
+        location="Remote",
+        job_url="https://example.com/jobs/masters",
+        requirements="Bachelor's degree preferred; Master's degree required; Python",
+    )
+
+    result = match_resume_to_job(resume, job)
+
+    assert result.eligible is False
+    assert "master's" in result.disqualifiers[0]
+
+
+def test_preferred_phd_is_not_a_hard_requirement() -> None:
+    resume = parse_resume_text(RESUME_TEXT)
+    job = JobPosting(
+        title="Software Intern",
+        company="Example",
+        location="Remote",
+        job_url="https://example.com/jobs/preferred-phd",
+        requirements="Python required. PhD preferred.",
+    )
+
+    assert match_resume_to_job(resume, job).eligible is True
+
+
+def test_degree_mentions_outside_education_do_not_satisfy_eligibility() -> None:
+    resume = parse_resume_text(
+        """Dana Developer
+SKILLS
+Python
+PROJECTS
+Built a portal for university PhD students.
+"""
+    )
+    job = JobPosting(
+        title="Software Engineering BSMS Intern",
+        company="Example",
+        location="Remote",
+        job_url="https://example.com/jobs/no-education",
+        requirements="Python",
+    )
+
+    assert match_resume_to_job(resume, job).eligible is False
+
+
+def test_masters_candidate_qualifies_for_masters_or_phd_title() -> None:
+    resume = parse_resume_text(
+        """Dana Developer
+SKILLS
+Python
+EDUCATION
+M.Sc. Computer Science, Example University
+"""
+    )
+    job = JobPosting(
+        title="Master's/PhD Research Intern",
+        company="Example",
+        location="Remote",
+        job_url="https://example.com/jobs/ms-phd",
+        requirements="Python required.",
+    )
+
+    assert match_resume_to_job(resume, job).eligible is True

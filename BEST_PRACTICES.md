@@ -14,6 +14,9 @@ reusable lesson appears.
   directories. Confirm installation by launching Chromium, not only by listing it.
 - Keep generated SQLite databases, virtual environments, caches, and bytecode out
   of Git.
+- In PowerShell conditions, wrap cmdlet calls such as `Test-Path` in parentheses
+  before combining them with `-and` or `-or`; otherwise the operator may be parsed
+  as a cmdlet parameter.
 
 ## Agent workflow and context
 
@@ -76,3 +79,9 @@ reusable lesson appears.
 - Do not include raw resume text or contact details in match output or logs.
 - Keep resume matching independent of storage and network services so the same
   domain service can run locally, in a container, or behind a future API.
+- Validate parsing against the rendered resume, not extracted text alone. Styled
+  PDF text can split a person's name or heading into separate extraction lines.
+- Calibrate the canonical skill dictionary with real resume vocabulary, but keep
+  aliases boundary-aware to avoid substring false positives.
+- Treat hard eligibility requirements separately from fit score. A strong skill
+  overlap must not rank a PhD-only role above an eligible bachelor's-level role.

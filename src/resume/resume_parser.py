@@ -36,6 +36,18 @@ SKILL_ALIASES = {
     "Pytest": ("pytest",), "Machine Learning": ("machine learning",),
     "Pandas": ("pandas",), "NumPy": ("numpy",),
     "TensorFlow": ("tensorflow",), "PyTorch": ("pytorch",),
+    "Qt/QML": ("qt", "qt6", "qml"), "CMake": ("cmake",),
+    "WebSockets": ("websocket", "websockets"),
+    "Express.js": ("express.js", "expressjs"),
+    "Algorithms": ("algorithm", "algorithms"),
+    "Data Structures": ("data structure", "data structures"),
+    "Object-Oriented Programming": ("object-oriented programming", "oop"),
+    "Multithreading": ("multithreading", "multi-threading"),
+    "Microservices": ("microservice", "microservices"),
+    "Unit Testing": ("unit test", "unit tests", "unit testing"),
+    "Integration Testing": ("integration test", "integration tests", "integration testing"),
+    "Regression Testing": ("regression test", "regression tests", "regression testing"),
+    "CTest": ("ctest",),
 }
 
 
@@ -135,11 +147,28 @@ def _canonical_heading(line: str) -> str | None:
 
 
 def _extract_name(header: str) -> str:
-    for line in header.splitlines():
-        candidate = line.strip()
-        if candidate and "@" not in candidate and not any(char.isdigit() for char in candidate):
-            return candidate
+    lines = [line.strip() for line in header.splitlines() if line.strip()]
+    for index, candidate in enumerate(lines):
+        if "@" in candidate or any(char.isdigit() for char in candidate):
+            continue
+        if (
+            index + 1 < len(lines)
+            and candidate.isupper()
+            and _looks_like_name_fragment(candidate)
+            and lines[index + 1].isupper()
+            and _looks_like_name_fragment(lines[index + 1])
+        ):
+            return f"{candidate} {lines[index + 1]}".title()
+        return candidate
     return ""
+
+
+def _looks_like_name_fragment(value: str) -> bool:
+    role_words = {"developer", "engineer", "engineering", "student", "manager"}
+    words = value.casefold().replace("-", " ").replace("'", " ").split()
+    return 1 <= len(words) <= 3 and not role_words.intersection(words) and all(
+        word.isalpha() for word in words
+    )
 
 
 def _normalize_text(text: str) -> str:

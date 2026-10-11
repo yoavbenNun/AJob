@@ -114,7 +114,11 @@ def _run_match(args: argparse.Namespace) -> int:
 
         ranked = sorted(
             ((job, match_resume_to_job(profile, job)) for job in jobs),
-            key=lambda item: (-item[1].score, -(item[0].id or 0)),
+            key=lambda item: (
+                not item[1].eligible,
+                -item[1].score,
+                -(item[0].id or 0),
+            ),
         )
         if args.job_id is None:
             ranked = ranked[: args.limit]
@@ -152,6 +156,9 @@ def _print_matches(ranked) -> None:
     for index, (job, result) in enumerate(ranked, start=1):
         print(f"{index}. {job.title} at {job.company} - {result.score}/100")
         print(f"   {job.location} | {job.job_url}")
+        print(f"   Eligibility: {'eligible' if result.eligible else 'manual review required'}")
+        for disqualifier in result.disqualifiers:
+            print(f"   Disqualifier: {disqualifier}")
         print(f"   Matched skills: {', '.join(result.matched_skills) or 'None'}")
         print(f"   Missing skills: {', '.join(result.missing_skills) or 'None identified'}")
         for strength in result.strengths:

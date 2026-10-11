@@ -77,3 +77,24 @@ def test_parse_resume_reads_docx_file(tmp_path: Path) -> None:
     assert profile.name == "Dana Developer"
     assert "Python" in profile.skills
     assert "Example Ltd" in profile.experience
+
+
+def test_parse_resume_combines_split_uppercase_name_and_extended_skills() -> None:
+    profile = parse_resume_text(
+        """YOAV
+BEN-NOON
+Software Engineering | Student
+PROJECTS
+Built C++ systems with Qt6/QML, CMake, WebSockets, microservices, and unit tests.
+"""
+    )
+
+    assert profile.name == "Yoav Ben-Noon"
+    assert profile.skills == (
+        "C++",
+        "Qt/QML",
+        "CMake",
+        "WebSockets",
+        "Microservices",
+        "Unit Testing",
+    )

@@ -47,6 +47,8 @@ class MatchResult:
     """A score and evidence-based guidance for one resume and job posting."""
 
     score: int
+    eligible: bool
+    disqualifiers: tuple[str, ...]
     minimum_score_applied: bool
     breakdown: MatchBreakdown
     job_skills: tuple[str, ...]
@@ -84,7 +86,9 @@ def match_resume_to_job(resume: ResumeProfile, job: JobPosting) -> MatchResult:
         PROJECT_POINTS,
         "projects",
     )
-    education_component = _education_component(resume.education)
+    education_component, education_disqualifiers = _education_component(
+        resume.education, resume.summary, job.title, job.requirements
+    )
     breakdown = MatchBreakdown(
         skills=skill_component,
         experience=experience_component,
@@ -93,6 +97,9 @@ def match_resume_to_job(resume: ResumeProfile, job: JobPosting) -> MatchResult:
     )
     minimum_score_applied = breakdown.total == 0
     score = max(1, min(100, breakdown.total))
+    eligible = not education_disqualifiers
+    if not eligible:
+        score = min(score, 25)
     strengths = _strengths(resume, matched_skills, experience_component, project_component)
     gaps = _gaps(resume, required_skills, missing_skills)
     suggestions = _tailoring_suggestions(
@@ -103,6 +110,8 @@ def match_resume_to_job(resume: ResumeProfile, job: JobPosting) -> MatchResult:
     )
     return MatchResult(
         score=score,
+        eligible=eligible,
+        disqualifiers=education_disqualifiers,
         minimum_score_applied=minimum_score_applied,
         breakdown=breakdown,
         job_skills=required_skills,
@@ -178,10 +187,97 @@ def _skill_is_in_text(skill: str, text: str) -> bool:
     )
 
 
-def _education_component(education: str) -> ScoreComponent:
+def _education_component(
+    education: str, summary: str, job_title: str, requirements: str
+) -> tuple[ScoreComponent, tuple[str, ...]]:
+    candidate_level = _candidate_education_level(education, summary)
+    required_level = _required_education_level(job_title, requirements)
+    if required_level > candidate_level:
+        names = {1: "bachelor's", 2: "master's", 3: "PhD"}
+        requirement = names[required_level]
+        return (
+            ScoreComponent(
+                0,
+                EDUCATION_POINTS,
+                f"job appears to require {requirement} education not shown on the resume",
+            ),
+            (f"Education mismatch: job appears to require a {requirement} degree.",),
+        )
     if education.strip():
-        return ScoreComponent(EDUCATION_POINTS, EDUCATION_POINTS, "resume includes education")
-    return ScoreComponent(0, EDUCATION_POINTS, "resume has no education section content")
+        return (
+            ScoreComponent(EDUCATION_POINTS, EDUCATION_POINTS, "resume includes education"),
+            (),
+        )
+    return (
+        ScoreComponent(0, EDUCATION_POINTS, "resume has no education section content"),
+        (),
+    )
+
+
+def _education_level(text: str) -> int:
+    normalized = text.casefold()
+    if re.search(r"\b(?:ph\.?d\.?|doctorate|doctoral)\b", normalized):
+        return 3
+    if re.search(r"\b(?:m\.?s\.?|m\.?sc\.?|master'?s?)\b", normalized):
+        return 2
+    if re.search(r"\b(?:b\.?s\.?|b\.?sc\.?|bachelor'?s?|bsms)\b", normalized):
+        return 1
+    return 0
+
+
+def _candidate_education_level(education: str, summary: str) -> int:
+    explicit_level = _education_level(f"{education}\n{summary}")
+    if explicit_level:
+        return explicit_level
+    normalized_education = education.casefold()
+    normalized_summary = summary.casefold()
+    has_institution = re.search(
+        r"\b(?:university|college)\b", normalized_education
+    ) is not None
+    has_study_evidence = "student" in normalized_summary or re.search(
+        r"\b20\d{2}\s*[-/]\s*20\d{2}\b", normalized_education
+    ) is not None
+    if has_institution and has_study_evidence:
+        return 1
+    return 0
+
+
+def _required_education_level(title: str, requirements: str) -> int:
+    normalized_title = title.casefold()
+    title_levels = _degree_levels(normalized_title)
+    if title_levels:
+        return min(title_levels)
+
+    hard_levels: list[int] = []
+    mode = "unknown"
+    for clause in re.split(r"[;\n.]", requirements.casefold()):
+        clause = clause.strip()
+        if not clause:
+            continue
+        if "preferred" in clause or "nice to have" in clause:
+            mode = "preferred"
+            continue
+        if "minimum qualification" in clause or "required" in clause:
+            mode = "required"
+        levels = _degree_levels(clause)
+        has_hard_marker = any(
+            marker in clause
+            for marker in ("required", "must", "currently pursuing", "enrolled")
+        )
+        if levels and (mode == "required" or has_hard_marker):
+            hard_levels.append(min(levels))
+    return max(hard_levels, default=0)
+
+
+def _degree_levels(text: str) -> list[int]:
+    levels: list[int] = []
+    if re.search(r"\b(?:bsms|b\.?s\.?|b\.?sc\.?|bachelor'?s?)\b", text):
+        levels.append(1)
+    if re.search(r"\b(?:m\.?s\.?|m\.?sc\.?|master'?s?)\b", text):
+        levels.append(2)
+    if re.search(r"\b(?:ph\.?d\.?|doctorate|doctoral)\b", text):
+        levels.append(3)
+    return levels
 
 
 def _strengths(
