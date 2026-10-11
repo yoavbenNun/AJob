@@ -45,6 +45,8 @@ reusable lesson appears.
 - Isolate failures per company so one slow, changed, or blocked site does not abort
   the entire scan.
 - Bound pagination and page timeouts. Deduplicate jobs by canonical URL across pages.
+- Canonicalize query parameter ordering and encoding before deduplication. `%20`
+  and `+` can represent the same query value and must not create duplicate jobs.
 - Confirm that listing content actually changed after clicking a pagination control;
   a visible or enabled next button does not prove navigation succeeded.
 - Do not claim a source is supported when its page exposes no usable job data.

@@ -3,11 +3,28 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+
+# Country names are matched as complete labels, not substrings, so an unknown
+# city-only location remains eligible for routing/manual review.
+_FOREIGN_COUNTRY_LABELS = frozenset(
+    {
+        "australia", "austria", "belgium", "brazil", "canada", "china",
+        "czech republic", "denmark", "finland", "france", "germany", "india",
+        "ireland", "italy", "japan", "mexico", "netherlands", "norway", "poland",
+        "portugal", "romania", "singapore", "south korea", "spain", "sweden",
+        "switzerland", "taiwan", "uk", "united kingdom", "united states", "usa",
+    }
+)
+_FOREIGN_CITY_LABELS = frozenset(
+    {"beijing", "krakow", "kraków", "london", "munich", "warsaw", "zurich", "zürich"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,10 +171,8 @@ def _is_remote(location: str) -> bool:
 
 
 def _is_clearly_outside_israel(location: str) -> bool:
-    lowered = location.casefold()
-    foreign_markers = (
-        "poland", "warsaw", "kraków", "krakow", "switzerland", "zürich", "zurich",
-        "germany", "munich", "united kingdom", "london, uk", "usa", "united states",
-        "canada", "india", "ireland", "netherlands", "france", "spain", "romania",
+    normalized = " ".join(re.sub(r"[^\w]+", " ", location.casefold()).split())
+    return any(
+        re.search(rf"(?<!\w){re.escape(label)}(?!\w)", normalized)
+        for label in _FOREIGN_COUNTRY_LABELS | _FOREIGN_CITY_LABELS
     )
-    return any(marker in lowered for marker in foreign_markers)

@@ -1,5 +1,5 @@
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import sqlite3
 
 from src.models import JobPosting
@@ -72,6 +72,61 @@ def test_repository_lists_only_relevant_jobs(tmp_path: Path) -> None:
     jobs = repository.list_relevant()
 
     assert [job.title for job in jobs] == ["Relevant Intern"]
+
+
+def test_repository_collapses_equivalent_job_url_encodings(tmp_path: Path) -> None:
+    repository = JobRepository(tmp_path / "jobs.db")
+    repository.initialize()
+    repository.save(
+        JobPosting(
+            "Older Intern", "Example", "Remote",
+            "https://example.com/jobs/1?q=software%20intern&team=platform",
+        )
+    )
+    repository.save(
+        JobPosting(
+            "Newer Intern", "Example", "Remote",
+            "https://example.com/jobs/1?team=platform&q=software+intern",
+        )
+    )
+
+    jobs = repository.list_relevant()
+
+    assert len(jobs) == 1
+    assert jobs[0].title == "Newer Intern"
+    assert len(repository.list_all()) == 1
+
+
+def test_initialize_merges_existing_equivalent_url_rows(tmp_path: Path) -> None:
+    database = tmp_path / "jobs.db"
+    repository = JobRepository(database)
+    repository.initialize()
+    now = datetime.now(timezone.utc)
+    with sqlite3.connect(database) as connection:
+        for title, url, discovered_at in (
+            (
+                "Newest by timestamp",
+                "https://EXAMPLE.com/jobs/1?q=software%20intern",
+                (now + timedelta(hours=1)).isoformat(),
+            ),
+            (
+                "Highest ID but stale",
+                "https://example.com/jobs/1?q=software+intern",
+                now.isoformat(),
+            ),
+        ):
+            connection.execute(
+                "INSERT INTO job_postings (title, company, location, job_url, "
+                "discovered_at, is_relevant) VALUES (?, ?, ?, ?, ?, ?)",
+                (title, "Example", "Remote", url, discovered_at, 1),
+            )
+
+    repository.initialize()
+
+    jobs = repository.list_all()
+    assert len(jobs) == 1
+    assert jobs[0].title == "Newest by timestamp"
+    assert jobs[0].job_url == "https://example.com/jobs/1?q=software+intern"
 
 
 def test_initialize_migrates_legacy_rows_as_unapproved(tmp_path: Path) -> None:

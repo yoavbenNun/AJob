@@ -3,12 +3,13 @@
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit
 
 from playwright.sync_api import Browser, Page, TimeoutError as PlaywrightTimeoutError
 
 from src.filtering.job_filter import classify_job, prefilter_job
 from src.models import Company, JobPosting
+from src.urls import canonical_url
 
 
 class JobWriter(Protocol):
@@ -46,10 +47,10 @@ def extract_jobs_from_links(
     configuration update rather than a new scraper implementation.
     """
     jobs_by_url: dict[str, JobPosting] = {}
-    careers_url = _canonical_url(company.careers_url)
+    careers_url = canonical_url(company.careers_url)
 
     for link in links:
-        url = _canonical_url(str(link.get("href", "")).strip())
+        url = canonical_url(str(link.get("href", "")).strip())
         raw_text = str(link.get("text", "")).strip()
         context = str(link.get("context", "")).strip()
         title = _first_nonempty_line(raw_text) or _title_from_url(url)
@@ -280,13 +281,6 @@ def extract_detail_location(description: str) -> str:
                 locations.append(normalized)
         return "; ".join(locations)[:200]
     return ""
-
-
-def _canonical_url(url: str) -> str:
-    if not url.startswith(("http://", "https://")):
-        return ""
-    parts = urlsplit(url)
-    return urlunsplit((parts.scheme, parts.netloc, parts.path.rstrip("/"), parts.query, ""))
 
 
 def _infer_location(context: str, title: str) -> str:

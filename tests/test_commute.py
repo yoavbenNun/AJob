@@ -57,6 +57,29 @@ def test_foreign_location_is_rejected_without_routing() -> None:
     assert not result.eligible
 
 
+def test_china_and_beijing_locations_are_rejected_without_routing() -> None:
+    for destination in ("Beijing, China", "Beijing", "Shanghai, China"):
+        result = evaluate_commute("Rishon Lezion, Israel", destination, None)
+        assert result.status == "outside_israel"
+        assert not result.eligible
+
+
+def test_common_foreign_country_labels_are_rejected_without_routing() -> None:
+    for destination in (
+        "Berlin, Germany", "Germany - Hybrid", "Germany.",
+        "Toronto, Canada", "Remote (United Kingdom)",
+    ):
+        result = evaluate_commute("Rishon Lezion, Israel", destination, None)
+        assert result.status == "outside_israel"
+        assert not result.eligible
+
+
+def test_israeli_and_unknown_city_only_locations_are_not_rejected() -> None:
+    for destination in ("Tel Aviv, Israel", "Rishon Lezion", "Exampleville"):
+        result = evaluate_commute("Rishon Lezion, Israel", destination, None)
+        assert result.status == "unknown"
+
+
 def test_unknown_location_requires_manual_review() -> None:
     result = evaluate_commute("Rishon Lezion, Israel", "Not specified", FakeProvider(20))
     assert result.status == "unknown"

@@ -55,6 +55,31 @@ def test_extract_jobs_from_links_filters_and_deduplicates() -> None:
     assert jobs[0].job_url == "https://example.com/positions/123"
 
 
+def test_extract_jobs_deduplicates_equivalent_query_encodings_and_order() -> None:
+    company = Company(
+        "Example",
+        "https://example.com/careers",
+        job_url_patterns=("/positions/",),
+    )
+    links = [
+        {
+            "href": "https://example.com/positions/123?q=software%20intern&team=platform",
+            "text": "Software Engineering Intern",
+            "context": "Software Engineering Intern\nTel Aviv, Israel",
+        },
+        {
+            "href": "HTTPS://EXAMPLE.com/positions/123?team=platform&q=software+intern",
+            "text": "Software Engineering Intern",
+            "context": "Software Engineering Intern\nTel Aviv, Israel",
+        },
+    ]
+
+    jobs = extract_jobs_from_links(company, links)
+
+    assert len(jobs) == 1
+    assert jobs[0].job_url == "https://example.com/positions/123?q=software+intern&team=platform"
+
+
 def test_extract_jobs_uses_url_slug_when_anchor_has_no_text() -> None:
     company = Company(
         "Example",

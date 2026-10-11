@@ -4,6 +4,7 @@ import sqlite3
 from pathlib import Path
 
 from src.models import JobPosting
+from src.urls import canonical_url
 
 
 class JobRepository:
@@ -40,11 +41,16 @@ class JobRepository:
                     "ALTER TABLE job_postings "
                     "ADD COLUMN is_relevant INTEGER NOT NULL DEFAULT 0"
                 )
+            self._merge_equivalent_urls(connection)
 
     def save(self, job: JobPosting) -> int:
         """Insert or update a posting by URL and return its database ID."""
         if job.discovered_at is None:
             raise ValueError("Job posting must have a discovery timestamp.")
+        normalized_url = canonical_url(job.job_url)
+        if not normalized_url:
+            raise ValueError("Job posting must have a valid HTTP(S) URL.")
+        job.job_url = normalized_url
 
         with self._connect() as connection:
             connection.execute(
@@ -100,18 +106,53 @@ class JobRepository:
         return _job_from_row(row) if row is not None else None
 
     def list_relevant(self) -> list[JobPosting]:
-        """Return only postings confirmed relevant by the current scan pipeline."""
+        """Return relevant postings, collapsing equivalent URL encodings."""
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT * FROM job_postings WHERE is_relevant = 1 "
                 "ORDER BY discovered_at DESC, id DESC"
             ).fetchall()
-        return [_job_from_row(row) for row in rows]
+        jobs: list[JobPosting] = []
+        seen: set[str] = set()
+        for row in rows:
+            job = _job_from_row(row)
+            identity = canonical_url(job.job_url)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            jobs.append(job)
+        return jobs
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path)
         connection.row_factory = sqlite3.Row
         return connection
+
+    @staticmethod
+    def _merge_equivalent_urls(connection: sqlite3.Connection) -> None:
+        """Keep the newest row for each canonical URL during migration."""
+        rows = connection.execute(
+            "SELECT id, job_url FROM job_postings ORDER BY discovered_at DESC, id DESC"
+        ).fetchall()
+        keepers: dict[str, int] = {}
+        duplicates: list[int] = []
+        for row in rows:
+            normalized = canonical_url(row["job_url"])
+            if not normalized:
+                continue
+            if normalized in keepers:
+                duplicates.append(int(row["id"]))
+                continue
+            keepers[normalized] = int(row["id"])
+        if duplicates:
+            connection.executemany(
+                "DELETE FROM job_postings WHERE id = ?",
+                ((job_id,) for job_id in duplicates),
+            )
+        connection.executemany(
+            "UPDATE job_postings SET job_url = ? WHERE id = ?",
+            ((url, job_id) for url, job_id in keepers.items()),
+        )
 
 
 def _parse_timestamp(value: str):
