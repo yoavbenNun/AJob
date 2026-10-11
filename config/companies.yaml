@@ -1,0 +1,24 @@
+companies:
+  - name: Microsoft
+    careers_url: https://jobs.careers.microsoft.com/global/en/search?q=software%20intern
+    enabled: true
+    job_url_patterns:
+      - /careers/job/
+    allowed_job_hosts:
+      - apply.careers.microsoft.com
+  - name: Google
+    careers_url: https://www.google.com/about/careers/applications/jobs/results/?q=software%20intern
+    enabled: true
+    job_url_patterns:
+      - /about/careers/applications/jobs/results/
+    allowed_job_hosts:
+      - www.google.com
+  - name: Wix
+    careers_url: https://careers.wix.com/positions
+    # The current page loads job data outside normal anchor markup. Keep this
+    # target documented until a dedicated Wix adapter is added in Phase 3.
+    enabled: false
+    job_url_patterns:
+      - /position/
+    allowed_job_hosts:
+      - careers.wix.com

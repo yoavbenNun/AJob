@@ -1,0 +1,1 @@
+"""Career-page scanning adapters."""

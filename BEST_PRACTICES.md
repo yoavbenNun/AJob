@@ -1,0 +1,53 @@
+# Project Best Practices
+
+This file records durable lessons discovered while building the AI Job Search
+Agent. Read it before making changes and update it when a new failure mode or
+reusable lesson appears.
+
+## Environment and verification
+
+- Do not assume `python` is globally available. Use the project `.venv` after
+  setup, and locate the workspace runtime when bootstrapping it.
+- Installing the Playwright Python package does not install browser binaries. Run
+  `playwright install chromium` and verify the executable can launch.
+- A timed-out Playwright installation may leave registered but incomplete browser
+  directories. Confirm installation by launching Chromium, not only by listing it.
+- Keep generated SQLite databases, virtual environments, caches, and bytecode out
+  of Git.
+
+## Career-site scraping
+
+- Career-site URL structures and rendered markup change. Keep job URL patterns in
+  configuration and verify them against live rendered links before relying on them.
+- Allowlist job-link hosts per company, including explicit external ATS hosts.
+  Matching a URL path alone is not enough to make an external link safe to fetch.
+- Some valid job anchors have no visible text. Use a deterministic URL-slug title
+  fallback, while preferring rendered titles when available.
+- Do not treat navigation labels such as "Learn more" or "Apply now" as locations.
+  Store `Not specified` when location evidence is unreliable.
+- Isolate failures per company so one slow, changed, or blocked site does not abort
+  the entire scan.
+- Bound pagination and page timeouts. Deduplicate jobs by canonical URL across pages.
+- Confirm that listing content actually changed after clicking a pagination control;
+  a visible or enabled next button does not prove navigation succeeded.
+- Do not claim a source is supported when its page exposes no usable job data.
+  Disable it explicitly and document the need for a dedicated adapter.
+
+## Relevance filtering
+
+- Separate cheap title-based prefiltering from final classification based on full
+  job details. This avoids opening clearly irrelevant roles without assuming every
+  unlevelled software title is junior.
+- Every relevance decision must have a human-readable reason.
+- Match classification terms on word or phrase boundaries. Raw substring checks can
+  confuse words such as `internally` with `intern` or `leadership` with `lead`.
+- Require positive early-career evidence and reject clear seniority markers.
+- Test both false negatives and false positives, especially titles where words such
+  as "developer" describe a program or audience rather than the job itself.
+
+## Data safety
+
+- Use idempotent URL-based upserts for discovered jobs.
+- Never delete or rewrite an existing jobs database merely because filtering rules
+  changed. Introduce an explicit migration or relevance state when needed.
+- Resume changes and application submission must always require human approval.

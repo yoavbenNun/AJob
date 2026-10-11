@@ -1,0 +1,19 @@
+Dana Developer
+dana@example.com | +972 50-123-4567
+
+SUMMARY
+Computer science student who builds backend services.
+
+TECHNICAL SKILLS
+Python, FastAPI, PostgreSQL, Docker, Git, JavaScript
+
+EXPERIENCE
+Software Engineering Intern, Example Ltd
+- Built REST APIs and tested them with Pytest.
+
+PROJECTS
+Job Search Agent
+- Used Playwright and SQLite.
+
+EDUCATION
+B.Sc. Computer Science, Example University
