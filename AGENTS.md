@@ -19,3 +19,9 @@ Follow the global Codex working rules. In particular:
   testable layers.
 - Never submit job applications or rewrite a resume without explicit human approval.
 - End every session with a handoff covering completed work and remaining work.
+- Prefer simple, surgical changes with explicit success criteria. Avoid unrelated
+  cleanup and stop when the requested behavior is verified.
+- Keep context lean with focused searches, bounded output, progressive disclosure,
+  and enough headroom for testing and unexpected failures.
+- Caveman is opt-in concise mode only. It must not hide safety information,
+  approvals, review findings, verification results, or session handoffs.

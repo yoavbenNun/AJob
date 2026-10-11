@@ -15,6 +15,20 @@ reusable lesson appears.
 - Keep generated SQLite databases, virtual environments, caches, and bytecode out
   of Git.
 
+## Agent workflow and context
+
+- Define observable success criteria before non-trivial changes and stop when they
+  are met. Do not add speculative architecture for later phases.
+- Keep changes surgical and avoid unrelated refactors or formatting churn.
+- Load context progressively: start with applicable instructions and directly
+  relevant files, then expand based on evidence.
+- Preserve context headroom for validation and failures by bounding searches, file
+  reads, logs, and test output.
+- Use Caveman only as an opt-in terse response skill. Do not use its proxy in this
+  project unless it is separately approved and benchmarked.
+- Do not stack LeanCTX, Headroom, or other context-transforming proxies without an
+  isolated comparison of correctness, privacy, reversibility, and actual savings.
+
 ## Career-site scraping
 
 - Career-site URL structures and rendered markup change. Keep job URL patterns in
