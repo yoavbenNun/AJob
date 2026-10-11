@@ -53,13 +53,15 @@ def test_match_command_returns_ranked_json(tmp_path: Path, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
 
     assert exit_code == 0
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert "resume_path" not in payload
     assert len(payload["matches"]) == 2
     assert payload["matches"][0]["job"]["company"] == "Example"
     assert payload["matches"][0]["match"]["score"] > payload["matches"][1]["match"]["score"]
     assert "raw_text" not in payload
     assert "dana@example.com" not in json.dumps(payload)
+    assert "origin" not in json.dumps(payload)
+    assert payload["matches"][0]["location_check"]["status"] == "remote"
 
 
 def test_match_command_selects_one_job(tmp_path: Path, capsys) -> None:
@@ -126,3 +128,53 @@ def test_match_command_handles_empty_database(tmp_path: Path, capsys) -> None:
 
     assert exit_code == 0
     assert "No stored jobs" in capsys.readouterr().out
+
+
+def test_match_command_excludes_foreign_job_from_recommendations(tmp_path: Path, capsys) -> None:
+    resume = tmp_path / "resume.txt"
+    resume.write_text(
+        "Dana Developer\nRishon Lezion, Israel\nSKILLS\nPython\nEDUCATION\nB.Sc.",
+        encoding="utf-8",
+    )
+    database = tmp_path / "jobs.db"
+    repository = JobRepository(database)
+    repository.initialize()
+    repository.save(
+        JobPosting(
+            "Software Intern", "Example", "Warsaw, Poland",
+            "https://example.com/jobs/poland", requirements="Python",
+        )
+    )
+
+    exit_code = main(["match", str(resume), "--database", str(database), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["matches"] == []
+
+
+def test_match_command_keeps_unverified_location_for_manual_review(tmp_path: Path, capsys) -> None:
+    resume = tmp_path / "resume.txt"
+    resume.write_text(
+        "Dana Developer\nRishon Lezion, Israel\nSKILLS\nPython\nEDUCATION\nB.Sc.",
+        encoding="utf-8",
+    )
+    database = tmp_path / "jobs.db"
+    repository = JobRepository(database)
+    repository.initialize()
+    repository.save(
+        JobPosting(
+            "Software Intern", "Example", "Tel Aviv, Israel",
+            "https://example.com/jobs/israel", requirements="Python",
+        )
+    )
+
+    exit_code = main([
+        "match", str(resume), "--database", str(database), "--json",
+        "--skip-commute-check",
+    ])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["matches"] == []
+    assert payload["manual_review"][0]["job"]["location"] == "Tel Aviv, Israel"

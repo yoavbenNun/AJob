@@ -22,6 +22,8 @@ The current MVP provides:
 - deterministic resume-to-job scoring from 1 to 100
 - transparent score breakdown, matched skills, missing skills, strengths, and gaps
 - evidence-backed resume tailoring suggestions that do not invent experience
+- resume-header location extraction and driving-commute eligibility
+- automatic rejection of clearly foreign roles and a 90/120 minute commute policy
 - human-readable and stable JSON matching output
 - isolated per-company failures and SQLite persistence
 - a dry-run mode that prints targets without launching a browser
@@ -70,6 +72,7 @@ python -m src.main parse-resume path\to\resume.pdf --json
 python -m src.main match path\to\resume.pdf
 python -m src.main match path\to\resume.pdf --job-id 42
 python -m src.main match path\to\resume.pdf --json --limit 20
+python -m src.main match path\to\resume.pdf --origin "Rishon Lezion, Israel"
 ```
 
 Use custom paths if needed:
@@ -102,6 +105,18 @@ Matching is local, deterministic, and explainable. It uses recognized skill
 coverage plus evidence in experience, projects, and education. Scores are useful
 for ranking, not a guarantee of recruiter decisions. Tailoring output is advice
 only and must remain truthful.
+
+Location eligibility is separate from professional fit. The matcher reads an
+explicit `City, Country` line from the resume header, or accepts `--origin` as a
+private runtime override. Remote roles are accepted, clearly foreign roles are
+rejected, driving estimates up to 90 minutes are suitable, 91-120 minutes are
+borderline, and anything longer is rejected. Unknown locations require manual
+review and are not recommended automatically. Driving estimates use the public
+OpenStreetMap Nominatim and OSRM services for low-volume personal use; they do
+not include live traffic. The resume origin is never written to match JSON or the
+jobs database. Use `--skip-commute-check` only when an explicit manual location
+review is intended. JSON output keeps verified recommendations in `matches` and
+unverified locations in a separate `manual_review` list.
 
 Running while the computer is off does not require an external AI API. The planned
 deployment is a scheduled container that runs scanning in the cloud and writes to

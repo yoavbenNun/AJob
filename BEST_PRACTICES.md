@@ -85,3 +85,11 @@ reusable lesson appears.
   aliases boundary-aware to avoid substring false positives.
 - Treat hard eligibility requirements separately from fit score. A strong skill
   overlap must not rank a PhD-only role above an eligible bachelor's-level role.
+- Keep commute eligibility separate from professional fit. Never recommend a job
+  when its location or route cannot be verified; mark it for manual review.
+- Driving estimates must name their routing source and limitations. Do not present
+  an OSRM estimate as live-traffic travel time.
+- Extract a candidate location only from an explicit resume-header location line.
+  Do not persist the home location, coordinates, or route details in the jobs DB.
+- Detail pages can contain a reliable location even when listing cards do not.
+  Prefer explicit accessibility markers such as `place` over guessing from prose.

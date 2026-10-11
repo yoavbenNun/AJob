@@ -47,6 +47,7 @@ class ResumeProfile:
 
     source_path: str
     name: str
+    location: str
     email: str
     phone: str
     skills: tuple[str, ...]

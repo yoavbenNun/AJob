@@ -1,9 +1,16 @@
 from src.models import Company
 from src.scrapers.careers_scraper import (
+    extract_detail_location,
     extract_jobs_from_links,
     extract_requirements,
     preview_companies,
 )
+
+
+def test_extract_detail_location_from_google_markers() -> None:
+    description = "Role\nplace\nWarsaw, Poland\n; Kraków, Poland\nbar_chart\nIntern"
+
+    assert extract_detail_location(description) == "Warsaw, Poland; Kraków, Poland"
 
 
 def test_preview_companies_prints_only_enabled_companies(capsys) -> None:

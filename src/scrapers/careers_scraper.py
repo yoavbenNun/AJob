@@ -236,6 +236,9 @@ def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> None:
         if normalized:
             job.description = normalized[:20_000]
             job.requirements = extract_requirements(normalized)
+            detail_location = extract_detail_location(normalized)
+            if detail_location:
+                job.location = detail_location
     except Exception:
         # Card data is still useful when an individual detail page is unavailable.
         return
@@ -260,6 +263,23 @@ def extract_requirements(description: str) -> str:
         return ""
     start = min(starts)
     return description[start : start + 6_000]
+
+
+def extract_detail_location(description: str) -> str:
+    """Extract locations from common detail-page accessibility markers."""
+    lines = [" ".join(line.split()) for line in description.splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        if line.casefold() != "place":
+            continue
+        locations: list[str] = []
+        for candidate in lines[index + 1 : index + 8]:
+            normalized = candidate.strip(" ;")
+            if candidate.casefold() in {"bar_chart", "apply", "info_outline"}:
+                break
+            if normalized and normalized != "+3 more":
+                locations.append(normalized)
+        return "; ".join(locations)[:200]
+    return ""
 
 
 def _canonical_url(url: str) -> str:

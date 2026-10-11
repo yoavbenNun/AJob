@@ -9,6 +9,11 @@ from collections.abc import Sequence
 from dataclasses import asdict
 
 from src.config_loader import load_companies
+from src.location.commute import (
+    OpenStreetMapDrivingProvider,
+    evaluate_commute,
+    resolve_job_destination,
+)
 from src.matching.resume_matcher import match_resume_to_job
 from src.scrapers.careers_scraper import preview_companies, scan_companies
 from src.resume.resume_parser import parse_resume
@@ -42,6 +47,15 @@ def build_parser() -> argparse.ArgumentParser:
     match_parser.add_argument("resume", type=Path, help="TXT, Markdown, PDF, or DOCX file")
     match_parser.add_argument("--database", type=Path, default=Path("data/jobs.db"))
     match_parser.add_argument("--job-id", type=int, help="Match only one stored job")
+    match_parser.add_argument(
+        "--origin",
+        help="Override the city/country extracted from the resume header",
+    )
+    match_parser.add_argument(
+        "--skip-commute-check",
+        action="store_true",
+        help="Disable driving eligibility (results require manual location review)",
+    )
     match_parser.add_argument(
         "--limit", type=int, default=10, help="Maximum matches shown in all-job mode"
     )
@@ -98,6 +112,7 @@ def _run_match(args: argparse.Namespace) -> int:
             raise FileNotFoundError(f"Job database not found: {args.database}")
 
         profile = parse_resume(args.resume)
+        origin = args.origin or profile.location
         repository = JobRepository(args.database)
         repository.initialize()
         if args.job_id is not None:
@@ -112,51 +127,81 @@ def _run_match(args: argparse.Namespace) -> int:
         else:
             jobs = repository.list_relevant()
 
+        provider = None if args.skip_commute_check else OpenStreetMapDrivingProvider()
+        assessed = []
+        for job in jobs:
+            destination = resolve_job_destination(job.location, job.description)
+            job.location = destination
+            commute = evaluate_commute(origin, destination, provider)
+            match = match_resume_to_job(profile, job)
+            assessed.append((job, match, commute, match.eligible and commute.eligible))
         ranked = sorted(
-            ((job, match_resume_to_job(profile, job)) for job in jobs),
+            assessed,
             key=lambda item: (
-                not item[1].eligible,
+                not item[3],
+                item[2].status == "unknown",
                 -item[1].score,
                 -(item[0].id or 0),
             ),
         )
+        manual_review = []
         if args.job_id is None:
-            ranked = ranked[: args.limit]
+            manual_review = [
+                item for item in ranked
+                if item[1].eligible and item[2].status == "unknown"
+            ][: args.limit]
+            ranked = [item for item in ranked if item[3]][: args.limit]
 
         if args.json:
             payload = {
-                "schema_version": 1,
+                "schema_version": 2,
                 "matches": [
-                    {
-                        "job": {
-                            "id": job.id,
-                            "title": job.title,
-                            "company": job.company,
-                            "location": job.location,
-                            "job_url": job.job_url,
-                        },
-                        "match": asdict(result),
-                    }
-                    for job, result in ranked
+                    _match_payload(job, result, commute, overall_eligible)
+                    for job, result, commute, overall_eligible in ranked
+                ],
+                "manual_review": [
+                    _match_payload(job, result, commute, overall_eligible)
+                    for job, result, commute, overall_eligible in manual_review
                 ],
             }
             print(json.dumps(payload, indent=2, ensure_ascii=False))
         else:
             _print_matches(ranked)
+            if manual_review:
+                print("\nManual location review:")
+                _print_matches(manual_review, empty_message="")
         return 0
     except (FileNotFoundError, OSError, ValueError, sqlite3.Error) as error:
         print(f"Match failed: {error}", file=sys.stderr)
         return 1
 
 
-def _print_matches(ranked) -> None:
+def _match_payload(job, result, commute, overall_eligible) -> dict:
+    return {
+        "job": {
+            "id": job.id,
+            "title": job.title,
+            "company": job.company,
+            "location": job.location,
+            "job_url": job.job_url,
+        },
+        "match": asdict(result),
+        "location_check": asdict(commute),
+        "overall_eligible": overall_eligible,
+    }
+
+
+def _print_matches(ranked, empty_message: str = "No stored jobs are currently eligible to recommend.") -> None:
     if not ranked:
-        print("No stored jobs to match.")
+        if empty_message:
+            print(empty_message)
         return
-    for index, (job, result) in enumerate(ranked, start=1):
+    for index, (job, result, commute, overall_eligible) in enumerate(ranked, start=1):
         print(f"{index}. {job.title} at {job.company} - {result.score}/100")
         print(f"   {job.location} | {job.job_url}")
-        print(f"   Eligibility: {'eligible' if result.eligible else 'manual review required'}")
+        print(f"   Overall eligibility: {'eligible' if overall_eligible else 'not recommended'}")
+        duration = f" ({commute.minutes} minutes by car)" if commute.minutes is not None else ""
+        print(f"   Location: {commute.status}{duration} - {commute.reason}")
         for disqualifier in result.disqualifiers:
             print(f"   Disqualifier: {disqualifier}")
         print(f"   Matched skills: {', '.join(result.matched_skills) or 'None'}")

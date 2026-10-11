@@ -31,6 +31,7 @@ def test_parse_resume_text_extracts_profile() -> None:
     profile = parse_resume_text(SAMPLE_RESUME)
 
     assert profile.name == "Dana Developer"
+    assert profile.location == ""
     assert profile.email == "dana@example.com"
     assert profile.phone == "+972 50-123-4567"
     assert profile.skills == (
@@ -98,3 +99,11 @@ Built C++ systems with Qt6/QML, CMake, WebSockets, microservices, and unit tests
         "Microservices",
         "Unit Testing",
     )
+
+
+def test_parse_resume_extracts_location_only_from_header() -> None:
+    profile = parse_resume_text(
+        "Dana Developer\nRishon Lezion, Israel\nSUMMARY\nWorked with a team in London, UK."
+    )
+
+    assert profile.location == "Rishon Lezion, Israel"

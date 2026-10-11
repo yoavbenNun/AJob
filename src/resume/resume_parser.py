@@ -95,6 +95,7 @@ def parse_resume_text(text: str, source_path: str = "<memory>") -> ResumeProfile
     return ResumeProfile(
         source_path=source_path,
         name=_extract_name(header),
+        location=_extract_location(header),
         email=email_match.group(0) if email_match else "",
         phone=" ".join(phone_match.group(0).split()) if phone_match else "",
         skills=extract_skills(normalized),
@@ -169,6 +170,16 @@ def _looks_like_name_fragment(value: str) -> bool:
     return 1 <= len(words) <= 3 and not role_words.intersection(words) and all(
         word.isalpha() for word in words
     )
+
+
+def _extract_location(header: str) -> str:
+    """Extract an explicit city/country line from the resume header only."""
+    for line in header.splitlines():
+        candidate = " ".join(line.strip().split())
+        if re.fullmatch(r"[A-Za-z][A-Za-z .'-]+,\s*[A-Za-z][A-Za-z .'-]+", candidate):
+            if "@" not in candidate and not any(char.isdigit() for char in candidate):
+                return candidate
+    return ""
 
 
 def _normalize_text(text: str) -> str:
