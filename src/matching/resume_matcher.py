@@ -1,1 +1,285 @@
-"""Resume matching will be implemented in Phase 5."""
+"""Explainable, deterministic resume-to-job matching."""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+
+from src.models import JobPosting, ResumeProfile
+from src.resume.resume_parser import SKILL_ALIASES
+
+
+SKILL_POINTS = 60
+EXPERIENCE_POINTS = 20
+PROJECT_POINTS = 15
+EDUCATION_POINTS = 5
+
+
+@dataclass(frozen=True, slots=True)
+class ScoreComponent:
+    """One transparent contribution to a match score."""
+
+    points: int
+    maximum: int
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class MatchBreakdown:
+    """The four deterministic components that total a match score."""
+
+    skills: ScoreComponent
+    experience: ScoreComponent
+    projects: ScoreComponent
+    education: ScoreComponent
+
+    @property
+    def total(self) -> int:
+        """Return the unbounded sum of component points."""
+        return sum(
+            component.points
+            for component in (self.skills, self.experience, self.projects, self.education)
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MatchResult:
+    """A score and evidence-based guidance for one resume and job posting."""
+
+    score: int
+    minimum_score_applied: bool
+    breakdown: MatchBreakdown
+    job_skills: tuple[str, ...]
+    matched_skills: tuple[str, ...]
+    missing_skills: tuple[str, ...]
+    strengths: tuple[str, ...]
+    gaps: tuple[str, ...]
+    tailoring_suggestions: tuple[str, ...]
+
+
+def match_resume_to_job(resume: ResumeProfile, job: JobPosting) -> MatchResult:
+    """Score a resume against a posting without inferring unprovided experience.
+
+    Skill requirements mentioned in the posting account for 60 points. Existing
+    experience, project, and education sections account for the remaining 40
+    points only when the resume itself contains that evidence. The returned score
+    is always an integer from 1 through 100.
+    """
+    job_text = "\n".join((job.title, job.description, job.requirements))
+    required_skills = _extract_known_skills(job_text)
+    resume_skills = set(resume.skills)
+    matched_skills = tuple(skill for skill in required_skills if skill in resume_skills)
+    missing_skills = tuple(skill for skill in required_skills if skill not in resume_skills)
+
+    skill_component = _skill_component(required_skills, matched_skills)
+    experience_component = _section_component(
+        resume.experience,
+        matched_skills,
+        EXPERIENCE_POINTS,
+        "experience",
+    )
+    project_component = _section_component(
+        resume.projects,
+        matched_skills,
+        PROJECT_POINTS,
+        "projects",
+    )
+    education_component = _education_component(resume.education)
+    breakdown = MatchBreakdown(
+        skills=skill_component,
+        experience=experience_component,
+        projects=project_component,
+        education=education_component,
+    )
+    minimum_score_applied = breakdown.total == 0
+    score = max(1, min(100, breakdown.total))
+    strengths = _strengths(resume, matched_skills, experience_component, project_component)
+    gaps = _gaps(resume, required_skills, missing_skills)
+    suggestions = _tailoring_suggestions(
+        resume,
+        matched_skills,
+        missing_skills,
+        required_skills,
+    )
+    return MatchResult(
+        score=score,
+        minimum_score_applied=minimum_score_applied,
+        breakdown=breakdown,
+        job_skills=required_skills,
+        matched_skills=matched_skills,
+        missing_skills=missing_skills,
+        strengths=strengths,
+        gaps=gaps,
+        tailoring_suggestions=suggestions,
+    )
+
+
+def match_resume(resume: ResumeProfile, job: JobPosting) -> MatchResult:
+    """Compatibility-friendly shorthand for :func:`match_resume_to_job`."""
+    return match_resume_to_job(resume, job)
+
+
+def _extract_known_skills(text: str) -> tuple[str, ...]:
+    lowered = text.casefold()
+    return tuple(
+        canonical
+        for canonical, aliases in SKILL_ALIASES.items()
+        if any(_contains_alias(lowered, alias.casefold()) for alias in aliases)
+    )
+
+
+def _contains_alias(text: str, alias: str) -> bool:
+    return re.search(rf"(?<![\w+#]){re.escape(alias)}(?![\w+#])", text) is not None
+
+
+def _skill_component(
+    required_skills: tuple[str, ...], matched_skills: tuple[str, ...]
+) -> ScoreComponent:
+    if not required_skills:
+        return ScoreComponent(
+            points=0,
+            maximum=SKILL_POINTS,
+            reason="no recognized skill requirements were found in the posting",
+        )
+    points = round(SKILL_POINTS * len(matched_skills) / len(required_skills))
+    return ScoreComponent(
+        points=points,
+        maximum=SKILL_POINTS,
+        reason=(
+            f"{len(matched_skills)} of {len(required_skills)} recognized job skills "
+            "are listed on the resume"
+        ),
+    )
+
+
+def _section_component(
+    section: str, matched_skills: tuple[str, ...], maximum: int, label: str
+) -> ScoreComponent:
+    if not section.strip():
+        return ScoreComponent(0, maximum, f"resume has no {label} section content")
+    evidenced = tuple(skill for skill in matched_skills if _skill_is_in_text(skill, section))
+    if evidenced:
+        return ScoreComponent(
+            maximum,
+            maximum,
+            f"{label} section provides evidence for: {', '.join(evidenced)}",
+        )
+    return ScoreComponent(
+        0,
+        maximum,
+        f"resume has {label} content but no matched job skill is explicit there; no points awarded",
+    )
+
+
+def _skill_is_in_text(skill: str, text: str) -> bool:
+    lowered = text.casefold()
+    return any(
+        _contains_alias(lowered, alias.casefold()) for alias in SKILL_ALIASES[skill]
+    )
+
+
+def _education_component(education: str) -> ScoreComponent:
+    if education.strip():
+        return ScoreComponent(EDUCATION_POINTS, EDUCATION_POINTS, "resume includes education")
+    return ScoreComponent(0, EDUCATION_POINTS, "resume has no education section content")
+
+
+def _strengths(
+    resume: ResumeProfile,
+    matched_skills: tuple[str, ...],
+    experience: ScoreComponent,
+    projects: ScoreComponent,
+) -> tuple[str, ...]:
+    strengths: list[str] = []
+    if matched_skills:
+        strengths.append(f"Matches job skills: {', '.join(matched_skills)}.")
+    if experience.points == experience.maximum:
+        strengths.append("Experience section explicitly supports matched job skills.")
+    if projects.points == projects.maximum:
+        strengths.append("Project section explicitly supports matched job skills.")
+    if resume.education.strip():
+        strengths.append("Education is documented on the resume.")
+    return tuple(strengths) or ("No direct match evidence was found by the deterministic rules.",)
+
+
+def _gaps(
+    resume: ResumeProfile,
+    required_skills: tuple[str, ...],
+    missing_skills: tuple[str, ...],
+) -> tuple[str, ...]:
+    gaps: list[str] = []
+    if missing_skills:
+        gaps.append(f"Job skills not listed on the resume: {', '.join(missing_skills)}.")
+    if not required_skills:
+        gaps.append("The posting has no skill terms recognized by the current matcher.")
+    if not resume.experience.strip():
+        gaps.append("No experience section content is available to support the fit.")
+    if not resume.projects.strip():
+        gaps.append("No project section content is available to support the fit.")
+    if not resume.education.strip():
+        gaps.append("No education section content is available to support the fit.")
+    return tuple(gaps)
+
+
+def _tailoring_suggestions(
+    resume: ResumeProfile,
+    matched_skills: tuple[str, ...],
+    missing_skills: tuple[str, ...],
+    required_skills: tuple[str, ...],
+) -> tuple[str, ...]:
+    suggestions: list[str] = []
+    if matched_skills:
+        strongest = ", ".join(matched_skills[:4])
+        suggestions.append(
+            f"Tailor the summary to the target role and emphasize {strongest}; "
+            "keep only claims already supported elsewhere in the resume."
+        )
+    experience_evidence = tuple(
+        skill for skill in matched_skills if _skill_is_in_text(skill, resume.experience)
+    )
+    if experience_evidence:
+        suggestions.append(
+            "In Experience, expand the existing evidence for "
+            f"{', '.join(experience_evidence)} with the action taken and a measurable outcome, "
+            "when those details are accurate."
+        )
+    project_evidence = tuple(
+        skill for skill in matched_skills if _skill_is_in_text(skill, resume.projects)
+    )
+    if project_evidence:
+        suggestions.append(
+            "In Projects, make the implementation and result for "
+            f"{', '.join(project_evidence)} explicit; do not add work that was not performed."
+        )
+    unsupported_matches = tuple(
+        skill
+        for skill in matched_skills
+        if skill not in experience_evidence and skill not in project_evidence
+    )
+    if unsupported_matches:
+        suggestions.append(
+            f"Connect {', '.join(unsupported_matches)} to a real experience or project example "
+            "if one exists; otherwise leave it only in the skills section."
+        )
+    if missing_skills:
+        suggestions.append(
+            "Do not add "
+            f"{', '.join(missing_skills)} unless you can truthfully support the claim; "
+            "consider learning it or building a relevant project first."
+        )
+    if not required_skills:
+        suggestions.append(
+            "Review the posting manually for role-specific terms not covered by the current skill list."
+        )
+    return tuple(suggestions) or (
+        "Keep the resume factual; this matcher found no specific tailoring evidence.",
+    )
+
+
+__all__ = [
+    "MatchBreakdown",
+    "MatchResult",
+    "ScoreComponent",
+    "match_resume",
+    "match_resume_to_job",
+]

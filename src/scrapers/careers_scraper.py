@@ -2,14 +2,19 @@
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import urlsplit, urlunsplit
 
 from playwright.sync_api import Browser, Page, TimeoutError as PlaywrightTimeoutError
 
 from src.filtering.job_filter import classify_job, prefilter_job
 from src.models import Company, JobPosting
-from src.storage.job_repository import JobRepository
+
+
+class JobWriter(Protocol):
+    """Minimal persistence boundary needed by scan orchestration."""
+
+    def save(self, job: JobPosting) -> int: ...
 
 
 @dataclass(slots=True)
@@ -115,7 +120,7 @@ class CareersScraper:
 
 def scan_companies(
     companies: Iterable[Company],
-    repository: JobRepository,
+    repository: JobWriter,
     *,
     headless: bool = True,
     timeout_ms: int = 30_000,

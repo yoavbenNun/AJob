@@ -34,6 +34,7 @@ class JobPosting:
     source: str = ""
     discovered_at: datetime | None = None
     id: int | None = None
+    is_relevant: bool = True
 
     def __post_init__(self) -> None:
         if self.discovered_at is None:

@@ -5,7 +5,7 @@ intern, and junior software roles. The long-term goal is to compare roles with a
 resume, explain fit, and prepare tailored application material while keeping all
 rewrites and submissions behind explicit human approval.
 
-## Current scope: Phase 4
+## Current scope: Phases 5 and 6
 
 The current MVP provides:
 
@@ -19,11 +19,15 @@ The current MVP provides:
 - full detail-page text and requirements-section extraction for accepted roles
 - local TXT, Markdown, PDF, and DOCX resume parsing
 - normalized contact details, resume sections, and technical skills
+- deterministic resume-to-job scoring from 1 to 100
+- transparent score breakdown, matched skills, missing skills, strengths, and gaps
+- evidence-backed resume tailoring suggestions that do not invent experience
+- human-readable and stable JSON matching output
 - isolated per-company failures and SQLite persistence
 - a dry-run mode that prints targets without launching a browser
 
-It does **not** yet score jobs, modify resumes, call paid APIs, or submit
-applications.
+It does **not** modify resumes, call paid APIs, deploy itself to the cloud, or
+submit applications.
 
 ## Architecture
 
@@ -63,6 +67,9 @@ python -m src.main scan --dry-run
 python -m src.main scan
 python -m src.main parse-resume path\to\resume.pdf
 python -m src.main parse-resume path\to\resume.pdf --json
+python -m src.main match path\to\resume.pdf
+python -m src.main match path\to\resume.pdf --job-id 42
+python -m src.main match path\to\resume.pdf --json --limit 20
 ```
 
 Use custom paths if needed:
@@ -91,6 +98,16 @@ software-oriented title, must not contain a clear senior-level marker, and must
 show early-career evidence in its title or fetched job details. Career-site
 markup changes can still require updates to URL patterns or extraction logic.
 
+Matching is local, deterministic, and explainable. It uses recognized skill
+coverage plus evidence in experience, projects, and education. Scores are useful
+for ranking, not a guarantee of recruiter decisions. Tailoring output is advice
+only and must remain truthful.
+
+Running while the computer is off does not require an external AI API. The planned
+deployment is a scheduled container that runs scanning in the cloud and writes to
+persistent storage. Resume parsing and matching remain local by default for
+privacy. See `docs/cloud-roadmap.md`.
+
 ## Roadmap
 
 1. **Foundation (complete):** config, models, SQLite storage, dry-run scanner.
@@ -100,8 +117,8 @@ markup changes can still require updates to URL patterns or extraction logic.
    explainable student, intern, junior, and non-senior software-role filtering.
 4. **Resume parsing (complete):** extract contact details, normalized skills,
    education, experience, projects, and summary locally.
-5. **Matching:** add explainable job/resume fit scores.
-6. **Tailoring suggestions:** propose precise, truthful resume improvements.
+5. **Matching (complete):** explainable 1–100 job/resume fit scores.
+6. **Tailoring suggestions (complete):** precise, evidence-backed resume advice.
 7. **Approved document generation:** require review before producing a tailored resume.
 8. **Notifications:** optionally send new-job summaries through Telegram or email.
 9. **Application assistance:** prepare applications, never submit without approval.

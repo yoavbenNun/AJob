@@ -64,4 +64,15 @@ reusable lesson appears.
 - Use idempotent URL-based upserts for discovered jobs.
 - Never delete or rewrite an existing jobs database merely because filtering rules
   changed. Introduce an explicit migration or relevance state when needed.
+- Treat legacy rows as relevance-unknown during schema migration. Do not silently
+  rank old unfiltered discoveries as approved job matches.
 - Resume changes and application submission must always require human approval.
+- Keep match scoring deterministic and explainable before adding an LLM. Every
+  point should map to visible resume/job evidence.
+- Do not award fit points merely because a resume section exists. Experience and
+  project points require explicit evidence tied to recognized job skills.
+- Never turn a missing skill into a resume claim. Suggest learning it or adding it
+  only when the user can support it truthfully.
+- Do not include raw resume text or contact details in match output or logs.
+- Keep resume matching independent of storage and network services so the same
+  domain service can run locally, in a container, or behind a future API.
