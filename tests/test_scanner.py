@@ -3,6 +3,7 @@ from src.scrapers.careers_scraper import (
     extract_detail_location,
     extract_jobs_from_links,
     extract_requirements,
+    extract_workday_jobs,
     preview_companies,
 )
 
@@ -11,6 +12,15 @@ def test_extract_detail_location_from_google_markers() -> None:
     description = "Role\nplace\nWarsaw, Poland\n; Kraków, Poland\nbar_chart\nIntern"
 
     assert extract_detail_location(description) == "Warsaw, Poland; Kraków, Poland"
+
+
+def test_extract_detail_location_from_apple_page_header() -> None:
+    description = (
+        "Back to search results\nSoftware Engineering Student\n"
+        "Jerusalem, Jerusalem District, Israel\nHardware\nSubmit Resume"
+    )
+
+    assert extract_detail_location(description) == "Jerusalem, Jerusalem District, Israel"
 
 
 def test_preview_companies_prints_only_enabled_companies(capsys) -> None:
@@ -25,6 +35,32 @@ def test_preview_companies_prints_only_enabled_companies(capsys) -> None:
     assert count == 1
     assert "Enabled" in output
     assert "Disabled" not in output
+
+
+def test_extract_workday_jobs_normalizes_public_api_response() -> None:
+    company = Company(
+        "Intel",
+        "https://intel.wd1.myworkdayjobs.com/en-US/External",
+        allowed_job_hosts=("intel.wd1.myworkdayjobs.com",),
+    )
+    payload = {
+        "jobPostings": [
+            {
+                "title": "Software Student",
+                "externalPath": "/job/Haifa/Software-Student_JR123",
+                "locationsText": "Israel, Haifa",
+                "bulletFields": ["Student", "Part time"],
+            },
+            {"title": "Unsafe", "externalPath": "https://evil.example/job/1"},
+        ]
+    }
+
+    jobs = extract_workday_jobs(company, payload)
+
+    assert len(jobs) == 1
+    assert jobs[0].title == "Software Student"
+    assert jobs[0].location == "Israel, Haifa"
+    assert jobs[0].job_url.startswith("https://intel.wd1.myworkdayjobs.com/job/")
 
 
 def test_extract_jobs_from_links_filters_and_deduplicates() -> None:

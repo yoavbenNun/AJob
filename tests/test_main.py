@@ -178,3 +178,133 @@ def test_match_command_keeps_unverified_location_for_manual_review(tmp_path: Pat
     assert exit_code == 0
     assert payload["matches"] == []
     assert payload["manual_review"][0]["job"]["location"] == "Tel Aviv, Israel"
+
+
+def test_match_command_does_not_recommend_applied_job(tmp_path: Path, capsys) -> None:
+    resume = tmp_path / "resume.txt"
+    resume.write_text(RESUME, encoding="utf-8")
+    database = tmp_path / "jobs.db"
+    repository, job_id = _database_with_jobs(database)
+    repository.update_status(job_id, "applied")
+
+    exit_code = main(["match", str(resume), "--database", str(database), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert all(match["job"]["id"] != job_id for match in payload["matches"])
+
+
+def test_list_and_status_commands_manage_job_lifecycle(tmp_path: Path, capsys) -> None:
+    database = tmp_path / "jobs.db"
+    _, job_id = _database_with_jobs(database)
+
+    exit_code = main(["status", str(job_id), "applied", "--database", str(database)])
+    status_output = capsys.readouterr().out
+    list_exit_code = main(["list", "--database", str(database), "--status", "applied", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert f"Job {job_id} status updated to applied" in status_output
+    assert list_exit_code == 0
+    assert payload["jobs"] == [
+        {
+            "id": job_id,
+            "title": "Python Software Intern",
+            "company": "Example",
+            "location": "Remote",
+            "job_url": "https://example.com/jobs/1",
+            "status": "applied",
+        }
+    ]
+
+
+def test_status_command_reports_missing_job(tmp_path: Path, capsys) -> None:
+    database = tmp_path / "jobs.db"
+    JobRepository(database).initialize()
+
+    exit_code = main(["status", "999", "reviewed", "--database", str(database)])
+
+    assert exit_code == 1
+    assert "was not found" in capsys.readouterr().err
+
+
+def test_scan_dry_run_can_select_one_company(capsys) -> None:
+    exit_code = main(["scan", "--dry-run", "--company", "Amazon"])
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Amazon" in output
+    assert "Microsoft" not in output
+
+
+def test_list_defaults_to_new_relevant_jobs(tmp_path: Path, capsys) -> None:
+    database = tmp_path / "jobs.db"
+    repository = JobRepository(database)
+    repository.initialize()
+    repository.save(
+        JobPosting("New Intern", "Example", "Remote", "https://example/jobs/new")
+    )
+    repository.save(
+        JobPosting(
+            "Applied Intern", "Example", "Remote", "https://example/jobs/applied",
+            status="applied",
+        )
+    )
+    repository.save(
+        JobPosting(
+            "Legacy Senior", "Example", "Remote", "https://example/jobs/legacy",
+            is_relevant=False,
+        )
+    )
+
+    exit_code = main(["list", "--database", str(database), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert [job["title"] for job in payload["jobs"]] == ["New Intern"]
+
+
+def test_export_safe_profile_omits_contact_details(tmp_path: Path, capsys) -> None:
+    resume = tmp_path / "resume.txt"
+    resume.write_text(RESUME, encoding="utf-8")
+
+    exit_code = main(["export-safe-profile", str(resume)])
+    output = capsys.readouterr().out
+    payload = json.loads(output)
+
+    assert exit_code == 0
+    assert "dana@example.com" not in output
+    assert "name" not in payload
+    assert "Python" in payload["skills"]
+
+
+def test_tailor_resume_command_requires_approval(tmp_path: Path, capsys) -> None:
+    resume = tmp_path / "resume.txt"
+    resume.write_text(RESUME, encoding="utf-8")
+    database = tmp_path / "jobs.db"
+    _, job_id = _database_with_jobs(database)
+
+    exit_code = main([
+        "tailor-resume", str(resume), str(job_id), str(tmp_path / "tailored.docx"),
+        "--database", str(database),
+    ])
+
+    assert exit_code == 1
+    assert "--approve" in capsys.readouterr().err
+
+
+def test_tailor_resume_command_creates_approved_docx(tmp_path: Path, capsys) -> None:
+    resume = tmp_path / "resume.txt"
+    resume.write_text(RESUME, encoding="utf-8")
+    database = tmp_path / "jobs.db"
+    _, job_id = _database_with_jobs(database)
+    output = tmp_path / "tailored.docx"
+
+    exit_code = main([
+        "tailor-resume", str(resume), str(job_id), str(output),
+        "--database", str(database), "--approve",
+    ])
+
+    assert exit_code == 0
+    assert output.is_file()
+    assert "created" in capsys.readouterr().out

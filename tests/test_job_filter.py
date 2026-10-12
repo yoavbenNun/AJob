@@ -44,3 +44,21 @@ def test_detail_substrings_do_not_create_early_career_evidence() -> None:
     job.description = "This team collaborates internally across the company."
 
     assert classify_job(job).relevant is False
+
+
+def test_mentoring_junior_staff_does_not_make_role_early_career() -> None:
+    job = make_job("CAD Software Developer Engineer")
+    job.description = "Experienced engineer who will mentor junior team members."
+
+    assert classify_job(job).relevant is False
+
+
+def test_classify_job_accepts_plural_internships_title() -> None:
+    job = JobPosting(
+        "2027 Internships: Software Engineering",
+        "Example",
+        "Remote",
+        "https://example.com/jobs/internships",
+    )
+
+    assert classify_job(job).relevant is True

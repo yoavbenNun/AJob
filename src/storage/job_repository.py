@@ -3,7 +3,7 @@
 import sqlite3
 from pathlib import Path
 
-from src.models import JobPosting
+from src.models import JOB_STATUSES, JobPosting
 from src.urls import canonical_url
 
 
@@ -28,7 +28,9 @@ class JobRepository:
                     requirements TEXT NOT NULL DEFAULT '',
                     source TEXT NOT NULL DEFAULT '',
                     discovered_at TEXT NOT NULL,
-                    is_relevant INTEGER NOT NULL DEFAULT 0
+                    is_relevant INTEGER NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'new'
+                        CHECK (status IN ('new', 'reviewed', 'applied', 'ignored', 'rejected'))
                 )
                 """
             )
@@ -40,6 +42,11 @@ class JobRepository:
                 connection.execute(
                     "ALTER TABLE job_postings "
                     "ADD COLUMN is_relevant INTEGER NOT NULL DEFAULT 0"
+                )
+            if "status" not in columns:
+                connection.execute(
+                    "ALTER TABLE job_postings "
+                    "ADD COLUMN status TEXT NOT NULL DEFAULT 'new'"
                 )
             self._merge_equivalent_urls(connection)
 
@@ -57,8 +64,8 @@ class JobRepository:
                 """
                 INSERT INTO job_postings (
                     title, company, location, job_url, description,
-                    requirements, source, discovered_at, is_relevant
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    requirements, source, discovered_at, is_relevant, status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(job_url) DO UPDATE SET
                     title = excluded.title,
                     company = excluded.company,
@@ -79,6 +86,7 @@ class JobRepository:
                     job.source,
                     job.discovered_at.isoformat(),
                     int(job.is_relevant),
+                    job.status,
                 ),
             )
             row = connection.execute(
@@ -97,9 +105,67 @@ class JobRepository:
             ).fetchall()
         return [_job_from_row(row) for row in rows]
 
+    def list_by_status(self, status: str) -> list[JobPosting]:
+        """Return postings with one lifecycle status, newest first."""
+        _validate_status(status)
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM job_postings WHERE status = ? "
+                "ORDER BY discovered_at DESC, id DESC",
+                (status,),
+            ).fetchall()
+        return [_job_from_row(row) for row in rows]
+
+    def list_relevant_by_status(self, status: str) -> list[JobPosting]:
+        """Return relevant postings with one lifecycle status, newest first."""
+        _validate_status(status)
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM job_postings WHERE is_relevant = 1 AND status = ? "
+                "ORDER BY discovered_at DESC, id DESC",
+                (status,),
+            ).fetchall()
+        return [_job_from_row(row) for row in rows]
+
     def get_by_id(self, job_id: int) -> JobPosting | None:
         """Return one posting by database ID, or None when it does not exist."""
         with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM job_postings WHERE id = ?", (job_id,)
+            ).fetchone()
+        return _job_from_row(row) if row is not None else None
+
+    def get_by_url(self, job_url: str) -> JobPosting | None:
+        """Return a posting by canonical URL, or None when it is new."""
+        normalized_url = canonical_url(job_url)
+        if not normalized_url:
+            return None
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM job_postings WHERE job_url = ?", (normalized_url,)
+            ).fetchone()
+        return _job_from_row(row) if row is not None else None
+
+    def update_relevance_by_url(self, job_url: str, is_relevant: bool) -> None:
+        """Update relevance without overwriting user lifecycle status or job details."""
+        normalized_url = canonical_url(job_url)
+        if not normalized_url:
+            return
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE job_postings SET is_relevant = ? WHERE job_url = ?",
+                (int(is_relevant), normalized_url),
+            )
+
+    def update_status(self, job_id: int, status: str) -> JobPosting | None:
+        """Set a posting's lifecycle status and return it, if it exists."""
+        _validate_status(status)
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE job_postings SET status = ? WHERE id = ?", (status, job_id)
+            )
+            if cursor.rowcount == 0:
+                return None
             row = connection.execute(
                 "SELECT * FROM job_postings WHERE id = ?", (job_id,)
             ).fetchone()
@@ -161,6 +227,12 @@ def _parse_timestamp(value: str):
     return datetime.fromisoformat(value)
 
 
+def _validate_status(status: str) -> None:
+    if status not in JOB_STATUSES:
+        allowed = ", ".join(JOB_STATUSES)
+        raise ValueError(f"Invalid job status {status!r}; expected one of: {allowed}")
+
+
 def _job_from_row(row: sqlite3.Row) -> JobPosting:
     return JobPosting(
         id=row["id"],
@@ -173,4 +245,5 @@ def _job_from_row(row: sqlite3.Row) -> JobPosting:
         source=row["source"],
         discovered_at=_parse_timestamp(row["discovered_at"]),
         is_relevant=bool(row["is_relevant"]),
+        status=row["status"],
     )

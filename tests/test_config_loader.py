@@ -47,3 +47,18 @@ def test_load_companies_rejects_empty_job_patterns(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="non-empty"):
         load_companies(config_path)
+
+
+def test_default_company_sources_use_safe_enabled_and_disabled_entries() -> None:
+    companies = {company.name: company for company in load_companies("config/companies.yaml")}
+
+    assert companies["Amazon"].enabled is True
+    assert companies["Amazon"].careers_url.endswith("country=ISR")
+    assert companies["Amazon"].job_url_patterns == ("/en/jobs/",)
+    assert companies["Apple"].enabled is True
+    assert companies["Apple"].careers_url.endswith("location=israel-ISR")
+    assert companies["Apple"].job_url_patterns == ("/en-il/details/",)
+    assert companies["NVIDIA"].enabled is True
+    assert companies["Intel"].enabled is True
+    assert companies["monday.com"].enabled is True
+    assert companies["Wix"].enabled is False

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ job.title }} · Job dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}">
+</head>
+<body>
+  <main class="page-shell detail">
+    <a class="text-link" href="/">← Back to jobs</a>
+    <header class="page-header"><div><p class="eyebrow">{{ job.company }}</p><h1>{{ job.title }}</h1><p class="muted">{{ job.location }}</p></div><span class="status status--{{ job.status }}">{{ job.status }}</span></header>
+    {% if updated %}<p class="notice">Job status updated.</p>{% endif %}
+    <div class="action-row"><a class="button secondary" href="{{ job.job_url }}" target="_blank" rel="noopener noreferrer">Open job posting</a><form method="post" action="/jobs/{{ job.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Lifecycle status<select name="status">{% for item in statuses %}<option value="{{ item }}" {% if item == job.status %}selected{% endif %}>{{ item|capitalize }}</option>{% endfor %}</select></label><button type="submit">Save status</button></form></div>
+    <section class="content-section"><h2>Description</h2><p class="preserve-lines">{{ job.description or 'No description was captured for this posting.' }}</p></section>
+    <section class="content-section"><h2>Requirements</h2><p class="preserve-lines">{{ job.requirements or 'No requirements were captured for this posting.' }}</p></section>
+    <section class="content-section"><h2>Local match</h2><p class="muted">The resume is read only from the configured local resume directory and is not saved or changed.</p>{% if resume_matching_enabled %}<form class="match-form" method="post" action="/jobs/{{ job.id }}/match"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Resume file path<input name="resume_path" required placeholder="C:\path\to\resume.pdf"></label><button type="submit">Calculate match</button></form>{% else %}<p class="muted">Set RESUME_DIRECTORY before starting the dashboard to enable matching.</p>{% endif %}{% if match_error %}<p class="error">{{ match_error }}</p>{% endif %}{% if match_result %}<div class="match-result"><h3>{{ match_result.score }}/100 fit score {% if not match_result.eligible %}<span class="error">· Not eligible</span>{% endif %}</h3><p><strong>Matched skills:</strong> {{ match_result.matched_skills|join(', ') or 'None identified' }}</p><p><strong>Missing skills:</strong> {{ match_result.missing_skills|join(', ') or 'None identified' }}</p><h4>Suggestions</h4><ul>{% for item in match_result.tailoring_suggestions %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}</section>
+  </main>
+</body>
+</html>

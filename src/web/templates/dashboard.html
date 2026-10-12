@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Job dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}">
+</head>
+<body>
+  <main class="page-shell">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Local-first job search</p>
+        <h1>Job dashboard</h1>
+        <p class="muted">Review discovered roles and track your application progress.</p>
+      </div>
+      <span class="count">{{ jobs|length }} shown</span>
+    </header>
+    {% if updated %}<p class="notice">Job status updated.</p>{% endif %}
+    <form class="filters" method="get">
+      <label>Search<input name="query" value="{{ query }}" placeholder="Title, company, or location"></label>
+      <label>Status<select name="status"><option value="all">All statuses</option>{% for item in statuses %}<option value="{{ item }}" {% if item == selected_status %}selected{% endif %}>{{ item|capitalize }}</option>{% endfor %}</select></label>
+      <label>Company<select name="company"><option value="">All companies</option>{% for item in companies %}<option value="{{ item }}" {% if item == selected_company %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
+      <label>Jobs<select name="relevance"><option value="relevant" {% if relevance == 'relevant' %}selected{% endif %}>Relevant only</option><option value="all" {% if relevance == 'all' %}selected{% endif %}>All discoveries</option></select></label>
+      <button type="submit">Filter</button>
+    </form>
+    {% if jobs %}
+    <section class="job-grid" aria-label="Job results">
+      {% for job in jobs %}
+      <article class="job-card">
+        <div class="job-card__heading"><p class="eyebrow">{{ job.company }}</p><span class="status status--{{ job.status }}">{{ job.status }}</span></div>
+        <h2><a href="/jobs/{{ job.id }}">{{ job.title }}</a></h2>
+        <p class="muted">{{ job.location }}</p>
+        <a class="text-link" href="/jobs/{{ job.id }}">View details <span aria-hidden="true">→</span></a>
+      </article>
+      {% endfor %}
+    </section>
+    {% else %}<section class="empty"><h2>No matching jobs</h2><p>Try broadening the filters or run a scan to find new roles.</p></section>{% endif %}
+  </main>
+</body>
+</html>

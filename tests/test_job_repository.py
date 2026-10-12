@@ -27,6 +27,37 @@ def test_repository_saves_and_updates_job_by_url(tmp_path: Path) -> None:
     assert saved_jobs[0].title == "Updated Software Engineering Intern"
 
 
+def test_repository_preserves_lifecycle_status_when_refreshing_job(tmp_path: Path) -> None:
+    repository = JobRepository(tmp_path / "jobs.db")
+    repository.initialize()
+    job = JobPosting("Intern", "Example", "Remote", "https://example.com/jobs/1")
+    job_id = repository.save(job)
+
+    repository.update_status(job_id, "applied")
+    job.title = "Updated Intern"
+    repository.save(job)
+
+    saved = repository.get_by_id(job_id)
+    assert saved is not None
+    assert saved.status == "applied"
+    assert saved.title == "Updated Intern"
+
+
+def test_repository_lists_and_updates_lifecycle_status(tmp_path: Path) -> None:
+    repository = JobRepository(tmp_path / "jobs.db")
+    repository.initialize()
+    new_id = repository.save(JobPosting("New Intern", "Example", "Remote", "https://example/jobs/1"))
+    applied_id = repository.save(JobPosting("Applied Intern", "Example", "Remote", "https://example/jobs/2"))
+
+    updated = repository.update_status(applied_id, "applied")
+
+    assert updated is not None
+    assert updated.status == "applied"
+    assert [job.id for job in repository.list_by_status("new")] == [new_id]
+    assert [job.id for job in repository.list_by_status("applied")] == [applied_id]
+    assert repository.update_status(999, "reviewed") is None
+
+
 def test_repository_refreshes_discovery_timestamp_on_update(tmp_path: Path) -> None:
     repository = JobRepository(tmp_path / "jobs.db")
     repository.initialize()
@@ -72,6 +103,22 @@ def test_repository_lists_only_relevant_jobs(tmp_path: Path) -> None:
     jobs = repository.list_relevant()
 
     assert [job.title for job in jobs] == ["Relevant Intern"]
+
+
+def test_repository_can_mark_existing_job_irrelevant_without_losing_status(tmp_path: Path) -> None:
+    repository = JobRepository(tmp_path / "jobs.db")
+    repository.initialize()
+    job = JobPosting(
+        "Intern", "Example", "Remote", "https://example/jobs/1", status="reviewed"
+    )
+    repository.save(job)
+
+    repository.update_relevance_by_url(job.job_url, False)
+
+    saved = repository.get_by_id(job.id)
+    assert saved is not None
+    assert saved.is_relevant is False
+    assert saved.status == "reviewed"
 
 
 def test_repository_collapses_equivalent_job_url_encodings(tmp_path: Path) -> None:
@@ -172,3 +219,36 @@ def test_initialize_migrates_legacy_rows_as_unapproved(tmp_path: Path) -> None:
         JobPosting("New Intern", "Example", "Remote", "https://example.com/new")
     )
     assert [job.title for job in repository.list_relevant()] == ["New Intern"]
+
+
+def test_initialize_migrates_existing_rows_to_new_status(tmp_path: Path) -> None:
+    database = tmp_path / "jobs.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            CREATE TABLE job_postings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                company TEXT NOT NULL,
+                location TEXT NOT NULL,
+                job_url TEXT NOT NULL UNIQUE,
+                description TEXT NOT NULL DEFAULT '',
+                requirements TEXT NOT NULL DEFAULT '',
+                source TEXT NOT NULL DEFAULT '',
+                discovered_at TEXT NOT NULL,
+                is_relevant INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO job_postings (title, company, location, job_url, discovered_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("Legacy Role", "Example", "Remote", "https://example.com/legacy", datetime.now(timezone.utc).isoformat()),
+        )
+
+    repository = JobRepository(database)
+    repository.initialize()
+
+    assert repository.list_all()[0].status == "new"

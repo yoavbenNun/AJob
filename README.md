@@ -5,7 +5,7 @@ intern, and junior software roles. The long-term goal is to compare roles with a
 resume, explain fit, and prepare tailored application material while keeping all
 rewrites and submissions behind explicit human approval.
 
-## Current scope: Phases 5 and 6
+## Current scope
 
 The current MVP provides:
 
@@ -27,9 +27,15 @@ The current MVP provides:
 - human-readable and stable JSON matching output
 - isolated per-company failures and SQLite persistence
 - a dry-run mode that prints targets without launching a browser
+- lifecycle tracking for new, reviewed, applied, ignored, and rejected jobs
+- PostgreSQL/Supabase storage selected through `DATABASE_URL`
+- email summaries with optional privacy-reduced cloud scoring
+- a scheduled Docker/GitHub Actions deployment
+- a local FastAPI dashboard for review and status updates
+- human-approved DOCX generation that preserves existing resume evidence
 
-It does **not** modify resumes, call paid APIs, deploy itself to the cloud, or
-submit applications.
+It does **not** call paid APIs or submit applications. Remote execution requires
+your GitHub, Supabase, and SMTP secrets before it can run in the cloud.
 
 ## Architecture
 
@@ -38,9 +44,11 @@ The project uses a small layered structure:
 - `config/`: user-editable target company definitions
 - `src/models.py`: domain objects shared by the application
 - `src/config_loader.py`: YAML-to-domain-model boundary
-- `src/storage/`: SQLite persistence
+- `src/storage/`: SQLite and PostgreSQL persistence
 - `src/scrapers/`: Playwright browsing and normalized job-link extraction
-- `src/matching/`, `src/resume/`, `src/notifications/`: reserved for later phases
+- `src/matching/`, `src/resume/`, `src/notifications/`: scoring, approved resume
+  generation, safe cloud profiles, and email delivery
+- `src/web/`: local FastAPI dashboard
 - `tests/`: tests for behavior already implemented
 
 The scanner depends on domain models rather than storage or matching logic. This
@@ -73,13 +81,51 @@ python -m src.main match path\to\resume.pdf
 python -m src.main match path\to\resume.pdf --job-id 42
 python -m src.main match path\to\resume.pdf --json --limit 20
 python -m src.main match path\to\resume.pdf --origin "Rishon Lezion, Israel"
+python -m src.main list --status new
+python -m src.main status 42 applied
+python -m src.main export-safe-profile path\to\resume.pdf
+python -m src.main tailor-resume path\to\resume.pdf 42 output\tailored.docx --approve
 ```
+
+Set `RESUME_DIRECTORY` to the folder containing resumes, then start the local
+dashboard with `uvicorn src.web.app:app --reload` and open
+`http://127.0.0.1:8000`. Dashboard matching accepts only files inside that folder,
+uses POST forms with CSRF protection, and does not put file paths in URLs. The
+dashboard has no user authentication and must not be exposed to the public internet.
 
 Use custom paths if needed:
 
 ```powershell
 python -m src.main scan --config config/companies.yaml --database data/jobs.db
 ```
+
+### Optional email summary
+
+Pass `--email-summary` to send one post-scan summary via SMTP. This is opt-in;
+without the flag no email is sent. Configuration is exclusively through process
+environment variables, never configuration files: `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, and `SMTP_TO` are required.
+`SMTP_USE_TLS` defaults to `true` and may be set to `false` only for SMTP servers
+that do not support STARTTLS. Do not commit these values.
+
+The repository includes a scheduled GitHub Actions workflow. It requires a
+`DATABASE_URL` repository secret for a persistent PostgreSQL database; without
+it, the workflow fails before scanning rather than silently using the runner's
+ephemeral SQLite filesystem. For Supabase, use its PostgreSQL connection string
+with `sslmode=require` (for example,
+`postgresql://USER:PASSWORD@HOST:5432/postgres?sslmode=require`) and keep the
+entire value in the secret store. Do not print or commit it. Add the SMTP values
+as repository secrets only when email delivery is desired. The workflow container
+has Chromium and its Playwright dependencies installed.
+
+For ranked cloud emails, store the one-line output of `export-safe-profile` as the
+`CANDIDATE_PROFILE_JSON` repository secret. It excludes name, email, phone, and
+free-form resume prose.
+
+GitHub Actions cron expressions use UTC. The included schedule is `05:17 UTC`,
+which is 07:17 or 08:17 in Israel depending on daylight saving time. Adjust the
+UTC expression if a different cadence is preferred; GitHub Actions does not
+support a per-schedule timezone setting.
 
 Run tests with:
 
@@ -92,9 +138,10 @@ visits each enabled page, and stores unique job links. Add `--headed` to watch t
 browser or `--timeout-ms 60000` for slow sites.
 Use `--max-pages 1` to restrict each company to its first results page.
 
-Microsoft and Google are the currently verified sources. Wix remains in the YAML
-as a disabled example because its positions page does not expose job links in the
-rendered anchor markup; it needs a dedicated data adapter in a later phase.
+Microsoft, Google, Amazon, Apple, Intel, NVIDIA, and monday.com are enabled.
+Intel and NVIDIA use a dedicated Workday JSON adapter. Wix remains disabled
+because live inspection found neither usable position anchors nor a stable official
+feed; it should not be presented as supported until an adapter is verified.
 
 Filtering is deliberately conservative and explainable. A role must have a
 software-oriented title, must not contain a clear senior-level marker, and must
@@ -134,8 +181,10 @@ privacy. See `docs/cloud-roadmap.md`.
    education, experience, projects, and summary locally.
 5. **Matching (complete):** explainable 1–100 job/resume fit scores.
 6. **Tailoring suggestions (complete):** precise, evidence-backed resume advice.
-7. **Approved document generation:** require review before producing a tailored resume.
-8. **Notifications:** optionally send new-job summaries through Telegram or email.
+7. **Approved document generation (complete):** `--approve` is required and
+   existing files are never overwritten.
+8. **Notifications (complete):** SMTP summaries support safe-profile scoring and
+   commute filtering in scheduled runs.
 9. **Application assistance:** prepare applications, never submit without approval.
 
 ## Safety principle

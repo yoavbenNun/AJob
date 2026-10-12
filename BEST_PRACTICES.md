@@ -51,6 +51,9 @@ reusable lesson appears.
   a visible or enabled next button does not prove navigation succeeded.
 - Do not claim a source is supported when its page exposes no usable job data.
   Disable it explicitly and document the need for a dedicated adapter.
+- Workday search landing pages can render no job anchors even when individual
+  job-detail URLs are public. Verify rendered listing anchors before enabling a
+  Workday source; otherwise keep it disabled pending a dedicated adapter.
 
 ## Relevance filtering
 
@@ -63,6 +66,11 @@ reusable lesson appears.
 - Require positive early-career evidence and reject clear seniority markers.
 - Test both false negatives and false positives, especially titles where words such
   as "developer" describe a program or audience rather than the job itself.
+- Boundary-aware matching still requires explicit common inflections. Test plural
+  program titles such as `Internships`; a singular `internship` rule will not match
+  them by design.
+- Do not treat prose such as "mentor junior team members" as evidence that the
+  role itself is junior. Detail-page early-career markers need candidate context.
 
 ## Data safety
 
@@ -72,6 +80,11 @@ reusable lesson appears.
 - Treat legacy rows as relevance-unknown during schema migration. Do not silently
   rank old unfiltered discoveries as approved job matches.
 - Resume changes and application submission must always require human approval.
+- Local-only web interfaces still need CSRF protection. Never place resume paths
+  in query strings, and restrict dashboard file access to an explicit directory.
+- Storage adapters must agree on canonical URL identity. Legacy canonicalization
+  may update unambiguous rows, but duplicate conflicts require a manual merge and
+  must never be silently deleted.
 - Keep match scoring deterministic and explainable before adding an LLM. Every
   point should map to visible resume/job evidence.
 - Do not award fit points merely because a resume section exists. Experience and
@@ -95,3 +108,31 @@ reusable lesson appears.
   Do not persist the home location, coordinates, or route details in the jobs DB.
 - Detail pages can contain a reliable location even when listing cards do not.
   Prefer explicit accessibility markers such as `place` over guessing from prose.
+
+## Notifications and scheduled runs
+
+- Keep SMTP settings exclusively in environment variables or secret stores; do not
+  place credentials in YAML, source code, images, or test fixtures that resemble
+  real credentials.
+- Make notification delivery explicit and test SMTP interactions with injected
+  clients. A scheduled GitHub-hosted runner has ephemeral local storage, so it
+  cannot reliably determine which jobs are new without a persistent store.
+- Cloud matching should use a privacy-reduced profile containing only location,
+  canonical skills, section-level skill evidence, and education level. Never put
+  contact details or raw resume prose in repository files or workflow logs.
+- GitHub Actions cron expressions are evaluated in UTC and do not follow Israel
+  daylight-saving transitions. Document the seasonal local-time shift.
+
+## Career platform adapters
+
+- Workday listing pages may expose no useful rendered anchors while their public
+  careers JSON endpoint remains available. Keep that API handling in a dedicated
+  adapter and validate the tenant, site, returned paths, and allowed host.
+- A search-engine result is evidence that a job detail page exists, not proof that
+  the configured listing can enumerate it. Keep sources disabled until the actual
+  listing path or official feed is verified end to end.
+- Require a persistent `DATABASE_URL` for scheduled cloud scans; do not silently
+  fall back to runner-local SQLite. GitHub Actions scheduled cron is UTC and does
+  not support a per-schedule timezone field, so document daylight-saving effects.
+- Do not make automatic PostgreSQL migrations delete or merge existing job rows.
+  URL normalization must preserve user-managed lifecycle status and audit history.

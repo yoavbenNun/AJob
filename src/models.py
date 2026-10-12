@@ -5,6 +5,9 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 
+JOB_STATUSES = ("new", "reviewed", "applied", "ignored", "rejected")
+
+
 @dataclass(frozen=True, slots=True)
 class Company:
     """A configured company career page."""
@@ -35,10 +38,14 @@ class JobPosting:
     discovered_at: datetime | None = None
     id: int | None = None
     is_relevant: bool = True
+    status: str = "new"
 
     def __post_init__(self) -> None:
         if self.discovered_at is None:
             self.discovered_at = datetime.now(timezone.utc)
+        if self.status not in JOB_STATUSES:
+            allowed = ", ".join(JOB_STATUSES)
+            raise ValueError(f"Invalid job status {self.status!r}; expected one of: {allowed}")
 
 
 @dataclass(frozen=True, slots=True)

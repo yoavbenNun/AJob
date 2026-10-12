@@ -13,6 +13,48 @@ companies:
       - /about/careers/applications/jobs/results/
     allowed_job_hosts:
       - www.google.com
+  - name: Amazon
+    # Official Israel search, scoped to software/student roles. Rendered job
+    # anchors are compatible with the generic scraper.
+    careers_url: https://www.amazon.jobs/en/search?base_query=software%20student&country=ISR
+    enabled: true
+    job_url_patterns:
+      - /en/jobs/
+    allowed_job_hosts:
+      - www.amazon.jobs
+  - name: Apple
+    # Official Israel-wide search. Early-career relevance remains enforced by
+    # the shared filters after discovery.
+    careers_url: https://jobs.apple.com/en-il/search?location=israel-ISR
+    enabled: true
+    job_url_patterns:
+      - /en-il/details/
+    allowed_job_hosts:
+      - jobs.apple.com
+  - name: NVIDIA
+    # Uses the dedicated Workday JSON adapter rather than rendered anchors.
+    careers_url: https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite
+    enabled: true
+    job_url_patterns:
+      - /job/
+    allowed_job_hosts:
+      - nvidia.wd5.myworkdayjobs.com
+  - name: Intel
+    # Uses the dedicated Workday JSON adapter rather than rendered anchors.
+    careers_url: https://intel.wd1.myworkdayjobs.com/en-US/External
+    enabled: true
+    job_url_patterns:
+      - /job/
+    allowed_job_hosts:
+      - intel.wd1.myworkdayjobs.com
+  - name: monday.com
+    # The shared role and location filters reject non-Israel/non-junior results.
+    careers_url: https://monday.com/careers
+    enabled: true
+    job_url_patterns:
+      - /careers/
+    allowed_job_hosts:
+      - monday.com
   - name: Wix
     careers_url: https://careers.wix.com/positions
     # The current page loads job data outside normal anchor markup. Keep this

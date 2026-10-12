@@ -23,6 +23,7 @@ SOFTWARE_TERMS = (
 EARLY_CAREER_TERMS = (
     "intern",
     "internship",
+    "internships",
     "student",
     "new grad",
     "new graduate",
@@ -33,6 +34,9 @@ EARLY_CAREER_TERMS = (
     "entry-level",
     "apprentice",
     "early career",
+)
+DETAIL_EARLY_CAREER_TERMS = tuple(
+    term for term in EARLY_CAREER_TERMS if term != "junior"
 )
 SENIOR_TERMS = (
     "senior",
@@ -73,7 +77,7 @@ def classify_job(job: JobPosting) -> FilterDecision:
         return FilterDecision(True, "title contains an early-career marker")
 
     details = _normalize(f"{job.description} {job.requirements}")
-    if any(_contains_phrase(details, term) for term in EARLY_CAREER_TERMS):
+    if any(_contains_phrase(details, term) for term in DETAIL_EARLY_CAREER_TERMS):
         return FilterDecision(True, "job details contain an early-career marker")
     if re.search(r"\b(?:0|zero)\s*(?:-|to)\s*[123]\s+years?\b", details):
         return FilterDecision(True, "job details allow zero years of experience")
