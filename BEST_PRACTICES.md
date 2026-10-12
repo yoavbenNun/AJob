@@ -122,6 +122,8 @@ reusable lesson appears.
   contact details or raw resume prose in repository files or workflow logs.
 - GitHub Actions cron expressions are evaluated in UTC and do not follow Israel
   daylight-saving transitions. Document the seasonal local-time shift.
+- Treat hosted-runner deprecation annotations as maintenance work even when a run
+  succeeds. Keep first-party actions on a runtime-supported major version.
 
 ## Career platform adapters
 
