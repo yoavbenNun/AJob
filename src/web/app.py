@@ -19,6 +19,11 @@ from fastapi.templating import Jinja2Templates
 from src.matching.resume_matcher import match_resume_to_job
 from src.models import JOB_STATUSES, JobPosting
 from src.resume.resume_parser import parse_resume
+from src.resume.tailored_resume import (
+    build_tailoring_proposal,
+    create_tailored_resume,
+    tailored_resume_output_path,
+)
 from src.storage.repository_factory import create_job_repository
 
 
@@ -35,6 +40,7 @@ def create_app(
     repository.initialize()
     csrf_token = secrets.token_urlsafe(32)
     allowed_resume_root = Path(resume_directory).resolve() if resume_directory else None
+    tailored_resume_root = allowed_resume_root / "tailored" if allowed_resume_root else None
 
     app = FastAPI(title="AI Job Search Agent", docs_url=None, redoc_url=None)
     app.mount("/static", StaticFiles(directory=str(WEB_ROOT / "static")), name="static")
@@ -112,13 +118,65 @@ def create_app(
                 resume_matching_enabled=True,
             )
         try:
-            resolved_resume = Path(resume_path).resolve()
-            if resolved_resume != allowed_resume_root and allowed_resume_root not in resolved_resume.parents:
-                raise ValueError("Resume path must be inside RESUME_DIRECTORY.")
-            result = match_resume_to_job(parse_resume(resolved_resume), job)
+            resolved_resume = _resolve_resume_path(resume_path, allowed_resume_root)
+            profile = parse_resume(resolved_resume)
+            result = match_resume_to_job(profile, job)
         except (OSError, ValueError) as error:
             return _detail_response(request, job, match_error=f"Match unavailable: {error}", csrf_token=csrf_token, resume_matching_enabled=True)
-        return _detail_response(request, job, match_result=result, csrf_token=csrf_token, resume_matching_enabled=True)
+        return _detail_response(
+            request,
+            job,
+            match_result=result,
+            tailoring_proposal=build_tailoring_proposal(profile, job, result),
+            resume_path=str(resolved_resume),
+            csrf_token=csrf_token,
+            resume_matching_enabled=True,
+        )
+
+    @app.post("/jobs/{job_id}/tailor", response_class=HTMLResponse)
+    async def tailor_job_resume(request: Request, job_id: int):
+        """Create a separate tailored DOCX only after an explicit local approval."""
+        job = _get_job_or_404(repository, job_id)
+        form = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
+        _validate_csrf(form, csrf_token)
+        if form.get("approve_tailoring", [""])[0] != "yes":
+            return _detail_response(
+                request,
+                job,
+                tailoring_error="Confirm the factual tailoring proposal before generating a DOCX.",
+                csrf_token=csrf_token,
+                resume_matching_enabled=allowed_resume_root is not None,
+            )
+        if allowed_resume_root is None or tailored_resume_root is None:
+            return _detail_response(
+                request,
+                job,
+                tailoring_error="Set RESUME_DIRECTORY to enable tailored resume generation.",
+                csrf_token=csrf_token,
+                resume_matching_enabled=False,
+            )
+        resume_path = form.get("resume_path", [""])[0]
+        try:
+            resolved_resume = _resolve_resume_path(resume_path, allowed_resume_root)
+            profile = parse_resume(resolved_resume)
+            match = match_resume_to_job(profile, job)
+            output = tailored_resume_output_path(tailored_resume_root, job)
+            create_tailored_resume(profile, job, match, output, approved=True)
+        except (OSError, ValueError) as error:
+            return _detail_response(
+                request,
+                job,
+                tailoring_error=f"Tailored resume unavailable: {error}",
+                csrf_token=csrf_token,
+                resume_matching_enabled=True,
+            )
+        return _detail_response(
+            request,
+            job,
+            tailored_resume_name=output.name,
+            csrf_token=csrf_token,
+            resume_matching_enabled=True,
+        )
 
     return app
 
@@ -134,6 +192,15 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
 def _validate_csrf(form: dict[str, list[str]], expected: str) -> None:
     if not secrets.compare_digest(form.get("csrf_token", [""])[0], expected):
         raise HTTPException(status_code=403, detail="Invalid form token")
+
+
+def _resolve_resume_path(resume_path: str, allowed_resume_root: Path) -> Path:
+    if not resume_path.strip():
+        raise ValueError("Enter a local resume path.")
+    resolved_resume = Path(resume_path).resolve()
+    if resolved_resume != allowed_resume_root and allowed_resume_root not in resolved_resume.parents:
+        raise ValueError("Resume path must be inside RESUME_DIRECTORY.")
+    return resolved_resume
 
 
 def _get_job_or_404(repository, job_id: int) -> JobPosting:

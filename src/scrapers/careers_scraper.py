@@ -68,17 +68,25 @@ def extract_jobs_from_links(
         ):
             continue
 
-        jobs_by_url.setdefault(
-            url,
-            JobPosting(
+        candidate = JobPosting(
                 title=title,
                 company=company.name,
                 location=_infer_location(context, title),
                 job_url=url,
                 description=" ".join(context.split()),
                 source=company.careers_url,
-            ),
-        )
+            )
+        existing = jobs_by_url.get(url)
+        has_descriptive_rendered_title = bool(raw_text) and not _is_generic_link_text(raw_text)
+        if (
+            existing is None
+            or _is_generic_link_text(existing.title)
+            or (
+                has_descriptive_rendered_title
+                and existing.title == _title_from_url(url)
+            )
+        ):
+            jobs_by_url[url] = candidate
 
     return list(jobs_by_url.values())
 
@@ -394,6 +402,16 @@ def _infer_location(context: str, title: str) -> str:
 
 def _first_nonempty_line(value: str) -> str:
     return next((" ".join(line.split()) for line in value.splitlines() if line.strip()), "")
+
+
+def _is_generic_link_text(value: str) -> bool:
+    return value.casefold().strip() in {
+        "apply",
+        "apply now",
+        "learn more",
+        "view details",
+        "view job",
+    }
 
 
 def _title_from_url(url: str) -> str:

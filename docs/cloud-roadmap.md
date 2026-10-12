@@ -31,9 +31,12 @@ code and can run on a laptop, server, scheduled container, or behind a future AP
 The scheduled workflow requires the `DATABASE_URL` repository secret so a hosted
 runner cannot fall back to an ephemeral SQLite database. GitHub Actions evaluates
 scheduled cron in UTC; it does not support a `timezone` property for a schedule.
-The included `05:17 UTC` schedule lands at 07:17 or 08:17 in Israel as daylight
-saving time changes. The concurrency group prevents overlapping scans from
-competing for the same database rows.
+The workflow therefore schedules both possible UTC offsets for each target hour
+and gates the actual scan using `Asia/Jerusalem` time-zone data. Scheduled scans run at 08:00, 11:00, and 16:00
+Israel time across daylight-saving changes; manual dispatch bypasses the gate.
+GitHub can still delay scheduled workflow starts, so this is not a hard real-time
+guarantee. The concurrency group prevents overlapping scans from competing for
+the same database rows.
 
 An LLM can later be an optional adapter for better wording. Deterministic matching
 must remain available as the private, free, testable baseline.

@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import re
 
 from src.models import JobPosting
 from src.storage.job_repository import JobRepository
@@ -73,6 +74,56 @@ def test_job_detail_calculates_a_local_match_without_exposing_resume_text(tmp_pa
     assert response.status_code == 200
     assert "/100 fit score" in response.text
     assert "Dana Developer" not in response.text
+
+
+def test_dashboard_previews_and_generates_an_explicitly_approved_tailored_resume(tmp_path) -> None:
+    client, job_id = _client_with_jobs(tmp_path)
+    resume = tmp_path / "master_resume.txt"
+    resume.write_text(
+        "Dana Developer\nSKILLS\nPython, FastAPI\nEXPERIENCE\nBuilt a FastAPI service.\n"
+        "EDUCATION\nB.Sc. Computer Science",
+        encoding="utf-8",
+    )
+    preview = client.post(
+        f"/jobs/{job_id}/match",
+        data={"resume_path": str(resume), "csrf_token": _csrf_token(client, job_id)},
+    )
+
+    assert preview.status_code == 200
+    assert "Factual tailoring proposal" in preview.text
+    assert "Score preview:" in preview.text
+    assert "Before:" in preview.text and "After:" in preview.text
+    assert "I approve this factual proposal" in preview.text
+
+    generated = client.post(
+        f"/jobs/{job_id}/tailor",
+        data={
+            "resume_path": str(resume),
+            "approve_tailoring": "yes",
+            "csrf_token": _csrf_token(client, job_id),
+        },
+    )
+
+    expected = tmp_path / "tailored" / "Example-Python-Software-Intern-tailored.docx"
+    assert generated.status_code == 200
+    assert expected.is_file()
+    assert "master resume was not changed" in generated.text
+    assert resume.read_text(encoding="utf-8").startswith("Dana Developer")
+
+
+def test_dashboard_refuses_tailored_resume_without_explicit_approval(tmp_path) -> None:
+    client, job_id = _client_with_jobs(tmp_path)
+    resume = tmp_path / "resume.txt"
+    resume.write_text("Dana Developer\nSKILLS\nPython", encoding="utf-8")
+
+    response = client.post(
+        f"/jobs/{job_id}/tailor",
+        data={"resume_path": str(resume), "csrf_token": _csrf_token(client, job_id)},
+    )
+
+    assert response.status_code == 200
+    assert "Confirm the factual tailoring proposal" in response.text
+    assert not (tmp_path / "tailored").exists()
 
 
 def test_dashboard_rejects_status_change_without_csrf_token(tmp_path) -> None:

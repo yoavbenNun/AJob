@@ -15,6 +15,26 @@
     <section class="content-section"><h2>Description</h2><p class="preserve-lines">{{ job.description or 'No description was captured for this posting.' }}</p></section>
     <section class="content-section"><h2>Requirements</h2><p class="preserve-lines">{{ job.requirements or 'No requirements were captured for this posting.' }}</p></section>
     <section class="content-section"><h2>Local match</h2><p class="muted">The resume is read only from the configured local resume directory and is not saved or changed.</p>{% if resume_matching_enabled %}<form class="match-form" method="post" action="/jobs/{{ job.id }}/match"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Resume file path<input name="resume_path" required placeholder="C:\path\to\resume.pdf"></label><button type="submit">Calculate match</button></form>{% else %}<p class="muted">Set RESUME_DIRECTORY before starting the dashboard to enable matching.</p>{% endif %}{% if match_error %}<p class="error">{{ match_error }}</p>{% endif %}{% if match_result %}<div class="match-result"><h3>{{ match_result.score }}/100 fit score {% if not match_result.eligible %}<span class="error">· Not eligible</span>{% endif %}</h3><p><strong>Matched skills:</strong> {{ match_result.matched_skills|join(', ') or 'None identified' }}</p><p><strong>Missing skills:</strong> {{ match_result.missing_skills|join(', ') or 'None identified' }}</p><h4>Suggestions</h4><ul>{% for item in match_result.tailoring_suggestions %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}</section>
+    {% if tailoring_proposal %}
+    <section class="content-section">
+      <h2>Factual tailoring proposal</h2>
+      <p><strong>Score preview:</strong> Before: {{ tailoring_proposal.before_score }}/100. After: {{ tailoring_proposal.after_score }}/100.</p>
+      <p class="muted">The score does not increase because reordering existing skills adds no new evidence.</p>
+      <p><strong>Proposed skill order:</strong> {{ tailoring_proposal.reordered_skills|join(', ') or 'No skills identified' }}</p>
+      <h3>Changes</h3>
+      <ul>{% for item in tailoring_proposal.changes %}<li>{{ item }}</li>{% endfor %}</ul>
+      <h3>Safeguards</h3>
+      <ul>{% for item in tailoring_proposal.safeguards %}<li>{{ item }}</li>{% endfor %}</ul>
+      <form class="match-form" method="post" action="/jobs/{{ job.id }}/tailor">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="resume_path" value="{{ resume_path }}">
+        <label><input type="checkbox" name="approve_tailoring" value="yes" required> I approve this factual proposal and want a separate DOCX generated.</label>
+        <button type="submit">Generate tailored resume</button>
+      </form>
+    </section>
+    {% endif %}
+    {% if tailoring_error %}<p class="error">{{ tailoring_error }}</p>{% endif %}
+    {% if tailored_resume_name %}<p class="notice">Created {{ tailored_resume_name }} in the configured tailored resume folder. The master resume was not changed.</p>{% endif %}
   </main>
 </body>
 </html>

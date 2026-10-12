@@ -40,6 +40,9 @@ reusable lesson appears.
   Matching a URL path alone is not enough to make an external link safe to fetch.
 - Some valid job anchors have no visible text. Use a deterministic URL-slug title
   fallback, while preferring rendered titles when available.
+- ATS listings can link to the same job from both its title and a generic `Apply`
+  button. Deduplicate by URL while retaining the most descriptive anchor text;
+  first-link-wins can silently discard the real title.
 - Do not treat navigation labels such as "Learn more" or "Apply now" as locations.
   Store `Not specified` when location evidence is unreliable.
 - Isolate failures per company so one slow, changed, or blocked site does not abort
@@ -121,7 +124,11 @@ reusable lesson appears.
   canonical skills, section-level skill evidence, and education level. Never put
   contact details or raw resume prose in repository files or workflow logs.
 - GitHub Actions cron expressions are evaluated in UTC and do not follow Israel
-  daylight-saving transitions. Document the seasonal local-time shift.
+  daylight-saving transitions. For fixed Israel local scan times, schedule both
+  possible UTC offsets and use a cheap `TZ=Asia/Jerusalem` gate before expensive
+  work; manual dispatch must bypass that gate. Gate by local hour so ordinary
+  GitHub queue delays do not skip a run. GitHub may still delay starts, so
+  do not represent this as a hard real-time guarantee.
 - Treat hosted-runner deprecation annotations as maintenance work even when a run
   succeeds. Keep first-party actions on a runtime-supported major version.
 

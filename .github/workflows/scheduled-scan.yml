@@ -2,9 +2,9 @@ name: Scheduled job scan
 
 on:
   schedule:
-    # GitHub Actions schedules are UTC. This runs at 07:17/08:17 Israel time,
-    # depending on daylight saving time.
-    - cron: "17 5 * * *"
+    # Each Israel target hour has both possible UTC offsets (UTC+2/UTC+3).
+    # The local-time gate below rejects the three DST-inapplicable runs.
+    - cron: "0 5,6,8,9,13,14 * * *"
   workflow_dispatch:
 
 permissions:
@@ -30,16 +30,40 @@ jobs:
       CANDIDATE_PROFILE_JSON: ${{ secrets.CANDIDATE_PROFILE_JSON }}
     steps:
       - uses: actions/checkout@v5
+      - name: Run only at scheduled Israel times
+        id: schedule_gate
+        shell: bash
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then
+            echo "run_scan=true" >> "$GITHUB_OUTPUT"
+            echo "Manual dispatch: bypassing the scheduled-time gate."
+            exit 0
+          fi
+
+          local_hour="$(TZ=Asia/Jerusalem date +%H)"
+          local_time="$(TZ=Asia/Jerusalem date +%H:%M)"
+          case "$local_hour" in
+            08|11|16)
+              echo "run_scan=true" >> "$GITHUB_OUTPUT"
+              echo "Scheduled scan approved for $local_time Asia/Jerusalem."
+              ;;
+            *)
+              echo "run_scan=false" >> "$GITHUB_OUTPUT"
+              echo "Skipping: $local_time Asia/Jerusalem is outside the scheduled scan times."
+              ;;
+          esac
       - name: Require persistent PostgreSQL storage
+        if: ${{ steps.schedule_gate.outputs.run_scan == 'true' }}
         run: |
           if [ -z "$DATABASE_URL" ]; then
             echo "DATABASE_URL repository secret is required for scheduled scans." >&2
             exit 1
           fi
       - name: Build scanner image
+        if: ${{ steps.schedule_gate.outputs.run_scan == 'true' }}
         run: docker build --tag ai-job-search-agent .
       - name: Scan career pages and send summary
-        if: ${{ env.SMTP_HOST != '' }}
+        if: ${{ steps.schedule_gate.outputs.run_scan == 'true' && env.SMTP_HOST != '' }}
         run: >-
           docker run --rm
           -e SMTP_HOST -e SMTP_PORT -e SMTP_USERNAME -e SMTP_PASSWORD
@@ -48,5 +72,5 @@ jobs:
           -e CANDIDATE_PROFILE_JSON
           ai-job-search-agent python -m src.main scan --email-summary
       - name: Scan career pages without email
-        if: ${{ env.SMTP_HOST == '' }}
+        if: ${{ steps.schedule_gate.outputs.run_scan == 'true' && env.SMTP_HOST == '' }}
         run: docker run --rm -e DATABASE_URL ai-job-search-agent

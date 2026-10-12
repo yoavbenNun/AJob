@@ -55,6 +55,67 @@ companies:
       - /careers/
     allowed_job_hosts:
       - monday.com
+  - name: Mobileye
+    # Official Lever board narrowed to student roles. The shared filters still
+    # enforce software relevance and the candidate's driving radius.
+    careers_url: https://jobs.eu.lever.co/mobileye/?commitment=Student
+    enabled: true
+    job_url_patterns:
+      - /mobileye/
+    allowed_job_hosts:
+      - jobs.eu.lever.co
+  - name: Check Point
+    # Official Israel search. Keep the source configurable because this legacy
+    # careers site can change its query-string job links without notice.
+    careers_url: https://careers.checkpoint.com/index.php?a=search&fa%5B%5D=country_ss%3AIsrael&module=cpcareers&q=&sort=
+    # The page currently renders no usable job anchors in Playwright. Enable
+    # only after a dedicated feed/adapter is verified.
+    enabled: false
+    job_url_patterns:
+      - a=show
+      - joborderid=
+    allowed_job_hosts:
+      - careers.checkpoint.com
+  - name: CyberArk
+    careers_url: https://www.cyberark.com/careers/
+    # No stable, enumerable official listing has been verified yet.
+    enabled: false
+    job_url_patterns:
+      - /job/
+    allowed_job_hosts:
+      - www.cyberark.com
+  - name: Qualcomm
+    careers_url: https://careers.qualcomm.com/careers
+    # Enable after the current ATS tenant and Israel listing are verified.
+    enabled: false
+    job_url_patterns:
+      - /job/
+    allowed_job_hosts:
+      - careers.qualcomm.com
+  - name: SAP
+    careers_url: https://jobs.sap.com/search/
+    # Enable after an Israel-scoped listing is verified end to end.
+    enabled: false
+    job_url_patterns:
+      - /job/
+    allowed_job_hosts:
+      - jobs.sap.com
+  - name: AppsFlyer
+    careers_url: https://www.appsflyer.com/jobs/
+    # The public careers page still needs a verified job-feed adapter.
+    enabled: false
+    job_url_patterns:
+      - /jobs/
+    allowed_job_hosts:
+      - www.appsflyer.com
+  - name: Similarweb
+    careers_url: https://www.similarweb.com/corp/careers/jobs/
+    # The public careers page still needs a verified job-feed adapter.
+    enabled: false
+    job_url_patterns:
+      - /job/
+    allowed_job_hosts:
+      - www.similarweb.com
   - name: Wix
     careers_url: https://careers.wix.com/positions
     # The current page loads job data outside normal anchor markup. Keep this

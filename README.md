@@ -122,10 +122,13 @@ For ranked cloud emails, store the one-line output of `export-safe-profile` as t
 `CANDIDATE_PROFILE_JSON` repository secret. It excludes name, email, phone, and
 free-form resume prose.
 
-GitHub Actions cron expressions use UTC. The included schedule is `05:17 UTC`,
-which is 07:17 or 08:17 in Israel depending on daylight saving time. Adjust the
-UTC expression if a different cadence is preferred; GitHub Actions does not
-support a per-schedule timezone setting.
+GitHub Actions cron expressions use UTC and do not support a per-schedule time
+zone. The workflow schedules both possible UTC offsets for each target hour,
+then uses the runner's `Asia/Jerusalem` time-zone data to run scans only during
+the `08:00`, `11:00`, and `16:00` Israel hours. This keeps the intended times stable across Israel
+daylight-saving changes. A manual **Run workflow** dispatch bypasses this gate.
+GitHub may delay scheduled workflow starts during periods of high load; the gate
+does not turn delayed GitHub execution into a real-time scheduling guarantee.
 
 Run tests with:
 
@@ -138,10 +141,11 @@ visits each enabled page, and stores unique job links. Add `--headed` to watch t
 browser or `--timeout-ms 60000` for slow sites.
 Use `--max-pages 1` to restrict each company to its first results page.
 
-Microsoft, Google, Amazon, Apple, Intel, NVIDIA, and monday.com are enabled.
-Intel and NVIDIA use a dedicated Workday JSON adapter. Wix remains disabled
-because live inspection found neither usable position anchors nor a stable official
-feed; it should not be presented as supported until an adapter is verified.
+Microsoft, Google, Amazon, Apple, Intel, NVIDIA, monday.com, and Mobileye are
+enabled. Intel and NVIDIA use a dedicated Workday JSON adapter; Mobileye uses
+its official Lever student listing. Wix, Check Point, CyberArk, Qualcomm, SAP,
+AppsFlyer, and Similarweb remain documented but disabled until an enumerable
+official feed or dedicated adapter is verified end to end.
 
 Filtering is deliberately conservative and explainable. A role must have a
 software-oriented title, must not contain a clear senior-level marker, and must

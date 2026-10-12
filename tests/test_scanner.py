@@ -91,6 +91,52 @@ def test_extract_jobs_from_links_filters_and_deduplicates() -> None:
     assert jobs[0].job_url == "https://example.com/positions/123"
 
 
+def test_extract_jobs_prefers_title_link_over_generic_apply_link() -> None:
+    company = Company(
+        "Example",
+        "https://example.com/careers",
+        job_url_patterns=("/positions/",),
+    )
+    links = [
+        {
+            "href": "https://example.com/positions/123",
+            "text": "Apply",
+            "context": "Apply",
+        },
+        {
+            "href": "https://example.com/positions/123",
+            "text": "Software Engineering Intern",
+            "context": "Software Engineering Intern\nTel Aviv, Israel",
+        },
+    ]
+
+    jobs = extract_jobs_from_links(company, links)
+
+    assert len(jobs) == 1
+    assert jobs[0].title == "Software Engineering Intern"
+    assert jobs[0].location == "Tel Aviv, Israel"
+
+
+def test_extract_jobs_prefers_rendered_title_over_url_fallback() -> None:
+    company = Company(
+        "Example",
+        "https://example.com/careers",
+        job_url_patterns=("/positions/",),
+    )
+    url = "https://example.com/positions/123-python-intern"
+
+    jobs = extract_jobs_from_links(
+        company,
+        [
+            {"href": url, "text": "", "context": ""},
+            {"href": url, "text": "Python Developer Student", "context": "Python Developer Student\nHaifa, Israel"},
+        ],
+    )
+
+    assert jobs[0].title == "Python Developer Student"
+    assert jobs[0].location == "Haifa, Israel"
+
+
 def test_extract_jobs_deduplicates_equivalent_query_encodings_and_order() -> None:
     company = Company(
         "Example",
