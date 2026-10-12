@@ -18,5 +18,10 @@ label { display: grid; gap: .35rem; font-size: .85rem; font-weight: 700; } input
 .outreach-form .wide { grid-column: span 2; }
 .contact-card { border-top: 1px solid #e2e8f0; padding: 1rem 0; display: flex; justify-content: space-between; gap: 1rem; align-items: center; }
 .contact-card .action-row { justify-content: flex-end; }
+.search-shortcuts { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+textarea { width: 100%; resize: vertical; border: 1px solid #cbd5e1; border-radius: .45rem; padding: .7rem; font: inherit; line-height: 1.45; }
+.draft-editor, .tracking-form { display: grid; gap: .8rem; margin-top: .8rem; }
+.tracking-form { grid-template-columns: auto minmax(150px, .5fr) minmax(220px, 1fr) auto; align-items: end; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #a5b4fc; outline-offset: 2px; }
 @media (max-width: 620px) { .page-shell { padding-top: 1.25rem; }.page-header { display: block; }.page-header .count, .page-header .status { display: inline-block; margin-top: .8rem; }.filters > *, .match-form > label { width: 100%; }.filters input, .filters select, .match-form input { width: 100%; }.action-row > *, .action-row form { width: 100%; }.action-row form { align-items: stretch; }.action-row form label, .action-row form select { width: 100%; } }
-@media (max-width: 760px) { .outreach-form { grid-template-columns: 1fr; }.outreach-form .wide { grid-column: auto; }.contact-card { display: block; }.contact-card .action-row { margin-top: .8rem; justify-content: flex-start; } }
+@media (max-width: 760px) { .outreach-form, .tracking-form { grid-template-columns: 1fr; }.outreach-form .wide { grid-column: auto; }.contact-card { display: block; }.contact-card .action-row { margin-top: .8rem; justify-content: flex-start; } }

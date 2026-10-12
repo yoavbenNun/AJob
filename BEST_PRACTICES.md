@@ -167,6 +167,12 @@ reusable lesson appears.
 - Treat draft approval and actual sending as separate consent events. Recompute
   drafts from server-known job/contact facts and bind approval to a short-lived
   fingerprint so stale previews cannot be approved.
+- Treat edited outreach text as user-authored. Validate its type and length,
+  require explicit approval of the exact text, preserve that approved snapshot,
+  and store copied/sent/replied events separately without inferring delivery.
+- Search shortcuts may construct public search-engine URLs but must never fetch,
+  parse, or enrich profile results. Opening a result and selecting a contact stays
+  under the user's control.
 - Add a `.dockerignore` before building locally; build context can otherwise carry
   resumes, databases, environment files, and repository history even when the
   Dockerfile does not copy those paths into the final image.

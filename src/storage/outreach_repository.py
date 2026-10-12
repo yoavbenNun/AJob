@@ -44,10 +44,28 @@ class OutreachRepository:
                     basis_fingerprint TEXT NOT NULL,
                     approved_at TEXT NOT NULL,
                     copied_at TEXT,
+                    kind TEXT NOT NULL DEFAULT 'full_message',
+                    sent_at TEXT,
+                    replied_at TEXT,
+                    follow_up_at TEXT,
+                    response_note TEXT NOT NULL DEFAULT '',
                     FOREIGN KEY(contact_id) REFERENCES outreach_contacts(id)
                 );
                 """
             )
+            columns = {row["name"] for row in connection.execute(
+                "PRAGMA table_info(outreach_drafts)"
+            ).fetchall()}
+            migrations = {
+                "kind": "TEXT NOT NULL DEFAULT 'full_message'",
+                "sent_at": "TEXT",
+                "replied_at": "TEXT",
+                "follow_up_at": "TEXT",
+                "response_note": "TEXT NOT NULL DEFAULT ''",
+            }
+            for name, definition in migrations.items():
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE outreach_drafts ADD COLUMN {name} {definition}")
 
     def save_contact(self, contact: OutreachContact) -> int:
         contact.profile_url = validate_profile_url(contact.profile_url)
@@ -87,15 +105,40 @@ class OutreachRepository:
             ).fetchone()
         return _contact_from_row(row) if row else None
 
-    def save_approved_draft(self, job_id: int, contact_id: int, body: str, fingerprint: str) -> int:
+    def save_approved_draft(self, job_id: int, contact_id: int, body: str,
+                            fingerprint: str, kind: str = "full_message") -> int:
         with self._connect() as connection:
+            owner = connection.execute(
+                "SELECT 1 FROM outreach_contacts WHERE id = ? AND job_id = ?",
+                (contact_id, job_id),
+            ).fetchone()
+            if owner is None:
+                raise ValueError("Contact does not belong to this job.")
             cursor = connection.execute(
                 """INSERT INTO outreach_drafts
-                (job_id, contact_id, body, basis_fingerprint, approved_at)
-                VALUES (?, ?, ?, ?, ?)""",
-                (job_id, contact_id, body, fingerprint, datetime.now().astimezone().isoformat()),
+                (job_id, contact_id, body, basis_fingerprint, approved_at, kind)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (job_id, contact_id, body, fingerprint, datetime.now().astimezone().isoformat(), kind),
             )
         return int(cursor.lastrowid)
+
+    def update_draft_activity(self, draft_id: int, job_id: int, action: str,
+                              follow_up_at: str = "", response_note: str = "") -> bool:
+        now = datetime.now().astimezone().isoformat()
+        if action == "copied":
+            assignment, values = "copied_at = ?", (now,)
+        elif action == "sent":
+            assignment, values = "sent_at = ?, follow_up_at = ?", (now, follow_up_at or None)
+        elif action == "replied":
+            assignment, values = "replied_at = ?, response_note = ?", (now, response_note.strip()[:1000])
+        else:
+            raise ValueError("Unknown outreach activity.")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                f"UPDATE outreach_drafts SET {assignment} WHERE id = ? AND job_id = ?",
+                (*values, draft_id, job_id),
+            )
+        return cursor.rowcount > 0
 
     def list_approved_drafts(self, job_id: int) -> list[sqlite3.Row]:
         with self._connect() as connection:

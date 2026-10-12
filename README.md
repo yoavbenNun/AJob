@@ -99,12 +99,14 @@ professionally formatted DOCX and PDF files in `RESUME_DIRECTORY\tailored`; the
 master resume is never changed. The dashboard has no user authentication and must
 not be exposed to the public internet.
 
-Each job page also has a local outreach workspace. Add a public professional
-profile you found yourself, review its explainable relevance score, preview a
-factual message, and explicitly approve the draft. Contact notes and approved
+Each job page also has a local outreach workspace. It provides public Google
+search shortcuts for recruiters, hiring managers, relevant team members, and
+alumni without scraping results. Add a LinkedIn profile you found, review its
+explainable relevance score, and choose either a short connection note or a full
+message. You can edit and explicitly approve the exact text, copy it, then
+manually record sent, reply, and follow-up dates. Contact notes and approved
 drafts are stored in `data/outreach.db`, separate from cloud job data. The app
-never fetches LinkedIn pages or sends a message; open the profile and send the
-approved text manually.
+never fetches LinkedIn pages or sends a message.
 
 Use custom paths if needed:
 
@@ -203,8 +205,8 @@ privacy. See `docs/cloud-roadmap.md`.
 8. **Notifications (complete):** SMTP summaries support safe-profile scoring and
    commute filtering in scheduled runs.
 9. **Application assistance:** prepare applications, never submit without approval.
-10. **Professional outreach (preparation complete):** manually add public contacts,
-    rank them, and approve drafts; discovery and sending remain manual.
+10. **Professional outreach (complete):** public search shortcuts, ranked manual
+    contacts, editable approved drafts, copying, and manual outcome tracking.
 
 ## Safety principle
 

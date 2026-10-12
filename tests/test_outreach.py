@@ -1,5 +1,8 @@
 from src.models import JobPosting, OutreachContact
-from src.outreach.service import draft_outreach_message, rank_contact, validate_profile_url
+from src.outreach.service import (
+    build_contact_searches, draft_outreach_message, rank_contact,
+    validate_approved_body, validate_profile_url,
+)
 
 
 def test_contact_ranking_is_explainable() -> None:
@@ -30,3 +33,15 @@ def test_draft_does_not_claim_contact_works_at_target_company() -> None:
     body = draft_outreach_message(job, contact)
     assert "at Different Co" in body
     assert "work there" not in body
+
+
+def test_searches_are_public_links_and_drafts_have_distinct_limits() -> None:
+    job = JobPosting("Backend Intern", "Example", "Remote", "https://example.com/job/1")
+    contact = OutreachContact(1, "Ari", "Engineer", "Example", "https://linkedin.com/in/ari")
+    searches = build_contact_searches(job)
+    assert len(searches) == 4
+    assert all(item["url"].startswith("https://www.google.com/search?") for item in searches)
+    connection = draft_outreach_message(job, contact, "connection_note")
+    full = draft_outreach_message(job, contact, "full_message")
+    assert len(connection) <= 300 and connection != full
+    assert validate_approved_body(" Edited ", "full_message") == "Edited"

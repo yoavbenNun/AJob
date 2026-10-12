@@ -43,14 +43,73 @@ def test_outreach_requires_preview_and_approval_before_storing_draft(tmp_path) -
     preview = client.post(f"/jobs/{job_id}/outreach/preview", data={
         "csrf_token": _csrf_token(client, job_id), "contact_id": contact_id,
     })
-    assert "Review this draft" in preview.text
+    assert "Edit full message" in preview.text
     token = re.search(r'name="outreach_token" value="([^"]+)"', preview.text).group(1)
     approved = client.post(f"/jobs/{job_id}/outreach/approve", data={
         "csrf_token": _csrf_token(client, job_id), "outreach_token": token,
+        "kind": "full_message", "body": "Edited and explicitly approved message.",
+    })
+    assert "Final approval" in approved.text
+    confirmation = re.search(r'name="confirmation_token" value="([^"]+)"', approved.text).group(1)
+    approved = client.post(f"/jobs/{job_id}/outreach/confirm", data={
+        "csrf_token": _csrf_token(client, job_id), "confirmation_token": confirmation,
     })
     assert approved.status_code == 200
     assert "Approved messages" in approved.text
-    assert "I saw the Python Software Intern opening" in approved.text
+    assert "Edited and explicitly approved message." in approved.text
+    assert "I sent this manually" in approved.text
+
+
+def test_outreach_search_shortcuts_and_connection_note(tmp_path) -> None:
+    client, job_id = _client_with_jobs(tmp_path)
+    page = client.get(f"/jobs/{job_id}")
+    assert "Find Recruiters" in page.text
+    assert "site%3Alinkedin.com" in page.text
+    client.post(f"/jobs/{job_id}/outreach/contacts", data={
+        "csrf_token": _csrf_token(client, job_id), "display_name": "Ari",
+        "role_title": "Engineer", "company": "Example",
+        "profile_url": "https://linkedin.com/in/ari", "relationship": "employee",
+    })
+    page = client.get(f"/jobs/{job_id}")
+    contact_id = re.search(r'name="contact_id" value="(\d+)"', page.text).group(1)
+    preview = client.post(f"/jobs/{job_id}/outreach/preview", data={
+        "csrf_token": _csrf_token(client, job_id), "contact_id": contact_id,
+        "kind": "connection_note",
+    })
+    assert 'name="kind" value="connection_note"' in preview.text
+    body = re.search(r'<textarea name="body"[^>]*>(.*?)</textarea>', preview.text, re.S).group(1)
+    assert len(body) <= 300
+
+
+def test_outreach_tracks_manual_activity_without_sending(tmp_path) -> None:
+    client, job_id = _client_with_jobs(tmp_path)
+    client.post(f"/jobs/{job_id}/outreach/contacts", data={
+        "csrf_token": _csrf_token(client, job_id), "display_name": "Ari",
+        "role_title": "Engineer", "company": "Example",
+        "profile_url": "https://linkedin.com/in/ari", "relationship": "employee",
+    })
+    page = client.get(f"/jobs/{job_id}")
+    contact_id = re.search(r'name="contact_id" value="(\d+)"', page.text).group(1)
+    preview = client.post(f"/jobs/{job_id}/outreach/preview", data={
+        "csrf_token": _csrf_token(client, job_id), "contact_id": contact_id,
+        "kind": "full_message",
+    })
+    token = re.search(r'name="outreach_token" value="([^"]+)"', preview.text).group(1)
+    approved = client.post(f"/jobs/{job_id}/outreach/approve", data={
+        "csrf_token": _csrf_token(client, job_id), "outreach_token": token,
+        "kind": "full_message", "body": "Approved body",
+    })
+    confirmation = re.search(r'name="confirmation_token" value="([^"]+)"', approved.text).group(1)
+    approved = client.post(f"/jobs/{job_id}/outreach/confirm", data={
+        "csrf_token": _csrf_token(client, job_id), "confirmation_token": confirmation,
+    })
+    draft_id = re.search(r'/outreach/drafts/(\d+)/activity', approved.text).group(1)
+    sent = client.post(f"/jobs/{job_id}/outreach/drafts/{draft_id}/activity", data={
+        "csrf_token": _csrf_token(client, job_id), "action": "sent",
+        "follow_up_at": "2030-01-02",
+    })
+    assert "Sent manually" in sent.text
+    assert 'value="2030-01-02"' in sent.text
 
 
 def test_outreach_rejects_invalid_profile_url(tmp_path) -> None:
