@@ -33,8 +33,9 @@ The current MVP provides:
 - a scheduled Docker/GitHub Actions deployment
 - a local FastAPI dashboard for review and status updates
 - human-approved DOCX generation that preserves existing resume evidence
+- a local outreach workspace for ranking user-supplied public contacts and approving message drafts
 
-It does **not** call paid APIs or submit applications. Remote execution requires
+It does **not** scrape LinkedIn, send messages, call paid APIs, or submit applications. Remote execution requires
 your GitHub, Supabase, and SMTP secrets before it can run in the cloud.
 
 ## Architecture
@@ -49,6 +50,7 @@ The project uses a small layered structure:
 - `src/matching/`, `src/resume/`, `src/notifications/`: scoring, approved resume
   generation, safe cloud profiles, and email delivery
 - `src/web/`: local FastAPI dashboard
+- `src/outreach/`: deterministic contact ranking and factual message drafting
 - `tests/`: tests for behavior already implemented
 
 The scanner depends on domain models rather than storage or matching logic. This
@@ -96,6 +98,13 @@ supporting evidence. Only checked changes are applied. Approval creates separate
 professionally formatted DOCX and PDF files in `RESUME_DIRECTORY\tailored`; the
 master resume is never changed. The dashboard has no user authentication and must
 not be exposed to the public internet.
+
+Each job page also has a local outreach workspace. Add a public professional
+profile you found yourself, review its explainable relevance score, preview a
+factual message, and explicitly approve the draft. Contact notes and approved
+drafts are stored in `data/outreach.db`, separate from cloud job data. The app
+never fetches LinkedIn pages or sends a message; open the profile and send the
+approved text manually.
 
 Use custom paths if needed:
 
@@ -194,6 +203,8 @@ privacy. See `docs/cloud-roadmap.md`.
 8. **Notifications (complete):** SMTP summaries support safe-profile scoring and
    commute filtering in scheduled runs.
 9. **Application assistance:** prepare applications, never submit without approval.
+10. **Professional outreach (preparation complete):** manually add public contacts,
+    rank them, and approve drafts; discovery and sending remain manual.
 
 ## Safety principle
 

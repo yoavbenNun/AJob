@@ -59,13 +59,22 @@ jobs:
             echo "DATABASE_URL repository secret is required for scheduled scans." >&2
             exit 1
           fi
+      - name: Validate email configuration
+        if: ${{ steps.schedule_gate.outputs.run_scan == 'true' && env.SMTP_HOST != '' }}
+        run: |
+          for name in SMTP_PORT SMTP_USERNAME SMTP_PASSWORD SMTP_FROM SMTP_TO; do
+            if [ -z "${!name}" ]; then
+              echo "$name is required when SMTP_HOST is configured." >&2
+              exit 1
+            fi
+          done
       - name: Build scanner image
         if: ${{ steps.schedule_gate.outputs.run_scan == 'true' }}
         run: docker build --tag ai-job-search-agent .
       - name: Scan career pages and send summary
         if: ${{ steps.schedule_gate.outputs.run_scan == 'true' && env.SMTP_HOST != '' }}
         run: >-
-          docker run --rm
+          docker run --rm --ipc=host
           -e SMTP_HOST -e SMTP_PORT -e SMTP_USERNAME -e SMTP_PASSWORD
           -e SMTP_FROM -e SMTP_TO -e SMTP_USE_TLS
           -e DATABASE_URL
@@ -73,4 +82,4 @@ jobs:
           ai-job-search-agent python -m src.main scan --email-summary
       - name: Scan career pages without email
         if: ${{ steps.schedule_gate.outputs.run_scan == 'true' && env.SMTP_HOST == '' }}
-        run: docker run --rm -e DATABASE_URL ai-job-search-agent
+        run: docker run --rm --ipc=host -e DATABASE_URL ai-job-search-agent

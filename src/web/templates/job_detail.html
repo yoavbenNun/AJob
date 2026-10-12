@@ -41,6 +41,35 @@
     {% endif %}
     {% if tailoring_error %}<p class="error">{{ tailoring_error }}</p>{% endif %}
     {% if tailored_resume_names %}<p class="notice">Created {{ tailored_resume_names|join(' and ') }} in the configured tailored resume folder. The master resume was not changed.</p>{% endif %}
+    <section class="content-section" id="outreach">
+      <h2>Professional outreach</h2>
+      <p class="muted">Add a person you found through public professional information. This app ranks contacts and prepares a draft, but never visits LinkedIn, contacts anyone, or submits an application.</p>
+      {% if outreach_error %}<p class="error">{{ outreach_error }}</p>{% endif %}
+      <form class="outreach-form" method="post" action="/jobs/{{ job.id }}/outreach/contacts">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>Name<input name="display_name" required></label>
+        <label>Current role<input name="role_title" required></label>
+        <label>Company<input name="company" value="{{ job.company }}" required></label>
+        <label>Public profile URL<input name="profile_url" type="url" required placeholder="https://www.linkedin.com/in/..."></label>
+        <label>Relationship<select name="relationship"><option value="hiring_team">Hiring team</option><option value="recruiter">Recruiter</option><option value="employee" selected>Employee</option><option value="alumni">Alumni</option><option value="other">Other</option></select></label>
+        <label>Location<input name="location" placeholder="Optional"></label>
+        <label class="wide">Private note<input name="notes" maxlength="500" placeholder="Optional; stored locally only"></label>
+        <button type="submit">Save contact</button>
+      </form>
+      {% if outreach_contacts %}
+      <h3>Ranked contacts</h3>
+      {% for item in outreach_contacts %}
+      <div class="contact-card">
+        <div><strong>{{ item.contact.display_name }}</strong> · {{ item.contact.role_title }} at {{ item.contact.company }}<br><span class="muted">{{ item.score }}/100 · {{ item.reasons|join(' · ') or 'No direct relevance signals yet' }}</span></div>
+        <div class="action-row"><a class="button secondary" href="{{ item.contact.profile_url }}" target="_blank" rel="noopener noreferrer">Open profile manually</a><form method="post" action="/jobs/{{ job.id }}/outreach/preview"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="contact_id" value="{{ item.contact.id }}"><button type="submit">Preview message</button></form></div>
+      </div>
+      {% endfor %}
+      {% endif %}
+      {% if outreach_preview %}
+      <div class="change-review"><h3>Review this draft</h3><p class="preserve-lines">{{ outreach_preview.body }}</p><p class="muted">Approval stores the draft locally. You still copy and send it manually.</p><form method="post" action="/jobs/{{ job.id }}/outreach/approve"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="outreach_token" value="{{ outreach_preview.token }}"><button type="submit">Approve and save draft</button></form></div>
+      {% endif %}
+      {% if outreach_drafts %}<h3>Approved messages</h3>{% for draft in outreach_drafts %}<div class="change-review"><strong>{{ draft.display_name }}</strong><p class="preserve-lines">{{ draft.body }}</p><p class="muted">Approved {{ draft.approved_at }}. Copy manually when you are ready.</p></div>{% endfor %}{% endif %}
+    </section>
   </main>
 </body>
 </html>

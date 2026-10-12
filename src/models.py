@@ -6,6 +6,7 @@ from urllib.parse import urlsplit
 
 
 JOB_STATUSES = ("new", "reviewed", "applied", "ignored", "rejected")
+OUTREACH_CONTACT_STATUSES = ("new", "reviewed", "contacted", "not_contacting")
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,3 +65,35 @@ class ResumeProfile:
     summary: str
     raw_text: str
     links: tuple[str, ...] = ()
+
+
+@dataclass(slots=True)
+class OutreachContact:
+    """A user-supplied public professional contact for one job."""
+
+    job_id: int
+    display_name: str
+    role_title: str
+    company: str
+    profile_url: str
+    relationship: str = "employee"
+    location: str = ""
+    notes: str = ""
+    created_at: datetime | None = None
+    id: int | None = None
+    status: str = "new"
+
+    def __post_init__(self) -> None:
+        if self.created_at is None:
+            self.created_at = datetime.now(timezone.utc)
+        if self.status not in OUTREACH_CONTACT_STATUSES:
+            raise ValueError(f"Invalid outreach contact status: {self.status!r}")
+
+
+@dataclass(frozen=True, slots=True)
+class RankedContact:
+    """Explainable relevance score for an outreach contact."""
+
+    contact: OutreachContact
+    score: int
+    reasons: tuple[str, ...]

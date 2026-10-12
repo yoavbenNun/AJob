@@ -21,12 +21,15 @@ from fastapi.templating import Jinja2Templates
 
 from src.matching.resume_matcher import match_resume_to_job
 from src.models import JOB_STATUSES, JobPosting
+from src.models import OutreachContact
+from src.outreach.service import draft_outreach_message, rank_contact
 from src.resume.resume_parser import parse_resume
 from src.resume.tailored_resume import (
     build_tailoring_proposal,
     create_resume_artifacts,
 )
 from src.storage.repository_factory import create_job_repository
+from src.storage.outreach_repository import OutreachRepository
 
 
 WEB_ROOT = Path(__file__).parent
@@ -36,14 +39,19 @@ templates = Jinja2Templates(directory=str(WEB_ROOT / "templates"))
 def create_app(
     database_path: str | Path = Path("data/jobs.db"),
     resume_directory: str | Path | None = None,
+    outreach_database_path: str | Path | None = None,
 ) -> FastAPI:
     """Create a local dashboard backed by the configured job repository."""
     repository = create_job_repository(database_path)
     repository.initialize()
+    outreach_path = Path(outreach_database_path) if outreach_database_path else Path("data/outreach.db")
+    outreach_repository = OutreachRepository(outreach_path)
+    outreach_repository.initialize()
     csrf_token = secrets.token_urlsafe(32)
     allowed_resume_root = Path(resume_directory).resolve() if resume_directory else None
     tailored_resume_root = allowed_resume_root / "tailored" if allowed_resume_root else None
     proposal_sessions: dict[str, tuple[float, int, Path, str]] = {}
+    outreach_sessions: dict[str, tuple[float, int, int, str]] = {}
 
     app = FastAPI(title="AI Job Search Agent", docs_url=None, redoc_url=None)
     app.mount("/static", StaticFiles(directory=str(WEB_ROOT / "static")), name="static")
@@ -90,7 +98,80 @@ def create_app(
     def job_detail(request: Request, job_id: int, updated: int | None = None):
         job = _get_job_or_404(repository, job_id)
         return _detail_response(request, job, updated=updated, csrf_token=csrf_token,
-                                resume_matching_enabled=allowed_resume_root is not None)
+                                resume_matching_enabled=allowed_resume_root is not None,
+                                **_outreach_context(outreach_repository, job))
+
+    @app.post("/jobs/{job_id}/outreach/contacts", response_class=HTMLResponse)
+    async def add_outreach_contact(request: Request, job_id: int):
+        job = _get_job_or_404(repository, job_id)
+        form = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
+        _validate_csrf(form, csrf_token)
+        try:
+            outreach_repository.save_contact(OutreachContact(
+                job_id=job_id,
+                display_name=form.get("display_name", [""])[0],
+                role_title=form.get("role_title", [""])[0],
+                company=form.get("company", [""])[0],
+                profile_url=form.get("profile_url", [""])[0],
+                relationship=form.get("relationship", ["employee"])[0],
+                location=form.get("location", [""])[0],
+                notes=form.get("notes", [""])[0],
+            ))
+        except ValueError as error:
+            return _detail_response(request, job, outreach_error=str(error), csrf_token=csrf_token,
+                                    resume_matching_enabled=allowed_resume_root is not None,
+                                    **_outreach_context(outreach_repository, job))
+        return RedirectResponse(url=f"/jobs/{job_id}#outreach", status_code=status.HTTP_303_SEE_OTHER)
+
+    @app.post("/jobs/{job_id}/outreach/preview", response_class=HTMLResponse)
+    async def preview_outreach(request: Request, job_id: int):
+        job = _get_job_or_404(repository, job_id)
+        form = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
+        _validate_csrf(form, csrf_token)
+        try:
+            contact_id = int(form.get("contact_id", [""])[0])
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid contact")
+        contact = outreach_repository.get_contact(contact_id, job_id)
+        if contact is None:
+            raise HTTPException(status_code=404, detail="Contact not found")
+        body = draft_outreach_message(job, contact)
+        fingerprint = _outreach_fingerprint(job, contact, body)
+        token = secrets.token_urlsafe(32)
+        outreach_sessions[token] = (time.monotonic(), job_id, contact_id, fingerprint)
+        _expire_outreach_sessions(outreach_sessions)
+        return _detail_response(
+            request, job, csrf_token=csrf_token,
+            resume_matching_enabled=allowed_resume_root is not None,
+            outreach_preview={"contact": contact, "body": body, "token": token},
+            **_outreach_context(outreach_repository, job),
+        )
+
+    @app.post("/jobs/{job_id}/outreach/approve", response_class=HTMLResponse)
+    async def approve_outreach(request: Request, job_id: int):
+        job = _get_job_or_404(repository, job_id)
+        form = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
+        _validate_csrf(form, csrf_token)
+        token = form.get("outreach_token", [""])[0]
+        session = outreach_sessions.get(token)
+        if session is None or session[1] != job_id or time.monotonic() - session[0] > 1800:
+            return _detail_response(request, job, outreach_error="The outreach preview expired.",
+                                    csrf_token=csrf_token,
+                                    resume_matching_enabled=allowed_resume_root is not None,
+                                    **_outreach_context(outreach_repository, job))
+        contact = outreach_repository.get_contact(session[2], job_id)
+        if contact is None:
+            raise HTTPException(status_code=404, detail="Contact not found")
+        body = draft_outreach_message(job, contact)
+        fingerprint = _outreach_fingerprint(job, contact, body)
+        if not secrets.compare_digest(fingerprint, session[3]):
+            return _detail_response(request, job, outreach_error="Job or contact changed after preview.",
+                                    csrf_token=csrf_token,
+                                    resume_matching_enabled=allowed_resume_root is not None,
+                                    **_outreach_context(outreach_repository, job))
+        outreach_repository.save_approved_draft(job_id, contact.id, body, fingerprint)
+        outreach_sessions.pop(token, None)
+        return RedirectResponse(url=f"/jobs/{job_id}#outreach", status_code=status.HTTP_303_SEE_OTHER)
 
     @app.post("/jobs/{job_id}/status")
     async def update_job_status(request: Request, job_id: int):
@@ -251,6 +332,26 @@ def _proposal_fingerprint(resume_path: Path, job: JobPosting, proposal) -> str:
     }
     serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _outreach_fingerprint(job: JobPosting, contact: OutreachContact, body: str) -> str:
+    payload = [job.id, job.title, job.company, job.job_url, contact.id,
+               contact.display_name, contact.role_title, contact.company,
+               contact.profile_url, body]
+    return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _expire_outreach_sessions(sessions: dict[str, tuple[float, int, int, str]]) -> None:
+    cutoff = time.monotonic() - 1800
+    for token in [key for key, value in sessions.items() if value[0] < cutoff]:
+        sessions.pop(token, None)
+
+
+def _outreach_context(repository: OutreachRepository, job: JobPosting) -> dict[str, object]:
+    contacts = repository.list_contacts_for_job(job.id)
+    ranked = sorted((rank_contact(job, contact) for contact in contacts),
+                    key=lambda item: (-item.score, item.contact.display_name.casefold()))
+    return {"outreach_contacts": ranked, "outreach_drafts": repository.list_approved_drafts(job.id)}
 
 
 def _get_job_or_404(repository, job_id: int) -> JobPosting:

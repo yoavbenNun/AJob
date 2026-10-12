@@ -14,4 +14,9 @@ label { display: grid; gap: .35rem; font-size: .85rem; font-weight: 700; } input
 .change-review label { display: flex; align-items: flex-start; gap: .55rem; font-size: .95rem; }
 .change-review input[type="checkbox"] { min-height: 0; width: 1rem; height: 1rem; margin-top: .15rem; }
 .change-review p { margin: .55rem 0 0; line-height: 1.45; }
+.outreach-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; align-items: end; }
+.outreach-form .wide { grid-column: span 2; }
+.contact-card { border-top: 1px solid #e2e8f0; padding: 1rem 0; display: flex; justify-content: space-between; gap: 1rem; align-items: center; }
+.contact-card .action-row { justify-content: flex-end; }
 @media (max-width: 620px) { .page-shell { padding-top: 1.25rem; }.page-header { display: block; }.page-header .count, .page-header .status { display: inline-block; margin-top: .8rem; }.filters > *, .match-form > label { width: 100%; }.filters input, .filters select, .match-form input { width: 100%; }.action-row > *, .action-row form { width: 100%; }.action-row form { align-items: stretch; }.action-row form label, .action-row form select { width: 100%; } }
+@media (max-width: 760px) { .outreach-form { grid-template-columns: 1fr; }.outreach-form .wide { grid-column: auto; }.contact-card { display: block; }.contact-card .action-row { margin-top: .8rem; justify-content: flex-start; } }

@@ -157,3 +157,16 @@ reusable lesson appears.
   not support a per-schedule timezone field, so document daylight-saving effects.
 - Do not make automatic PostgreSQL migrations delete or merge existing job rows.
   URL normalization must preserve user-managed lifecycle status and audit history.
+
+## Professional outreach
+
+- Do not scrape LinkedIn, automate logged-in browsing, or send connection requests
+  and messages. Accept user-supplied public profile URLs and keep sending manual.
+- Store outreach contacts separately from scheduled cloud job data. Minimize
+  personal data, strip tracking query parameters, and never fetch profile URLs.
+- Treat draft approval and actual sending as separate consent events. Recompute
+  drafts from server-known job/contact facts and bind approval to a short-lived
+  fingerprint so stale previews cannot be approved.
+- Add a `.dockerignore` before building locally; build context can otherwise carry
+  resumes, databases, environment files, and repository history even when the
+  Dockerfile does not copy those paths into the final image.

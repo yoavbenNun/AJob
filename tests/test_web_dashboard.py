@@ -22,7 +22,44 @@ def _client_with_jobs(tmp_path):
             is_relevant=False,
         )
     )
-    return TestClient(create_app(database, resume_directory=tmp_path)), job_id
+    return TestClient(create_app(database, resume_directory=tmp_path,
+                                 outreach_database_path=tmp_path / "outreach.db")), job_id
+
+
+def test_outreach_requires_preview_and_approval_before_storing_draft(tmp_path) -> None:
+    client, job_id = _client_with_jobs(tmp_path)
+    csrf = _csrf_token(client, job_id)
+    added = client.post(f"/jobs/{job_id}/outreach/contacts", data={
+        "csrf_token": csrf, "display_name": "Ari", "role_title": "Software Engineer",
+        "company": "Example", "profile_url": "https://www.linkedin.com/in/ari?trk=test",
+        "relationship": "hiring_team", "location": "Remote",
+    })
+    assert added.status_code == 200
+    assert "Ari" in added.text
+    assert "90/100" in added.text
+    assert "Approved messages" not in added.text
+
+    contact_id = re.search(r'name="contact_id" value="(\d+)"', added.text).group(1)
+    preview = client.post(f"/jobs/{job_id}/outreach/preview", data={
+        "csrf_token": _csrf_token(client, job_id), "contact_id": contact_id,
+    })
+    assert "Review this draft" in preview.text
+    token = re.search(r'name="outreach_token" value="([^"]+)"', preview.text).group(1)
+    approved = client.post(f"/jobs/{job_id}/outreach/approve", data={
+        "csrf_token": _csrf_token(client, job_id), "outreach_token": token,
+    })
+    assert approved.status_code == 200
+    assert "Approved messages" in approved.text
+    assert "I saw the Python Software Intern opening" in approved.text
+
+
+def test_outreach_rejects_invalid_profile_url(tmp_path) -> None:
+    client, job_id = _client_with_jobs(tmp_path)
+    response = client.post(f"/jobs/{job_id}/outreach/contacts", data={
+        "csrf_token": _csrf_token(client, job_id), "display_name": "Ari",
+        "role_title": "Engineer", "company": "Example", "profile_url": "javascript:bad",
+    })
+    assert "public HTTP(S) URL" in response.text
 
 
 def _csrf_token(client: TestClient, job_id: int) -> str:
