@@ -8,8 +8,11 @@ from __future__ import annotations
 
 from pathlib import Path
 from urllib.parse import parse_qs
+import hashlib
+import json
 import os
 import secrets
+import time
 
 from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -21,8 +24,7 @@ from src.models import JOB_STATUSES, JobPosting
 from src.resume.resume_parser import parse_resume
 from src.resume.tailored_resume import (
     build_tailoring_proposal,
-    create_tailored_resume,
-    tailored_resume_output_path,
+    create_resume_artifacts,
 )
 from src.storage.repository_factory import create_job_repository
 
@@ -41,6 +43,7 @@ def create_app(
     csrf_token = secrets.token_urlsafe(32)
     allowed_resume_root = Path(resume_directory).resolve() if resume_directory else None
     tailored_resume_root = allowed_resume_root / "tailored" if allowed_resume_root else None
+    proposal_sessions: dict[str, tuple[float, int, Path, str]] = {}
 
     app = FastAPI(title="AI Job Search Agent", docs_url=None, redoc_url=None)
     app.mount("/static", StaticFiles(directory=str(WEB_ROOT / "static")), name="static")
@@ -123,12 +126,20 @@ def create_app(
             result = match_resume_to_job(profile, job)
         except (OSError, ValueError) as error:
             return _detail_response(request, job, match_error=f"Match unavailable: {error}", csrf_token=csrf_token, resume_matching_enabled=True)
+        proposal_token = secrets.token_urlsafe(32)
+        proposal_sessions[proposal_token] = (
+            time.monotonic(), job_id, resolved_resume,
+            _proposal_fingerprint(
+                resolved_resume, job, build_tailoring_proposal(profile, job, result)
+            ),
+        )
+        _expire_proposal_sessions(proposal_sessions)
         return _detail_response(
             request,
             job,
             match_result=result,
             tailoring_proposal=build_tailoring_proposal(profile, job, result),
-            resume_path=str(resolved_resume),
+            proposal_token=proposal_token,
             csrf_token=csrf_token,
             resume_matching_enabled=True,
         )
@@ -139,14 +150,6 @@ def create_app(
         job = _get_job_or_404(repository, job_id)
         form = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
         _validate_csrf(form, csrf_token)
-        if form.get("approve_tailoring", [""])[0] != "yes":
-            return _detail_response(
-                request,
-                job,
-                tailoring_error="Confirm the factual tailoring proposal before generating a DOCX.",
-                csrf_token=csrf_token,
-                resume_matching_enabled=allowed_resume_root is not None,
-            )
         if allowed_resume_root is None or tailored_resume_root is None:
             return _detail_response(
                 request,
@@ -155,14 +158,36 @@ def create_app(
                 csrf_token=csrf_token,
                 resume_matching_enabled=False,
             )
-        resume_path = form.get("resume_path", [""])[0]
+        _expire_proposal_sessions(proposal_sessions)
+        proposal_token = form.get("proposal_token", [""])[0]
+        session = proposal_sessions.get(proposal_token)
+        if session is None or session[1] != job_id or time.monotonic() - session[0] > 1800:
+            return _detail_response(
+                request, job,
+                tailoring_error="The tailoring preview expired. Calculate the match again.",
+                csrf_token=csrf_token,
+                resume_matching_enabled=True,
+            )
+        approved_change_ids = tuple(dict.fromkeys(form.get("approved_change_id", [])))
         try:
-            resolved_resume = _resolve_resume_path(resume_path, allowed_resume_root)
+            resolved_resume = _resolve_resume_path(str(session[2]), allowed_resume_root)
             profile = parse_resume(resolved_resume)
             match = match_resume_to_job(profile, job)
-            output = tailored_resume_output_path(tailored_resume_root, job)
-            create_tailored_resume(profile, job, match, output, approved=True)
-        except (OSError, ValueError) as error:
+            proposal = build_tailoring_proposal(profile, job, match)
+            if _proposal_fingerprint(resolved_resume, job, proposal) != session[3]:
+                raise PermissionError(
+                    "The resume or job changed after preview. Calculate the match again."
+                )
+            allowed_ids = {change.id for change in proposal.changes}
+            if not approved_change_ids or not set(approved_change_ids) <= allowed_ids:
+                raise PermissionError("Select only changes shown in the current preview.")
+            artifacts = create_resume_artifacts(
+                profile, job, match, tailored_resume_root,
+                approved=True,
+                approved_change_ids=approved_change_ids,
+            )
+            proposal_sessions.pop(proposal_token, None)
+        except (OSError, ValueError, PermissionError) as error:
             return _detail_response(
                 request,
                 job,
@@ -173,7 +198,7 @@ def create_app(
         return _detail_response(
             request,
             job,
-            tailored_resume_name=output.name,
+            tailored_resume_names=(artifacts.docx_path.name, artifacts.pdf_path.name),
             csrf_token=csrf_token,
             resume_matching_enabled=True,
         )
@@ -201,6 +226,31 @@ def _resolve_resume_path(resume_path: str, allowed_resume_root: Path) -> Path:
     if resolved_resume != allowed_resume_root and allowed_resume_root not in resolved_resume.parents:
         raise ValueError("Resume path must be inside RESUME_DIRECTORY.")
     return resolved_resume
+
+
+def _expire_proposal_sessions(
+    sessions: dict[str, tuple[float, int, Path, str]], max_age_seconds: int = 1800
+) -> None:
+    cutoff = time.monotonic() - max_age_seconds
+    for token in [token for token, value in sessions.items() if value[0] < cutoff]:
+        sessions.pop(token, None)
+
+
+def _proposal_fingerprint(resume_path: Path, job: JobPosting, proposal) -> str:
+    payload = {
+        "resume_sha256": hashlib.sha256(resume_path.read_bytes()).hexdigest(),
+        "job": [
+            job.title, job.company, job.location, job.description,
+            job.requirements, job.job_url,
+        ],
+        "scores": [proposal.before_score, proposal.after_score],
+        "changes": [
+            [change.id, change.original, change.proposed, change.evidence, change.score_delta]
+            for change in proposal.changes
+        ],
+    }
+    serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def _get_job_or_404(repository, job_id: int) -> JobPosting:

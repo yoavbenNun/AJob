@@ -63,3 +63,4 @@ class ResumeProfile:
     projects: str
     summary: str
     raw_text: str
+    links: tuple[str, ...] = ()

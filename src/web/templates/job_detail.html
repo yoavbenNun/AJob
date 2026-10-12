@@ -20,21 +20,27 @@
       <h2>Factual tailoring proposal</h2>
       <p><strong>Score preview:</strong> Before: {{ tailoring_proposal.before_score }}/100. After: {{ tailoring_proposal.after_score }}/100.</p>
       <p class="muted">The score does not increase because reordering existing skills adds no new evidence.</p>
-      <p><strong>Proposed skill order:</strong> {{ tailoring_proposal.reordered_skills|join(', ') or 'No skills identified' }}</p>
-      <h3>Changes</h3>
-      <ul>{% for item in tailoring_proposal.changes %}<li>{{ item }}</li>{% endfor %}</ul>
-      <h3>Safeguards</h3>
-      <ul>{% for item in tailoring_proposal.safeguards %}<li>{{ item }}</li>{% endfor %}</ul>
+      <p class="muted">A higher score is shown only when the approved text adds evidence already present elsewhere in the source resume.</p>
+      <h3>Choose changes</h3>
       <form class="match-form" method="post" action="/jobs/{{ job.id }}/tailor">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="hidden" name="resume_path" value="{{ resume_path }}">
-        <label><input type="checkbox" name="approve_tailoring" value="yes" required> I approve this factual proposal and want a separate DOCX generated.</label>
-        <button type="submit">Generate tailored resume</button>
+        <input type="hidden" name="proposal_token" value="{{ proposal_token }}">
+        {% for change in tailoring_proposal.changes %}
+        <div class="change-review">
+          <label><input type="checkbox" name="approved_change_id" value="{{ change.id }}"> <strong>{{ change.section }}</strong> - {{ change.description }}</label>
+          <p><strong>Original:</strong> {{ change.original }}</p>
+          <p><strong>Proposed:</strong> {{ change.proposed }}</p>
+          <p class="muted"><strong>Evidence:</strong> {{ change.evidence }} Score impact: {{ '%+d'|format(change.score_delta) }}.</p>
+        </div>
+        {% endfor %}
+        <button type="submit">Generate approved DOCX and PDF</button>
       </form>
+      <h3>Safeguards</h3>
+      <ul>{% for item in tailoring_proposal.safeguards %}<li>{{ item }}</li>{% endfor %}</ul>
     </section>
     {% endif %}
     {% if tailoring_error %}<p class="error">{{ tailoring_error }}</p>{% endif %}
-    {% if tailored_resume_name %}<p class="notice">Created {{ tailored_resume_name }} in the configured tailored resume folder. The master resume was not changed.</p>{% endif %}
+    {% if tailored_resume_names %}<p class="notice">Created {{ tailored_resume_names|join(' and ') }} in the configured tailored resume folder. The master resume was not changed.</p>{% endif %}
   </main>
 </body>
 </html>

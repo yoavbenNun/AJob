@@ -25,7 +25,7 @@ from src.models import JOB_STATUSES
 from src.scrapers.careers_scraper import preview_companies, scan_companies
 from src.resume.resume_parser import parse_resume
 from src.resume.safe_profile import build_safe_profile, load_safe_profile_json
-from src.resume.tailored_resume import create_tailored_resume
+from src.resume.tailored_resume import build_tailoring_proposal, create_resume_artifacts
 from src.storage.repository_factory import create_job_repository
 
 try:
@@ -101,16 +101,23 @@ def build_parser() -> argparse.ArgumentParser:
     status_parser.add_argument("status", choices=JOB_STATUSES, help="New lifecycle status")
     status_parser.add_argument("--database", type=Path, default=Path("data/jobs.db"))
     tailor_parser = subparsers.add_parser(
-        "tailor-resume", help="Create a factual DOCX for one job after human approval"
+        "tailor-resume", help="Create approved factual DOCX and PDF files for one job"
     )
     tailor_parser.add_argument("resume", type=Path)
     tailor_parser.add_argument("job_id", type=int)
-    tailor_parser.add_argument("output", type=Path)
+    tailor_parser.add_argument("output", type=Path, help="Output directory")
     tailor_parser.add_argument("--database", type=Path, default=Path("data/jobs.db"))
     tailor_parser.add_argument(
         "--approve",
         action="store_true",
         help="Confirm that you reviewed the target and approve file generation",
+    )
+    tailor_parser.add_argument(
+        "--change",
+        action="append",
+        default=[],
+        choices=("professional_format", "prioritize_matched_skills", "targeted_summary"),
+        help="Approved proposal change ID; repeat for multiple changes",
     )
     return parser
 
@@ -325,6 +332,8 @@ def _run_tailor_resume(args: argparse.Namespace) -> int:
             raise PermissionError(
                 "Tailored resume generation is blocked until --approve is provided."
             )
+        if not args.change:
+            raise PermissionError("Select at least one reviewed proposal with --change.")
         if not os.getenv("DATABASE_URL") and not args.database.is_file():
             raise FileNotFoundError(f"Job database not found: {args.database}")
         repository = create_job_repository(args.database)
@@ -336,8 +345,22 @@ def _run_tailor_resume(args: argparse.Namespace) -> int:
             raise ValueError(f"Job ID {args.job_id} is not currently relevant")
         profile = parse_resume(args.resume)
         match = match_resume_to_job(profile, job)
-        output = create_tailored_resume(profile, job, match, args.output, approved=True)
-        print(f"Approved tailored resume created: {output}")
+        proposal = build_tailoring_proposal(profile, job, match)
+        allowed_ids = {change.id for change in proposal.changes}
+        if not set(args.change) <= allowed_ids:
+            raise ValueError("A selected change is not available for this resume and job.")
+        artifacts = create_resume_artifacts(
+            profile,
+            job,
+            match,
+            args.output,
+            approved=True,
+            approved_change_ids=tuple(dict.fromkeys(args.change)),
+        )
+        print(
+            "Approved tailored resumes created: "
+            f"{artifacts.docx_path} and {artifacts.pdf_path}"
+        )
         return 0
     except (
         FileExistsError,

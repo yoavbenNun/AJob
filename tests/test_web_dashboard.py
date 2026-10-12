@@ -32,6 +32,12 @@ def _csrf_token(client: TestClient, job_id: int) -> str:
     return match.group(1)
 
 
+def _proposal_token(html: str) -> str:
+    match = re.search(r'name="proposal_token" value="([^"]+)"', html)
+    assert match
+    return match.group(1)
+
+
 def test_dashboard_filters_to_relevant_jobs_by_default(tmp_path) -> None:
     client, _ = _client_with_jobs(tmp_path)
 
@@ -93,20 +99,23 @@ def test_dashboard_previews_and_generates_an_explicitly_approved_tailored_resume
     assert "Factual tailoring proposal" in preview.text
     assert "Score preview:" in preview.text
     assert "Before:" in preview.text and "After:" in preview.text
-    assert "I approve this factual proposal" in preview.text
+    assert "Choose changes" in preview.text
+    assert "Original:" in preview.text and "Proposed:" in preview.text
 
     generated = client.post(
         f"/jobs/{job_id}/tailor",
         data={
-            "resume_path": str(resume),
-            "approve_tailoring": "yes",
+            "proposal_token": _proposal_token(preview.text),
+            "approved_change_id": ["professional_format", "targeted_summary"],
             "csrf_token": _csrf_token(client, job_id),
         },
     )
 
     expected = tmp_path / "tailored" / "Example-Python-Software-Intern-tailored.docx"
+    expected_pdf = tmp_path / "tailored" / "Example-Python-Software-Intern-tailored.pdf"
     assert generated.status_code == 200
     assert expected.is_file()
+    assert expected_pdf.is_file()
     assert "master resume was not changed" in generated.text
     assert resume.read_text(encoding="utf-8").startswith("Dana Developer")
 
@@ -118,11 +127,34 @@ def test_dashboard_refuses_tailored_resume_without_explicit_approval(tmp_path) -
 
     response = client.post(
         f"/jobs/{job_id}/tailor",
-        data={"resume_path": str(resume), "csrf_token": _csrf_token(client, job_id)},
+        data={"proposal_token": "missing", "csrf_token": _csrf_token(client, job_id)},
     )
 
     assert response.status_code == 200
-    assert "Confirm the factual tailoring proposal" in response.text
+    assert "preview expired" in response.text
+    assert not (tmp_path / "tailored").exists()
+
+
+def test_dashboard_rejects_approval_when_resume_changed_after_preview(tmp_path) -> None:
+    client, job_id = _client_with_jobs(tmp_path)
+    resume = tmp_path / "resume.txt"
+    resume.write_text("Dana Developer\nSKILLS\nPython", encoding="utf-8")
+    preview = client.post(
+        f"/jobs/{job_id}/match",
+        data={"resume_path": str(resume), "csrf_token": _csrf_token(client, job_id)},
+    )
+    resume.write_text("Dana Developer\nSKILLS\nPython, FastAPI", encoding="utf-8")
+
+    response = client.post(
+        f"/jobs/{job_id}/tailor",
+        data={
+            "proposal_token": _proposal_token(preview.text),
+            "approved_change_id": "professional_format",
+            "csrf_token": _csrf_token(client, job_id),
+        },
+    )
+
+    assert "changed after preview" in response.text
     assert not (tmp_path / "tailored").exists()
 
 

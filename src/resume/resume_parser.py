@@ -59,7 +59,9 @@ def parse_resume(path: str | Path) -> ResumeProfile:
     raw_text = extract_resume_text(source)
     if not raw_text.strip():
         raise ValueError(f"No readable text found in resume: {source}")
-    return parse_resume_text(raw_text, source_path=str(source))
+    return parse_resume_text(
+        raw_text, source_path=str(source), links=extract_resume_links(source)
+    )
 
 
 def extract_resume_text(path: str | Path) -> str:
@@ -85,7 +87,9 @@ def extract_resume_text(path: str | Path) -> str:
     )
 
 
-def parse_resume_text(text: str, source_path: str = "<memory>") -> ResumeProfile:
+def parse_resume_text(
+    text: str, source_path: str = "<memory>", links: tuple[str, ...] = ()
+) -> ResumeProfile:
     """Parse contact details, sections, and normalized skills from resume text."""
     normalized = _normalize_text(text)
     sections = split_sections(normalized)
@@ -104,7 +108,35 @@ def parse_resume_text(text: str, source_path: str = "<memory>") -> ResumeProfile
         projects=sections.get("projects", ""),
         summary=sections.get("summary", ""),
         raw_text=normalized,
+        links=links,
     )
+
+
+def extract_resume_links(path: str | Path) -> tuple[str, ...]:
+    """Extract explicit web links so generated resumes do not lose them."""
+    source = Path(path)
+    links: list[str] = []
+    if source.suffix.casefold() == ".pdf":
+        from pypdf import PdfReader
+
+        for page in PdfReader(source).pages:
+            for annotation_ref in page.get("/Annots") or ():
+                annotation = annotation_ref.get_object()
+                uri = (annotation.get("/A") or {}).get("/URI")
+                if isinstance(uri, str) and uri.startswith(("https://", "http://")):
+                    links.append(uri)
+    elif source.suffix.casefold() == ".docx":
+        from docx import Document
+
+        document = Document(source)
+        relationships = document.part.rels.values()
+        links.extend(
+            relationship.target_ref
+            for relationship in relationships
+            if relationship.reltype.endswith("/hyperlink")
+            and relationship.target_ref.startswith(("https://", "http://"))
+        )
+    return tuple(dict.fromkeys(links))
 
 
 def split_sections(text: str) -> dict[str, str]:

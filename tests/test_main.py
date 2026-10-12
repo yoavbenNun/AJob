@@ -293,18 +293,19 @@ def test_tailor_resume_command_requires_approval(tmp_path: Path, capsys) -> None
     assert "--approve" in capsys.readouterr().err
 
 
-def test_tailor_resume_command_creates_approved_docx(tmp_path: Path, capsys) -> None:
+def test_tailor_resume_command_creates_approved_docx_and_pdf(tmp_path: Path, capsys) -> None:
     resume = tmp_path / "resume.txt"
     resume.write_text(RESUME, encoding="utf-8")
     database = tmp_path / "jobs.db"
     _, job_id = _database_with_jobs(database)
-    output = tmp_path / "tailored.docx"
+    output = tmp_path / "tailored"
 
     exit_code = main([
         "tailor-resume", str(resume), str(job_id), str(output),
-        "--database", str(database), "--approve",
+        "--database", str(database), "--change", "professional_format", "--approve",
     ])
 
     assert exit_code == 0
-    assert output.is_file()
+    assert (output / "Example-Python-Software-Intern-tailored.docx").is_file()
+    assert (output / "Example-Python-Software-Intern-tailored.pdf").is_file()
     assert "created" in capsys.readouterr().out

@@ -83,6 +83,15 @@ reusable lesson appears.
 - Treat legacy rows as relevance-unknown during schema migration. Do not silently
   rank old unfiltered discoveries as approved job matches.
 - Resume changes and application submission must always require human approval.
+- Treat resume-change approval and application submission as separate consent
+  events. A generated resume never authorizes sending an external application;
+  show the complete form and require a final submission approval.
+- Never trust proposed resume text or scores posted by the browser. Recompute the
+  proposal from the stored job and allowed local resume, and accept only stable
+  server-known change IDs.
+- Preflight every requested output and publish a DOCX/PDF pair from temporary
+  files only after both pass structural verification. A partial export must not
+  look like a completed application artifact.
 - Local-only web interfaces still need CSRF protection. Never place resume paths
   in query strings, and restrict dashboard file access to an explicit directory.
 - Storage adapters must agree on canonical URL identity. Legacy canonicalization
@@ -99,6 +108,9 @@ reusable lesson appears.
   domain service can run locally, in a container, or behind a future API.
 - Validate parsing against the rendered resume, not extracted text alone. Styled
   PDF text can split a person's name or heading into separate extraction lines.
+- PDF text extraction does not preserve hyperlink annotations. Extract and carry
+  explicit LinkedIn, portfolio, and project URLs separately so regenerated resumes
+  do not silently replace useful links with dead labels.
 - Calibrate the canonical skill dictionary with real resume vocabulary, but keep
   aliases boundary-aware to avoid substring false positives.
 - Treat hard eligibility requirements separately from fit score. A strong skill

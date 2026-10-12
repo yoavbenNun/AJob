@@ -84,14 +84,18 @@ python -m src.main match path\to\resume.pdf --origin "Rishon Lezion, Israel"
 python -m src.main list --status new
 python -m src.main status 42 applied
 python -m src.main export-safe-profile path\to\resume.pdf
-python -m src.main tailor-resume path\to\resume.pdf 42 output\tailored.docx --approve
+python -m src.main tailor-resume path\to\resume.pdf 42 output --change professional_format --approve
 ```
 
 Set `RESUME_DIRECTORY` to the folder containing resumes, then start the local
 dashboard with `uvicorn src.web.app:app --reload` and open
 `http://127.0.0.1:8000`. Dashboard matching accepts only files inside that folder,
 uses POST forms with CSRF protection, and does not put file paths in URLs. The
-dashboard has no user authentication and must not be exposed to the public internet.
+dashboard shows each factual change with its original text, proposed text, and
+supporting evidence. Only checked changes are applied. Approval creates separate,
+professionally formatted DOCX and PDF files in `RESUME_DIRECTORY\tailored`; the
+master resume is never changed. The dashboard has no user authentication and must
+not be exposed to the public internet.
 
 Use custom paths if needed:
 
@@ -185,8 +189,8 @@ privacy. See `docs/cloud-roadmap.md`.
    education, experience, projects, and summary locally.
 5. **Matching (complete):** explainable 1–100 job/resume fit scores.
 6. **Tailoring suggestions (complete):** precise, evidence-backed resume advice.
-7. **Approved document generation (complete):** `--approve` is required and
-   existing files are never overwritten.
+7. **Approved document generation (complete):** per-change approval creates
+   matching DOCX and PDF files; existing files are never overwritten.
 8. **Notifications (complete):** SMTP summaries support safe-profile scoring and
    commute filtering in scheduled runs.
 9. **Application assistance:** prepare applications, never submit without approval.
@@ -194,7 +198,8 @@ privacy. See `docs/cloud-roadmap.md`.
 ## Safety principle
 
 The system may recommend and prepare actions, but resume rewrites and application
-submission must always require explicit human approval.
+submission require two separate explicit approvals. Approving resume changes does
+not authorize submitting an application.
 
 Resume parsing is entirely local. Text-based PDFs are supported; scanned-image
 PDFs require OCR, which is not included yet. Section and skill extraction uses
