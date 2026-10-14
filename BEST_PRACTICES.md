@@ -20,6 +20,8 @@ reusable lesson appears.
 - A Windows dashboard launcher should use the project virtual environment by
   absolute path and probe the local URL before starting Uvicorn. This avoids
   duplicate servers and port conflicts when the shortcut is clicked twice.
+- Keep non-ASCII local paths in a UTF-8 ignored settings file instead of shortcut
+  arguments; Windows shortcut automation can silently corrupt Unicode arguments.
 
 ## Agent workflow and context
 
@@ -115,6 +117,9 @@ reusable lesson appears.
   project points require explicit evidence tied to recognized job skills.
 - Never turn a missing skill into a resume claim. Suggest learning it or adding it
   only when the user can support it truthfully.
+- Resume uploads must be size-bounded, structurally validated, written through a
+  same-directory temporary file, and published under a server-generated name.
+  Preserve prior versions and never expose configured filesystem paths in HTML.
 - Do not include raw resume text or contact details in match output or logs.
 - Keep resume matching independent of storage and network services so the same
   domain service can run locally, in a container, or behind a future API.
@@ -205,3 +210,6 @@ reusable lesson appears.
 - Add a `.dockerignore` before building locally; build context can otherwise carry
   resumes, databases, environment files, and repository history even when the
   Dockerfile does not copy those paths into the final image.
+- Reject missing or oversized upload request lengths before multipart parsing, and
+  validate that upload directories are real descendants rather than links or
+  junctions before writing sensitive resume files.

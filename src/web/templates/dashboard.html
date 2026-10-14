@@ -10,7 +10,23 @@
   <main class="page-shell dashboard-shell">
     <header class="app-bar">
       <a class="brand" href="/" aria-label="Job Agent home"><span class="brand-mark">A</span><span>Job Agent</span></a>
-      <div class="system-state"><span class="system-dot" aria-hidden="true"></span>Private workspace</div>
+      <div class="top-actions">
+        <details class="resume-menu">
+          <summary class="button resume-button">Update resume</summary>
+          <div class="resume-popover">
+            <strong>Update active resume</strong>
+            <p>Your previous files are preserved. Nothing leaves this computer.</p>
+            {% if resume_upload_enabled %}
+            <form method="post" action="/resume" enctype="multipart/form-data">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <label>PDF or DOCX, up to 10 MB<input type="file" name="resume_file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required></label>
+              <button type="submit">Save as active resume</button>
+            </form>
+            {% else %}<p class="error" role="alert">Resume updates are unavailable until RESUME_DIRECTORY is configured.</p>{% endif %}
+          </div>
+        </details>
+        <div class="system-state"><span class="system-dot" aria-hidden="true"></span>Private workspace</div>
+      </div>
     </header>
     <section class="hero" aria-labelledby="dashboard-title">
       <div>
@@ -27,6 +43,8 @@
       <div class="stat-card"><span>Applied</span><strong>{{ dashboard_stats.applied }}</strong><small>Applications tracked</small></div>
     </section>
     {% if updated %}<p class="notice" role="status">Job status updated.</p>{% endif %}
+    {% if resume_updated %}<p class="notice" role="status">Resume updated. <strong>{{ active_resume_name }}</strong> is now active.</p>{% endif %}
+    {% if resume_error %}<p class="error-panel" role="alert">{{ resume_error }}</p>{% endif %}
     <section class="results-panel">
       <div class="results-heading"><div><p class="eyebrow">Opportunity inbox</p><h2>Discovered roles</h2></div><span class="count">{{ jobs|length }} shown</span></div>
       <form class="filters" method="get" aria-label="Filter jobs">
@@ -40,10 +58,18 @@
       {% if jobs %}
       <div class="job-grid" aria-label="Job results">
         {% for job in jobs %}
+        {% set match = job_matches.get(job.id) %}
         <article class="job-card">
-          <div class="job-card__heading"><div class="company-label"><span class="company-mark" aria-hidden="true">{{ job.company[:1] }}</span><p>{{ job.company }}</p></div><span class="status status--{{ job.status }}">{{ job.status }}</span></div>
+          <div class="job-card__heading"><div class="company-label"><span class="company-mark"><img src="{{ url_for('static', path='logos/' ~ company_logos.get(job.company|lower, 'company-generic.svg')) }}" alt="" aria-hidden="true"></span><p>{{ job.company }}</p></div><span class="status status--{{ job.status }}">{{ job.status }}</span></div>
           <h2><a href="/jobs/{{ job.id }}">{{ job.title }}</a></h2>
           <p class="location"><span aria-hidden="true">●</span>{{ job.location }}</p>
+          {% if match %}
+          <div class="fit-summary{% if not match.eligible %} fit-summary--ineligible{% endif %}">
+            <div class="fit-score"><strong>{{ match.score }}</strong><span>/100 match</span></div>
+            <div class="fit-meter" role="progressbar" aria-label="Resume match" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ match.score }}"><span style="width: {{ match.score }}%"></span></div>
+            {% if not match.eligible %}<p class="eligibility-warning"><strong>Not eligible:</strong> {{ match.disqualifiers|join(' ') }}</p>{% elif match.tailoring_suggestions %}<ul class="fit-suggestions">{% for suggestion in match.tailoring_suggestions[:2] %}<li>{{ suggestion }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+          {% elif resume_match_error %}<p class="match-prompt error">The active resume could not be analyzed. Upload a valid PDF or DOCX.</p>{% else %}<p class="match-prompt">Update your resume to see a match score.</p>{% endif %}
           <a class="text-link" href="/jobs/{{ job.id }}">Review opportunity <span aria-hidden="true">→</span></a>
         </article>
         {% endfor %}

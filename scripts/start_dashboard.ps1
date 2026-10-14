@@ -4,6 +4,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$localSettingsPath = Join-Path $projectRoot "config\local_settings.txt"
+if (-not $ResumeDirectory -and (Test-Path -LiteralPath $localSettingsPath)) {
+    $ResumeDirectory = (Get-Content -LiteralPath $localSettingsPath -Raw -Encoding UTF8).Trim()
+}
 $pythonPath = Join-Path $projectRoot ".venv\Scripts\python.exe"
 $dashboardUrl = "http://127.0.0.1:8001/"
 

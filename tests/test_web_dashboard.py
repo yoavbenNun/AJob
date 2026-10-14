@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 import re
+from docx import Document
 
 from src.models import JobPosting
 from src.applications.service import discover_resume_pairs
@@ -153,6 +154,84 @@ def test_dashboard_filters_to_relevant_jobs_by_default(tmp_path) -> None:
     assert "Needs review" in response.text
     assert 'aria-label="Filter jobs"' in response.text
     assert "Review opportunity" in response.text
+    assert "company-generic.svg" in response.text
+    assert "Update resume" in response.text
+    assert 'enctype="multipart/form-data"' in response.text
+
+
+def test_job_detail_uses_collapsible_content_sections(tmp_path) -> None:
+    client, job_id = _client_with_jobs(tmp_path)
+
+    response = client.get(f"/jobs/{job_id}")
+
+    assert response.status_code == 200
+    assert response.text.count('class="content-section collapsible-section"') >= 5
+    assert "<summary><h2>Description</h2></summary>" in response.text
+    assert "<summary><h2>Requirements</h2></summary>" in response.text
+    assert "<summary><h2>Local match</h2></summary>" in response.text
+    assert "<summary><h2>Application package</h2></summary>" in response.text
+    assert "<summary><h2>Professional outreach</h2></summary>" in response.text
+
+
+def test_dashboard_uploads_resume_and_preserves_local_path_privacy(tmp_path) -> None:
+    client, _ = _client_with_jobs(tmp_path)
+    document_path = tmp_path / "upload-source.docx"
+    document = Document()
+    document.add_paragraph("Dana Developer\nSKILLS\nPython")
+    document.save(document_path)
+    page = client.get("/")
+    token = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
+
+    response = client.post(
+        "/resume",
+        data={"csrf_token": token},
+        files={
+            "resume_file": (
+                "Dana Resume.docx", document_path.read_bytes(),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "Resume updated" in response.text
+    assert "Dana Resume" in response.text
+    assert "/100 match" in response.text
+    assert "fit-suggestions" in response.text
+    assert 'role="progressbar"' in response.text
+    assert str(tmp_path) not in response.text
+    assert (tmp_path / ".active_resume").is_file()
+
+
+def test_resume_upload_rejects_invalid_csrf_without_writing(tmp_path) -> None:
+    client, _ = _client_with_jobs(tmp_path)
+
+    response = client.post(
+        "/resume",
+        data={"csrf_token": "wrong"},
+        files={"resume_file": ("resume.pdf", b"%PDF-1.4", "application/pdf")},
+    )
+
+    assert response.status_code == 403
+    assert not (tmp_path / ".active_resume").exists()
+
+
+def test_resume_upload_rejects_request_without_content_length(tmp_path) -> None:
+    client, _ = _client_with_jobs(tmp_path)
+    request = client.build_request(
+        "POST",
+        "/resume",
+        data={"csrf_token": "irrelevant"},
+        files={"resume_file": ("resume.pdf", b"%PDF-1.4", "application/pdf")},
+    )
+    del request.headers["content-length"]
+
+    response = client.send(request, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/?resume_error=invalid"
+    assert not (tmp_path / ".active_resume").exists()
 
 
 def test_dashboard_can_filter_and_update_a_job_status(tmp_path) -> None:

@@ -39,6 +39,7 @@ from src.outreach.service import (
     validate_approved_body,
 )
 from src.resume.resume_parser import parse_resume
+from src.resume.resume_manager import MAX_RESUME_BYTES, get_active_resume, save_active_resume
 from src.resume.tailored_resume import (
     build_tailoring_proposal,
     create_resume_artifacts,
@@ -50,6 +51,12 @@ from src.storage.outreach_repository import OutreachRepository
 
 WEB_ROOT = Path(__file__).parent
 templates = Jinja2Templates(directory=str(WEB_ROOT / "templates"))
+COMPANY_LOGOS = {
+    "amazon": "amazon.svg",
+    "apple": "apple.svg",
+    "google": "google.svg",
+    "microsoft": "microsoft.svg",
+}
 
 
 def create_app(
@@ -93,6 +100,8 @@ def create_app(
         relevance: str = "relevant",
         location_scope: str = Query("israel", alias="location"),
         updated: int | None = None,
+        resume_updated: int | None = None,
+        resume_error: str = "",
     ):
         if status_filter != "all" and status_filter not in JOB_STATUSES:
             raise HTTPException(status_code=400, detail="Unknown job status")
@@ -121,6 +130,24 @@ def create_app(
             "reviewed": sum(job.status == "reviewed" for job in domestic_jobs),
             "applied": sum(job.status == "applied" for job in domestic_jobs),
         }
+        active_resume = get_active_resume(allowed_resume_root)
+        job_matches = {}
+        resume_match_error = False
+        if active_resume is not None:
+            try:
+                active_profile = parse_resume(active_resume)
+                job_matches = {
+                    job.id: match_resume_to_job(active_profile, job)
+                    for job in jobs
+                    if job.id is not None
+                }
+            except Exception:
+                job_matches = {}
+                resume_match_error = True
+        resume_errors = {
+            "disabled": "Resume updates require RESUME_DIRECTORY.",
+            "invalid": "The resume could not be saved. Choose a valid PDF or DOCX up to 10 MB.",
+        }
         return templates.TemplateResponse(
             request,
             "dashboard.html",
@@ -135,8 +162,40 @@ def create_app(
                 "location_scope": location_scope,
                 "updated": updated,
                 "dashboard_stats": dashboard_stats,
+                "csrf_token": csrf_token,
+                "resume_upload_enabled": allowed_resume_root is not None,
+                "active_resume_name": active_resume.name if active_resume else None,
+                "resume_updated": resume_updated,
+                "resume_error": resume_errors.get(resume_error, ""),
+                "job_matches": job_matches,
+                "resume_match_error": resume_match_error,
+                "company_logos": COMPANY_LOGOS,
             },
         )
+
+    @app.post("/resume")
+    async def upload_resume(request: Request):
+        if allowed_resume_root is None:
+            return RedirectResponse(url="/?resume_error=disabled", status_code=status.HTTP_303_SEE_OTHER)
+        try:
+            content_length = request.headers.get("content-length", "")
+            if not content_length.isdigit() or int(content_length) > MAX_RESUME_BYTES + 1_000_000:
+                raise ValueError("The upload is too large.")
+            form = await request.form()
+            submitted_token = str(form.get("csrf_token", ""))
+            if not secrets.compare_digest(submitted_token, csrf_token):
+                raise HTTPException(status_code=403, detail="Invalid form token")
+            upload = form.get("resume_file")
+            if upload is None or not getattr(upload, "filename", ""):
+                raise ValueError("Choose a resume file.")
+            content = await upload.read(MAX_RESUME_BYTES + 1)
+            await upload.close()
+            save_active_resume(allowed_resume_root, upload.filename, content)
+        except HTTPException:
+            raise
+        except (OSError, ValueError, RuntimeError):
+            return RedirectResponse(url="/?resume_error=invalid", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url="/?resume_updated=1", status_code=status.HTTP_303_SEE_OTHER)
 
     @app.get("/jobs/{job_id}", response_class=HTMLResponse)
     def job_detail(request: Request, job_id: int, updated: int | None = None):
@@ -425,18 +484,13 @@ def create_app(
                 **_application_context(application_repository, job, tailored_resume_root),
                 **_outreach_context(outreach_repository, job),
             )
-        if not resume_path.strip():
-            return _detail_response(
-                request,
-                job,
-                match_error="Enter a local resume path to match this job.",
-                csrf_token=csrf_token,
-                resume_matching_enabled=True,
-                **_application_context(application_repository, job, tailored_resume_root),
-                **_outreach_context(outreach_repository, job),
-            )
         try:
-            resolved_resume = _resolve_resume_path(resume_path, allowed_resume_root)
+            if resume_path.strip():
+                resolved_resume = _resolve_resume_path(resume_path, allowed_resume_root)
+            else:
+                resolved_resume = get_active_resume(allowed_resume_root)
+                if resolved_resume is None:
+                    raise ValueError("Upload or choose a resume before calculating a match.")
             profile = parse_resume(resolved_resume)
             result = match_resume_to_job(profile, job)
         except (OSError, ValueError) as error:

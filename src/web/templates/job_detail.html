@@ -12,12 +12,13 @@
     <header class="page-header"><div><p class="eyebrow">{{ job.company }}</p><h1>{{ job.title }}</h1><p class="muted">{{ job.location }}</p></div><span class="status status--{{ job.status }}">{{ job.status }}</span></header>
     {% if updated %}<p class="notice">Job status updated.</p>{% endif %}
     <div class="action-row"><a class="button secondary" href="{{ job.job_url }}" target="_blank" rel="noopener noreferrer">Open job posting</a><form method="post" action="/jobs/{{ job.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Lifecycle status<select name="status">{% for item in statuses %}<option value="{{ item }}" {% if item == job.status %}selected{% endif %}>{{ item|capitalize }}</option>{% endfor %}</select></label><button type="submit">Save status</button></form></div>
-    <section class="content-section"><h2>Description</h2><p class="preserve-lines">{{ job.description or 'No description was captured for this posting.' }}</p></section>
-    <section class="content-section"><h2>Requirements</h2><p class="preserve-lines">{{ job.requirements or 'No requirements were captured for this posting.' }}</p></section>
-    <section class="content-section"><h2>Local match</h2><p class="muted">The resume is read only from the configured local resume directory and is not saved or changed.</p>{% if resume_matching_enabled %}<form class="match-form" method="post" action="/jobs/{{ job.id }}/match"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Resume file path<input name="resume_path" required placeholder="C:\path\to\resume.pdf"></label><button type="submit">Calculate match</button></form>{% else %}<p class="muted">Set RESUME_DIRECTORY before starting the dashboard to enable matching.</p>{% endif %}{% if match_error %}<p class="error">{{ match_error }}</p>{% endif %}{% if match_result %}<div class="match-result"><h3>{{ match_result.score }}/100 fit score {% if not match_result.eligible %}<span class="error">· Not eligible</span>{% endif %}</h3><p><strong>Matched skills:</strong> {{ match_result.matched_skills|join(', ') or 'None identified' }}</p><p><strong>Missing skills:</strong> {{ match_result.missing_skills|join(', ') or 'None identified' }}</p><h4>Suggestions</h4><ul>{% for item in match_result.tailoring_suggestions %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}</section>
+    <details class="content-section collapsible-section" open><summary><h2>Description</h2></summary><div class="collapsible-section__body"><p class="preserve-lines">{{ job.description or 'No description was captured for this posting.' }}</p></div></details>
+    <details class="content-section collapsible-section"><summary><h2>Requirements</h2></summary><div class="collapsible-section__body"><p class="preserve-lines">{{ job.requirements or 'No requirements were captured for this posting.' }}</p></div></details>
+    <details class="content-section collapsible-section" {% if match_error or match_result %}open{% endif %}><summary><h2>Local match</h2></summary><div class="collapsible-section__body"><p class="muted">Your active resume is used by default and never leaves this computer. Enter a path only to use another file from the configured resume directory.</p>{% if resume_matching_enabled %}<form class="match-form" method="post" action="/jobs/{{ job.id }}/match"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Optional resume file path<input name="resume_path" placeholder="Leave blank to use the active resume"></label><button type="submit">Calculate match</button></form>{% else %}<p class="muted">Set RESUME_DIRECTORY before starting the dashboard to enable matching.</p>{% endif %}{% if match_error %}<p class="error">{{ match_error }}</p>{% endif %}{% if match_result %}<div class="match-result"><h3>{{ match_result.score }}/100 fit score {% if not match_result.eligible %}<span class="error">· Not eligible</span>{% endif %}</h3><p><strong>Matched skills:</strong> {{ match_result.matched_skills|join(', ') or 'None identified' }}</p><p><strong>Missing skills:</strong> {{ match_result.missing_skills|join(', ') or 'None identified' }}</p><h4>Suggestions</h4><ul>{% for item in match_result.tailoring_suggestions %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}</div></details>
     {% if tailoring_proposal %}
-    <section class="content-section">
-      <h2>Factual tailoring proposal</h2>
+    <details class="content-section collapsible-section" open>
+      <summary><h2>Factual tailoring proposal</h2></summary>
+      <div class="collapsible-section__body">
       <p><strong>Score preview:</strong> Before: {{ tailoring_proposal.before_score }}/100. After: {{ tailoring_proposal.after_score }}/100.</p>
       <p class="muted">The score does not increase because reordering existing skills adds no new evidence.</p>
       <p class="muted">A higher score is shown only when the approved text adds evidence already present elsewhere in the source resume.</p>
@@ -37,12 +38,14 @@
       </form>
       <h3>Safeguards</h3>
       <ul>{% for item in tailoring_proposal.safeguards %}<li>{{ item }}</li>{% endfor %}</ul>
-    </section>
+      </div>
+    </details>
     {% endif %}
     {% if tailoring_error %}<p class="error">{{ tailoring_error }}</p>{% endif %}
     {% if tailored_resume_names %}<p class="notice">Created {{ tailored_resume_names|join(' and ') }} in the configured tailored resume folder. The master resume was not changed.</p>{% endif %}
-    <section class="content-section" id="application">
-      <h2>Application package</h2>
+    <details class="content-section collapsible-section" id="application" {% if application_error or application_preview %}open{% endif %}>
+      <summary><h2>Application package</h2></summary>
+      <div class="collapsible-section__body">
       <p class="muted">Prepare and approve an exact local package. This app never fills or submits an employer form. Submission remains manual on the employer's website.</p>
       {% if application_error %}<p class="error">{{ application_error }}</p>{% endif %}
       {% if application_enabled %}
@@ -72,9 +75,11 @@
       </div>
       {% endif %}
       {% if application_packages %}<h3>Prepared packages</h3>{% for package in application_packages %}<div class="change-review"><strong>{{ package.approved_at }} · {{ package.submission_status|replace('_', ' ') }}</strong><p>PDF: {{ package.resume_pdf_path }}<br>DOCX: {{ package.resume_docx_path }}</p>{% if package.cover_note %}<p class="preserve-lines"><strong>Cover note:</strong> {{ package.cover_note }}</p>{% endif %}<div class="action-row"><a class="button secondary" href="{{ package.job_url }}" target="_blank" rel="noopener noreferrer">Open employer page manually</a>{% if package.submission_status == 'prepared' %}<form method="post" action="/jobs/{{ job.id }}/application/packages/{{ package.id }}/submitted"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label><input type="checkbox" name="confirm_submission" value="yes" required> I already submitted this manually</label><button type="submit">Record manual submission</button></form>{% else %}<span class="notice">Manual submission recorded {{ package.submitted_at }}</span>{% endif %}</div></div>{% endfor %}{% endif %}
-    </section>
-    <section class="content-section" id="outreach">
-      <h2>Professional outreach</h2>
+      </div>
+    </details>
+    <details class="content-section collapsible-section" id="outreach" {% if outreach_error or outreach_preview or outreach_confirmation %}open{% endif %}>
+      <summary><h2>Professional outreach</h2></summary>
+      <div class="collapsible-section__body">
       <p class="muted">Use these public search shortcuts, then add a profile you found. The app never scrapes LinkedIn, sends messages, connection requests, or applications.</p>
       <div class="search-shortcuts">{% for search in contact_searches %}<a class="button secondary" href="{{ search.url }}" target="_blank" rel="noopener noreferrer">Find {{ search.label }}</a>{% endfor %}</div>
       {% if outreach_error %}<p class="error">{{ outreach_error }}</p>{% endif %}
@@ -103,7 +108,8 @@
       {% endif %}
       {% if outreach_confirmation %}<div class="change-review"><h3>Final approval</h3><p class="muted">Confirm this exact text. It will only be stored locally; nothing is sent.</p><p class="preserve-lines">{{ outreach_confirmation.body }}</p><form method="post" action="/jobs/{{ job.id }}/outreach/confirm"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="confirmation_token" value="{{ outreach_confirmation.token }}"><button type="submit">Approve exact message</button></form></div>{% endif %}
       {% if outreach_drafts %}<h3>Approved messages</h3>{% for draft in outreach_drafts %}<div class="change-review approved-draft"><strong>{{ draft.display_name }} · {{ draft.kind|replace('_', ' ') }}</strong><textarea id="draft-{{ draft.id }}" rows="7" readonly>{{ draft.body }}</textarea><div class="action-row"><button type="button" class="copy-draft" data-copy-target="draft-{{ draft.id }}" data-activity-form="copy-form-{{ draft.id }}">Copy message</button><form id="copy-form-{{ draft.id }}" method="post" action="/jobs/{{ job.id }}/outreach/drafts/{{ draft.id }}/activity"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="copied"><noscript><button type="submit">I copied this manually</button></noscript></form></div><p class="muted">Approved {{ draft.approved_at }}.{% if draft.copied_at %} Copied {{ draft.copied_at }}.{% endif %}{% if draft.sent_at %} Sent manually {{ draft.sent_at }}.{% endif %}{% if draft.replied_at %} Reply recorded {{ draft.replied_at }}.{% endif %}</p><form class="tracking-form" method="post" action="/jobs/{{ job.id }}/outreach/drafts/{{ draft.id }}/activity"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button name="action" value="sent" type="submit">I sent this manually</button><label>Follow up on<input type="date" name="follow_up_at" value="{{ draft.follow_up_at or '' }}"></label><label>Private response note<input name="response_note" maxlength="1000" value="{{ draft.response_note or '' }}"></label><button name="action" value="replied" type="submit">Mark reply received</button></form></div>{% endfor %}<p id="copy-status" class="muted" role="status" aria-live="polite"></p>{% endif %}
-    </section>
+      </div>
+    </details>
   </main>
   <script src="{{ url_for('static', path='outreach.js') }}" defer></script>
 </body>

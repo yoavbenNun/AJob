@@ -3,3 +3,4 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 data/*.db
+config/local_settings.txt
