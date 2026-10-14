@@ -48,7 +48,7 @@ def test_compose_scan_summary_has_expected_headers_and_counts() -> None:
 
     assert message["From"] == ENV["SMTP_FROM"]
     assert message["To"] == ENV["SMTP_TO"]
-    assert message["Subject"] == "AI Job Search Agent: 0 new matching job(s)"
+    assert message["Subject"] == "AJob: 0 new matching job(s)"
     assert "Relevant roles saved: 3" in message.get_content()
     assert ENV["SMTP_PASSWORD"] not in message.as_string()
 
@@ -82,7 +82,7 @@ def test_send_scan_summary_uses_tls_authentication_and_mocked_smtp() -> None:
         ("connect", "smtp.example.test", 587, 30),
         "starttls",
         ("login", "agent@example.test", "not-a-real-secret"),
-        ("message", "AI Job Search Agent: 0 new matching job(s)"),
+        ("message", "AJob: 0 new matching job(s)"),
     ]
 
 
@@ -100,7 +100,7 @@ def test_compose_scan_summary_lists_new_jobs() -> None:
     message = compose_scan_summary(settings, summary)
     content = message.get_content()
 
-    assert message["Subject"] == "AI Job Search Agent: 1 new matching job(s)"
+    assert message["Subject"] == "AJob: 1 new matching job(s)"
     assert "Software Intern at Example" in content
     assert "https://example.test/jobs/1" in content
 
@@ -119,7 +119,7 @@ def test_ranked_email_counts_only_eligible_recommendations() -> None:
 
     message = compose_scan_summary(settings, Summary(), (recommendation,))
 
-    assert message["Subject"] == "AI Job Search Agent: 1 new matching job(s)"
+    assert message["Subject"] == "AJob: 1 new matching job(s)"
     assert "82/100 - Python Intern" in message.get_content()
 
 
@@ -133,6 +133,6 @@ def test_ranked_email_does_not_fall_back_to_unfiltered_jobs() -> None:
 
     message = compose_scan_summary(settings, summary, ())
 
-    assert message["Subject"] == "AI Job Search Agent: 0 new matching job(s)"
+    assert message["Subject"] == "AJob: 0 new matching job(s)"
     assert "No new jobs passed both resume and commute" in message.get_content()
     assert "Foreign Intern" not in message.get_content()

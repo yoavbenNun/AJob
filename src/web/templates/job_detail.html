@@ -3,15 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ job.title }} · Job dashboard</title>
+  <title>{{ job.title }} · AJob</title>
   <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}">
 </head>
 <body>
-  <main class="page-shell detail">
-    <a class="text-link" href="/">← Back to jobs</a>
-    <header class="page-header"><div><p class="eyebrow">{{ job.company }}</p><h1>{{ job.title }}</h1><p class="muted">{{ job.location }}</p></div><span class="status status--{{ job.status }}">{{ job.status }}</span></header>
-    {% if updated %}<p class="notice">Job status updated.</p>{% endif %}
-    <div class="action-row"><a class="button secondary" href="{{ job.job_url }}" target="_blank" rel="noopener noreferrer">Open job posting</a><form method="post" action="/jobs/{{ job.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Lifecycle status<select name="status">{% for item in statuses %}<option value="{{ item }}" {% if item == job.status %}selected{% endif %}>{{ item|capitalize }}</option>{% endfor %}</select></label><button type="submit">Save status</button></form></div>
+  <a class="skip-link" href="#job-content">Skip to job details</a>
+  <main class="page-shell detail-shell">
+    <header class="app-bar detail-app-bar"><a class="brand" href="/" aria-label="AJob home"><span class="brand-mark">A</span><span>AJob</span></a><div class="system-state"><span class="system-dot" aria-hidden="true"></span>Private workspace</div></header>
+    <a class="back-link" href="/"><span aria-hidden="true">←</span> All opportunities</a>
+    <section class="detail-hero" id="job-content" tabindex="-1" aria-labelledby="job-title">
+      <div class="detail-company-mark"><img src="{{ url_for('static', path='logos/' ~ company_logos.get(job.company|lower, 'company-generic.svg')) }}" alt="" aria-hidden="true"></div>
+      <div class="detail-hero__copy"><p class="eyebrow">{{ job.company }}</p><h1 id="job-title">{{ job.title }}</h1><div class="detail-meta"><span><span aria-hidden="true">●</span>{{ job.location }}</span><span class="status status--{{ job.status }}">{{ job.status|capitalize }}</span></div></div>
+    </section>
+    {% if updated %}<p class="notice" role="status">Job status updated.</p>{% endif %}
+    <div class="detail-toolbar"><a class="button secondary" href="{{ job.job_url }}" target="_blank" rel="noopener noreferrer">Open original posting <span aria-hidden="true">↗</span></a><form class="status-form" method="post" action="/jobs/{{ job.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Application status<select name="status">{% for item in statuses %}<option value="{{ item }}" {% if item == job.status %}selected{% endif %}>{{ item|capitalize }}</option>{% endfor %}</select></label><button type="submit">Save status</button></form></div>
     <details class="content-section collapsible-section" open><summary><h2>Description</h2></summary><div class="collapsible-section__body"><p class="preserve-lines">{{ job.description or 'No description was captured for this posting.' }}</p></div></details>
     <details class="content-section collapsible-section"><summary><h2>Requirements</h2></summary><div class="collapsible-section__body"><p class="preserve-lines">{{ job.requirements or 'No requirements were captured for this posting.' }}</p></div></details>
     <details class="content-section collapsible-section" {% if match_error or match_result %}open{% endif %}><summary><h2>Local match</h2></summary><div class="collapsible-section__body"><p class="muted">Your active resume is used by default and never leaves this computer. Enter a path only to use another file from the configured resume directory.</p>{% if resume_matching_enabled %}<form class="match-form" method="post" action="/jobs/{{ job.id }}/match"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Optional resume file path<input name="resume_path" placeholder="Leave blank to use the active resume"></label><button type="submit">Calculate match</button></form>{% else %}<p class="muted">Set RESUME_DIRECTORY before starting the dashboard to enable matching.</p>{% endif %}{% if match_error %}<p class="error">{{ match_error }}</p>{% endif %}{% if match_result %}<div class="match-result"><h3>{{ match_result.score }}/100 fit score {% if not match_result.eligible %}<span class="error">· Not eligible</span>{% endif %}</h3><p><strong>Matched skills:</strong> {{ match_result.matched_skills|join(', ') or 'None identified' }}</p><p><strong>Missing skills:</strong> {{ match_result.missing_skills|join(', ') or 'None identified' }}</p><h4>Suggestions</h4><ul>{% for item in match_result.tailoring_suggestions %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}</div></details>

@@ -150,6 +150,8 @@ def test_dashboard_filters_to_relevant_jobs_by_default(tmp_path) -> None:
     assert "Python Software Intern" in response.text
     assert "Unreviewed role" not in response.text
     assert "Your job search command center" in response.text
+    assert "AJob" in response.text
+    assert "Job Agent" not in response.text
     assert "Relevant roles" in response.text
     assert "Needs review" in response.text
     assert 'aria-label="Filter jobs"' in response.text
@@ -171,6 +173,8 @@ def test_job_detail_uses_collapsible_content_sections(tmp_path) -> None:
     assert "<summary><h2>Local match</h2></summary>" in response.text
     assert "<summary><h2>Application package</h2></summary>" in response.text
     assert "<summary><h2>Professional outreach</h2></summary>" in response.text
+    assert "AJob" in response.text
+    assert "company-generic.svg" in response.text
 
 
 def test_dashboard_uploads_resume_and_preserves_local_path_privacy(tmp_path) -> None:

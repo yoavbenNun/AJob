@@ -84,7 +84,7 @@ def compose_scan_summary(
     message["To"] = settings.recipient
     new_jobs = tuple(getattr(summary, "new_jobs", ()))
     notified_count = len(new_jobs) if recommendations is None else len(recommendations)
-    message["Subject"] = f"AI Job Search Agent: {notified_count} new matching job(s)"
+    message["Subject"] = f"AJob: {notified_count} new matching job(s)"
     if recommendations is not None:
         details = "\n".join(
             f"- {item.score}/100 - {item.title} at {item.company}\n"
@@ -98,7 +98,7 @@ def compose_scan_summary(
             for job in new_jobs
         ) or "No new matching jobs were discovered."
     message.set_content(
-        "AI Job Search Agent scan complete.\n\n"
+        "AJob scan complete.\n\n"
         f"Companies scanned: {summary.companies_scanned}\n"
         f"Candidates found: {summary.jobs_found}\n"
         f"Relevant roles saved: {summary.jobs_saved}\n"

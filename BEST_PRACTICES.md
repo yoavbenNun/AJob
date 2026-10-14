@@ -1,7 +1,7 @@
 # Project Best Practices
 
-This file records durable lessons discovered while building the AI Job Search
-Agent. Read it before making changes and update it when a new failure mode or
+This file records durable lessons discovered while building AJob. Read it before
+making changes and update it when a new failure mode or
 reusable lesson appears.
 
 ## Environment and verification

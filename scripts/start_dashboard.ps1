@@ -15,7 +15,7 @@ if (-not (Test-Path -LiteralPath $pythonPath)) {
     Add-Type -AssemblyName PresentationFramework
     [System.Windows.MessageBox]::Show(
         "Python environment was not found at $pythonPath",
-        "AI Job Search Agent"
+        "AJob"
     ) | Out-Null
     exit 1
 }
@@ -58,7 +58,7 @@ if (-not (Test-DashboardReady)) {
         Add-Type -AssemblyName PresentationFramework
         [System.Windows.MessageBox]::Show(
             "The dashboard server did not become ready. Check the PowerShell window for details.",
-            "AI Job Search Agent"
+            "AJob"
         ) | Out-Null
         exit 1
     }

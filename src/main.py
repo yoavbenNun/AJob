@@ -1,4 +1,4 @@
-"""Command-line entry point for the AI Job Search Agent."""
+"""Command-line entry point for AJob."""
 
 import argparse
 import json

@@ -1,4 +1,4 @@
-# AI Job Search Agent Instructions
+# AJob Instructions
 
 Read `BEST_PRACTICES.md` completely before making changes in this repository.
 Update it whenever work reveals a reusable project-specific lesson, failure mode,

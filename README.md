@@ -1,6 +1,6 @@
-# AI Job Search Agent
+# AJob
 
-AI Job Search Agent is a local-first assistant for discovering relevant student,
+AJob is a local-first assistant for discovering relevant student,
 intern, and junior software roles. The long-term goal is to compare roles with a
 resume, explain fit, and prepare tailored application material while keeping all
 rewrites and submissions behind explicit human approval.

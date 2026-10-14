@@ -3,13 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Job Agent · Opportunity dashboard</title>
+  <title>AJob · Opportunity dashboard</title>
   <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}">
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
   <main class="page-shell dashboard-shell">
     <header class="app-bar">
-      <a class="brand" href="/" aria-label="Job Agent home"><span class="brand-mark">A</span><span>Job Agent</span></a>
+      <a class="brand" href="/" aria-label="AJob home"><span class="brand-mark">A</span><span>AJob</span></a>
       <div class="top-actions">
         <details class="resume-menu">
           <summary class="button resume-button">Update resume</summary>
@@ -28,7 +29,7 @@
         <div class="system-state"><span class="system-dot" aria-hidden="true"></span>Private workspace</div>
       </div>
     </header>
-    <section class="hero" aria-labelledby="dashboard-title">
+    <section class="hero" id="main-content" tabindex="-1" aria-labelledby="dashboard-title">
       <div>
         <p class="eyebrow">Your job search command center</p>
         <h1 id="dashboard-title">Find the right role.<br><span>Apply with confidence.</span></h1>
@@ -46,7 +47,7 @@
     {% if resume_updated %}<p class="notice" role="status">Resume updated. <strong>{{ active_resume_name }}</strong> is now active.</p>{% endif %}
     {% if resume_error %}<p class="error-panel" role="alert">{{ resume_error }}</p>{% endif %}
     <section class="results-panel">
-      <div class="results-heading"><div><p class="eyebrow">Opportunity inbox</p><h2>Discovered roles</h2></div><span class="count">{{ jobs|length }} shown</span></div>
+      <div class="results-heading"><div><p class="eyebrow">Opportunity inbox</p><h2>Discovered roles</h2></div><div class="results-meta"><span class="count">{{ jobs|length }} shown</span>{% if query or selected_status != 'all' or selected_company or relevance != 'relevant' or location_scope != 'israel' %}<a class="reset-link" href="/">Reset filters</a>{% endif %}</div></div>
       <form class="filters" method="get" aria-label="Filter jobs">
         <label class="search-field">Search roles<input name="query" value="{{ query }}" placeholder="Title, company, or location"></label>
         <label>Status<select name="status"><option value="all">All statuses</option>{% for item in statuses %}<option value="{{ item }}" {% if item == selected_status %}selected{% endif %}>{{ item|capitalize }}</option>{% endfor %}</select></label>
@@ -60,7 +61,7 @@
         {% for job in jobs %}
         {% set match = job_matches.get(job.id) %}
         <article class="job-card">
-          <div class="job-card__heading"><div class="company-label"><span class="company-mark"><img src="{{ url_for('static', path='logos/' ~ company_logos.get(job.company|lower, 'company-generic.svg')) }}" alt="" aria-hidden="true"></span><p>{{ job.company }}</p></div><span class="status status--{{ job.status }}">{{ job.status }}</span></div>
+          <div class="job-card__heading"><div class="company-label"><span class="company-mark"><img src="{{ url_for('static', path='logos/' ~ company_logos.get(job.company|lower, 'company-generic.svg')) }}" alt="" aria-hidden="true"></span><p>{{ job.company }}</p></div><span class="status status--{{ job.status }}">{{ job.status|capitalize }}</span></div>
           <h2><a href="/jobs/{{ job.id }}">{{ job.title }}</a></h2>
           <p class="location"><span aria-hidden="true">●</span>{{ job.location }}</p>
           {% if match %}

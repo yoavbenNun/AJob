@@ -181,7 +181,7 @@ class OpenStreetMapDrivingProvider:
         return coordinates
 
     def _get_json(self, url: str):
-        request = Request(url, headers={"User-Agent": "AI-Job-Search-Agent/1.0 personal-use"})
+        request = Request(url, headers={"User-Agent": "AJob/1.0 personal-use"})
         with urlopen(request, timeout=self.timeout_seconds) as response:
             return json.loads(response.read().decode("utf-8"))
 

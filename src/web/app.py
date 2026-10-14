@@ -88,7 +88,7 @@ def create_app(
         str, tuple[float, int, ApplicationPackagePreview]
     ] = {}
 
-    app = FastAPI(title="AI Job Search Agent", docs_url=None, redoc_url=None)
+    app = FastAPI(title="AJob", docs_url=None, redoc_url=None)
     app.mount("/static", StaticFiles(directory=str(WEB_ROOT / "static")), name="static")
 
     @app.get("/", response_class=HTMLResponse)
@@ -619,7 +619,7 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
     return templates.TemplateResponse(
         request,
         "job_detail.html",
-        {"job": job, "statuses": JOB_STATUSES, **context},
+        {"job": job, "statuses": JOB_STATUSES, "company_logos": COMPANY_LOGOS, **context},
     )
 
 
