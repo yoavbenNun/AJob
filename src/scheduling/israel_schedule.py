@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 ISRAEL_TIMEZONE = ZoneInfo("Asia/Jerusalem")
 TARGET_LOCAL_HOURS = frozenset({8, 11, 16})
-CRON_PATTERN = re.compile(r"^0\s+(\d{1,2})\s+\*\s+\*\s+\*$")
+CRON_PATTERN = re.compile(r"^(\d{1,2})\s+(\d{1,2})\s+\*\s+\*\s+\*$")
 
 
 def should_run_scheduled_scan(
@@ -28,7 +28,10 @@ def should_run_scheduled_scan(
     if match is None:
         raise ValueError(f"Unsupported schedule expression: {cron_expression!r}")
 
-    utc_hour = int(match.group(1))
+    utc_minute = int(match.group(1))
+    utc_hour = int(match.group(2))
+    if not 0 <= utc_minute <= 59:
+        raise ValueError(f"UTC schedule minute must be between 0 and 59: {utc_minute}")
     if not 0 <= utc_hour <= 23:
         raise ValueError(f"UTC schedule hour must be between 0 and 23: {utc_hour}")
 
@@ -37,7 +40,7 @@ def should_run_scheduled_scan(
         raise ValueError("reference_utc must be timezone-aware")
     reference = reference.astimezone(timezone.utc)
     intended_utc = datetime.combine(
-        reference.date(), time(hour=utc_hour), tzinfo=timezone.utc
+        reference.date(), time(hour=utc_hour, minute=utc_minute), tzinfo=timezone.utc
     )
     if intended_utc > reference:
         intended_utc -= timedelta(days=1)

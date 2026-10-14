@@ -156,6 +156,9 @@ reusable lesson appears.
   delayed GitHub runner can skip every expensive step while reporting success.
   Manual dispatch must bypass that gate. GitHub may still delay starts, so do not
   represent this as a hard real-time guarantee.
+- Avoid scheduling GitHub Actions at minute zero. Hosted cron load can delay or
+  drop top-of-hour runs; use a non-zero minute and verify actual run creation,
+  not merely that the workflow is active.
 - Treat hosted-runner deprecation annotations as maintenance work even when a run
   succeeds. Keep first-party actions on a runtime-supported major version.
 

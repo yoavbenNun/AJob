@@ -4,12 +4,13 @@ on:
   schedule:
     # Keep expressions distinct: github.event.schedule identifies the intended
     # UTC slot even when GitHub starts the runner hours late.
-    - cron: "0 5 * * *"
-    - cron: "0 6 * * *"
-    - cron: "0 8 * * *"
-    - cron: "0 9 * * *"
-    - cron: "0 13 * * *"
-    - cron: "0 14 * * *"
+    # Avoid minute 0, when GitHub-hosted schedules are most likely to be delayed.
+    - cron: "17 5 * * *"
+    - cron: "17 6 * * *"
+    - cron: "17 8 * * *"
+    - cron: "17 9 * * *"
+    - cron: "17 13 * * *"
+    - cron: "17 14 * * *"
   workflow_dispatch:
 
 permissions:
