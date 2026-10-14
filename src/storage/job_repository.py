@@ -49,6 +49,56 @@ class JobRepository:
                     "ADD COLUMN status TEXT NOT NULL DEFAULT 'new'"
                 )
             self._merge_equivalent_urls(connection)
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS notification_deliveries (
+                    slot_key TEXT PRIMARY KEY,
+                    status TEXT NOT NULL CHECK (status IN ('processing', 'sent', 'failed')),
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    claimed_at TEXT NOT NULL,
+                    sent_at TEXT,
+                    last_error TEXT NOT NULL DEFAULT ''
+                )
+                """
+            )
+
+    def begin_delivery(self, slot_key: str) -> bool:
+        """Claim a delivery slot unless it was sent or has a live claim."""
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO notification_deliveries (
+                    slot_key, status, attempts, claimed_at, sent_at, last_error
+                ) VALUES (?, 'processing', 1, datetime('now'), NULL, '')
+                ON CONFLICT(slot_key) DO UPDATE SET
+                    status = 'processing',
+                    attempts = notification_deliveries.attempts + 1,
+                    claimed_at = datetime('now'),
+                    last_error = ''
+                WHERE notification_deliveries.status = 'failed'
+                   OR (notification_deliveries.status = 'processing'
+                       AND notification_deliveries.claimed_at < datetime('now', '-20 minutes'))
+                """,
+                (slot_key,),
+            )
+            return cursor.rowcount == 1
+
+    def complete_delivery(self, slot_key: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE notification_deliveries "
+                "SET status = 'sent', sent_at = datetime('now'), last_error = '' "
+                "WHERE slot_key = ? AND status = 'processing'",
+                (slot_key,),
+            )
+
+    def fail_delivery(self, slot_key: str, error: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE notification_deliveries SET status = 'failed', last_error = ? "
+                "WHERE slot_key = ? AND status = 'processing'",
+                (error[:500], slot_key),
+            )
 
     def save(self, job: JobPosting) -> int:
         """Insert or update a posting by URL and return its database ID."""

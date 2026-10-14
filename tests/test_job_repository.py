@@ -252,3 +252,40 @@ def test_initialize_migrates_existing_rows_to_new_status(tmp_path: Path) -> None
     repository.initialize()
 
     assert repository.list_all()[0].status == "new"
+
+
+def test_delivery_slot_is_claimed_once_and_sent_is_terminal(tmp_path: Path) -> None:
+    repository = JobRepository(tmp_path / "jobs.db")
+    repository.initialize()
+    slot = "2026-10-14T08:17:00+03:00"
+
+    assert repository.begin_delivery(slot) is True
+    assert repository.begin_delivery(slot) is False
+    repository.complete_delivery(slot)
+    assert repository.begin_delivery(slot) is False
+
+
+def test_failed_delivery_can_be_retried(tmp_path: Path) -> None:
+    repository = JobRepository(tmp_path / "jobs.db")
+    repository.initialize()
+    slot = "2026-10-14T11:17:00+03:00"
+
+    assert repository.begin_delivery(slot) is True
+    repository.fail_delivery(slot, "temporary SMTP failure")
+    assert repository.begin_delivery(slot) is True
+
+
+def test_expired_delivery_claim_can_be_retried(tmp_path: Path) -> None:
+    database = tmp_path / "jobs.db"
+    repository = JobRepository(database)
+    repository.initialize()
+    slot = "2026-10-14T16:17:00+03:00"
+    assert repository.begin_delivery(slot) is True
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE notification_deliveries SET claimed_at = datetime('now', '-21 minutes') "
+            "WHERE slot_key = ?",
+            (slot,),
+        )
+
+    assert repository.begin_delivery(slot) is True

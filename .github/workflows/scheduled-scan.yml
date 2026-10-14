@@ -11,6 +11,14 @@ on:
     - cron: "17 9 * * *"
     - cron: "17 13 * * *"
     - cron: "17 14 * * *"
+    # Retry each eligible Israel slot 30 minutes later. Persistent delivery
+    # records make these no-ops when the primary email was already sent.
+    - cron: "47 5 * * *"
+    - cron: "47 6 * * *"
+    - cron: "47 8 * * *"
+    - cron: "47 9 * * *"
+    - cron: "47 13 * * *"
+    - cron: "47 14 * * *"
   workflow_dispatch:
 
 permissions:
@@ -44,6 +52,7 @@ jobs:
         run: |
           if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then
             echo "run_scan=true" >> "$GITHUB_OUTPUT"
+            echo "delivery_slot=" >> "$GITHUB_OUTPUT"
             echo "Manual dispatch: bypassing the scheduled-time gate."
             exit 0
           fi
@@ -54,6 +63,7 @@ jobs:
           set -e
           if [ "$gate_status" -eq 0 ]; then
             echo "run_scan=true" >> "$GITHUB_OUTPUT"
+            echo "delivery_slot=$gate_output" >> "$GITHUB_OUTPUT"
             echo "Scheduled scan approved for cron slot $SCHEDULE_EXPRESSION."
           elif [ "$gate_status" -eq 1 ]; then
             echo "run_scan=false" >> "$GITHUB_OUTPUT"
@@ -90,3 +100,4 @@ jobs:
           -e DATABASE_URL
           -e CANDIDATE_PROFILE_JSON
           ai-job-search-agent python -m src.main scan --email-summary
+          --delivery-slot "${{ steps.schedule_gate.outputs.delivery_slot }}"

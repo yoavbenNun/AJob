@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 ISRAEL_TIMEZONE = ZoneInfo("Asia/Jerusalem")
 TARGET_LOCAL_HOURS = frozenset({8, 11, 16})
+SCHEDULE_MINUTES = frozenset({17, 47})
 CRON_PATTERN = re.compile(r"^(\d{1,2})\s+(\d{1,2})\s+\*\s+\*\s+\*$")
 
 
@@ -45,7 +46,33 @@ def should_run_scheduled_scan(
     if intended_utc > reference:
         intended_utc -= timedelta(days=1)
     intended_local = intended_utc.astimezone(ISRAEL_TIMEZONE)
-    return intended_local.hour in TARGET_LOCAL_HOURS
+    return (
+        intended_local.hour in TARGET_LOCAL_HOURS
+        and intended_local.minute in SCHEDULE_MINUTES
+    )
+
+
+def delivery_slot_for_schedule(
+    cron_expression: str,
+    reference_utc: datetime | None = None,
+) -> str | None:
+    """Return the canonical Israel delivery slot for a primary or retry cron."""
+    match = CRON_PATTERN.fullmatch(cron_expression.strip())
+    if match is None:
+        raise ValueError(f"Unsupported schedule expression: {cron_expression!r}")
+    utc_minute = int(match.group(1))
+    utc_hour = int(match.group(2))
+    reference = (reference_utc or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    intended_utc = datetime.combine(
+        reference.date(), time(hour=utc_hour, minute=utc_minute), tzinfo=timezone.utc
+    )
+    if intended_utc > reference:
+        intended_utc -= timedelta(days=1)
+    intended_local = intended_utc.astimezone(ISRAEL_TIMEZONE)
+    if not should_run_scheduled_scan(cron_expression, reference):
+        return None
+    canonical = intended_local.replace(minute=17, second=0, microsecond=0)
+    return canonical.isoformat()
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -58,7 +85,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         should_run = should_run_scheduled_scan(args.cron_expression)
     except ValueError as error:
         parser.error(str(error))
-    print("true" if should_run else "false")
+    slot = delivery_slot_for_schedule(args.cron_expression)
+    print(slot if should_run else "false")
     return 0 if should_run else 1
 
 

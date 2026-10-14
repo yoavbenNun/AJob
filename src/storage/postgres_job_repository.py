@@ -57,7 +57,58 @@ class PostgresJobRepository:
                 "CREATE INDEX IF NOT EXISTS job_postings_relevant_status_discovered_idx "
                 "ON job_postings (is_relevant, status, discovered_at DESC, id DESC)"
             )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS notification_deliveries (
+                    slot_key TEXT PRIMARY KEY,
+                    status TEXT NOT NULL CHECK (status IN ('processing', 'sent', 'failed')),
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    claimed_at TIMESTAMPTZ NOT NULL,
+                    sent_at TIMESTAMPTZ,
+                    last_error TEXT NOT NULL DEFAULT ''
+                )
+                """
+            )
             self._canonicalize_existing_urls(cursor)
+
+    def begin_delivery(self, slot_key: str) -> bool:
+        """Atomically claim a delivery slot, allowing failed or stale retries."""
+        with self._connect() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO notification_deliveries (
+                    slot_key, status, attempts, claimed_at, sent_at, last_error
+                ) VALUES (%s, 'processing', 1, NOW(), NULL, '')
+                ON CONFLICT(slot_key) DO UPDATE SET
+                    status = 'processing',
+                    attempts = notification_deliveries.attempts + 1,
+                    claimed_at = NOW(),
+                    last_error = ''
+                WHERE notification_deliveries.status = 'failed'
+                   OR (notification_deliveries.status = 'processing'
+                       AND notification_deliveries.claimed_at < NOW() - INTERVAL '20 minutes')
+                RETURNING slot_key
+                """,
+                (slot_key,),
+            )
+            return cursor.fetchone() is not None
+
+    def complete_delivery(self, slot_key: str) -> None:
+        with self._connect() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE notification_deliveries "
+                "SET status = 'sent', sent_at = NOW(), last_error = '' "
+                "WHERE slot_key = %s AND status = 'processing'",
+                (slot_key,),
+            )
+
+    def fail_delivery(self, slot_key: str, error: str) -> None:
+        with self._connect() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE notification_deliveries SET status = 'failed', last_error = %s "
+                "WHERE slot_key = %s AND status = 'processing'",
+                (error[:500], slot_key),
+            )
 
     @staticmethod
     def _canonicalize_existing_urls(cursor) -> None:

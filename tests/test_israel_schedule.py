@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from src.scheduling.israel_schedule import should_run_scheduled_scan
+from src.scheduling.israel_schedule import delivery_slot_for_schedule, should_run_scheduled_scan
 
 
 @pytest.mark.parametrize(
@@ -46,6 +46,16 @@ def test_winter_schedule_selects_utc_plus_two_slots(
 def test_runner_delay_does_not_change_intended_slot() -> None:
     delayed_start = datetime(2026, 10, 13, 19, 35, tzinfo=timezone.utc)
     assert should_run_scheduled_scan("17 13 * * *", delayed_start) is True
+    assert delivery_slot_for_schedule("17 13 * * *", delayed_start) == (
+        "2026-10-13T16:17:00+03:00"
+    )
+
+
+def test_retry_maps_to_same_canonical_delivery_slot() -> None:
+    reference = datetime(2026, 7, 1, 14, 55, tzinfo=timezone.utc)
+    assert delivery_slot_for_schedule("17 13 * * *", reference) == (
+        delivery_slot_for_schedule("47 13 * * *", reference)
+    )
 
 
 def test_delay_across_utc_midnight_uses_previous_scheduled_date() -> None:
@@ -88,4 +98,7 @@ def test_cloud_workflow_never_succeeds_without_email_configuration() -> None:
     assert expressions == [
         "17 5 * * *", "17 6 * * *", "17 8 * * *",
         "17 9 * * *", "17 13 * * *", "17 14 * * *",
+        "47 5 * * *", "47 6 * * *", "47 8 * * *",
+        "47 9 * * *", "47 13 * * *", "47 14 * * *",
     ]
+    assert '--delivery-slot "${{ steps.schedule_gate.outputs.delivery_slot }}"' in workflow

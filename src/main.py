@@ -58,6 +58,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Send a scan summary using SMTP_* environment variables",
     )
+    scan_parser.add_argument(
+        "--delivery-slot",
+        help="Stable scheduled-delivery key used to prevent duplicate cloud emails",
+    )
     resume_parser = subparsers.add_parser(
         "parse-resume", help="Parse a local resume without sending it anywhere"
     )
@@ -141,9 +145,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             preview_companies(companies)
             return 0
 
+        repository = None
+        delivery_claimed = False
         try:
             repository = create_job_repository(args.database)
             repository.initialize()
+            if args.delivery_slot:
+                if not args.email_summary:
+                    raise ValueError("--delivery-slot requires --email-summary")
+                delivery_claimed = repository.begin_delivery(args.delivery_slot)
+                if not delivery_claimed:
+                    print(f"Delivery slot {args.delivery_slot} was already sent or is active.")
+                    return 0
             summary = scan_companies(
                 companies,
                 repository,
@@ -151,7 +164,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 timeout_ms=args.timeout_ms,
                 max_pages=max(1, args.max_pages),
             )
-        except (PostgresError, RuntimeError, sqlite3.Error) as error:
+        except (PostgresError, RuntimeError, sqlite3.Error, ValueError) as error:
+            if repository is not None and delivery_claimed:
+                repository.fail_delivery(args.delivery_slot, type(error).__name__)
             print(f"Scan failed: storage unavailable ({type(error).__name__}).", file=sys.stderr)
             return 1
         print(
@@ -163,8 +178,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             try:
                 recommendations = _cloud_recommendations(summary)
                 send_scan_summary(load_smtp_settings(), summary, recommendations)
+                if delivery_claimed:
+                    repository.complete_delivery(args.delivery_slot)
                 print("Email summary sent.")
             except (OSError, ValueError) as error:
+                if delivery_claimed:
+                    repository.fail_delivery(args.delivery_slot, type(error).__name__)
                 print(f"Email summary failed: {error}", file=sys.stderr)
                 return 1
         return 1 if summary.failures else 0

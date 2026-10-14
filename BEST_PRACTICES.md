@@ -159,6 +159,11 @@ reusable lesson appears.
 - Avoid scheduling GitHub Actions at minute zero. Hosted cron load can delay or
   drop top-of-hour runs; use a non-zero minute and verify actual run creation,
   not merely that the workflow is active.
+- Give each scheduled notification a stable local-time slot stored in the
+  persistent database. Retry from a second cron and atomically claim the slot so
+  a successful primary run turns the retry into a no-op. Treat SMTP delivery as
+  at-least-once: a network failure after server acceptance can still duplicate a
+  message, so never promise mathematically exact-once email.
 - Treat hosted-runner deprecation annotations as maintenance work even when a run
   succeeds. Keep first-party actions on a runtime-supported major version.
 
