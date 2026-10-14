@@ -106,6 +106,12 @@ def create_app(
             relevance=relevance,
         )
         companies = sorted({job.company for job in all_jobs}, key=str.casefold)
+        dashboard_stats = {
+            "relevant": sum(job.is_relevant for job in all_jobs),
+            "new": sum(job.is_relevant and job.status == "new" for job in all_jobs),
+            "reviewed": sum(job.status == "reviewed" for job in all_jobs),
+            "applied": sum(job.status == "applied" for job in all_jobs),
+        }
         return templates.TemplateResponse(
             request,
             "dashboard.html",
@@ -118,6 +124,7 @@ def create_app(
                 "query": query,
                 "relevance": relevance,
                 "updated": updated,
+                "dashboard_stats": dashboard_stats,
             },
         )
 
