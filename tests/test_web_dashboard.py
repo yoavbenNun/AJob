@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 import re
 
 from src.models import JobPosting
+from src.applications.service import discover_resume_pairs
 from src.storage.job_repository import JobRepository
 from src.web.app import create_app
 
@@ -269,8 +270,7 @@ def _application_form(csrf: str, pdf, docx) -> dict[str, str]:
         "salary_expectation": "",
         "linkedin_url": "https://linkedin.com/in/dana",
         "github_url": "https://github.com/dana",
-        "resume_pdf_path": str(pdf),
-        "resume_docx_path": str(docx),
+        "resume_pair": discover_resume_pairs(pdf.parent)[0].id,
         "cover_note": "I am interested in this role.",
     }
 
@@ -329,6 +329,19 @@ def test_application_requires_exact_preview_then_records_manual_submission(tmp_p
     assert 'status--applied' in submitted.text
 
 
+def test_application_form_lists_only_matching_tailored_resume_pairs(tmp_path) -> None:
+    client, job_id = _client_with_jobs(tmp_path)
+    pdf, _ = _application_pair(tmp_path)
+    unmatched = pdf.parent / "unmatched.pdf"
+    unmatched.write_bytes(pdf.read_bytes())
+
+    page = client.get(f"/jobs/{job_id}")
+
+    assert f'>{pdf.stem}</option>' in page.text
+    assert str(pdf.parent) not in page.text
+    assert "unmatched</option>" not in page.text
+
+
 def test_application_rejects_changed_resume_after_preview(tmp_path) -> None:
     client, job_id = _client_with_jobs(tmp_path)
     pdf, docx = _application_pair(tmp_path)
@@ -348,7 +361,33 @@ def test_application_rejects_changed_resume_after_preview(tmp_path) -> None:
     assert "Prepared packages" not in response.text
 
 
-def test_application_rejects_resume_outside_tailored_directory(tmp_path) -> None:
+def test_application_rejects_changed_resume_when_recording_manual_submission(tmp_path) -> None:
+    client, job_id = _client_with_jobs(tmp_path)
+    pdf, docx = _application_pair(tmp_path)
+    preview = client.post(
+        f"/jobs/{job_id}/application/preview",
+        data=_application_form(_csrf_token(client, job_id), pdf, docx),
+    )
+    token = re.search(r'name="application_token" value="([^"]+)"', preview.text).group(1)
+    approved = client.post(
+        f"/jobs/{job_id}/application/approve",
+        data={"csrf_token": _csrf_token(client, job_id), "application_token": token},
+    )
+    package_id = re.search(r'/application/packages/(\d+)/submitted', approved.text).group(1)
+    pdf.write_bytes(b"changed after package approval")
+
+    response = client.post(
+        f"/jobs/{job_id}/application/packages/{package_id}/submitted",
+        data={"csrf_token": _csrf_token(client, job_id), "confirm_submission": "yes"},
+    )
+
+    assert response.status_code == 200
+    assert "changed after package approval" in response.text
+    assert "Manual submission recorded" not in response.text
+    assert JobRepository(tmp_path / "jobs.db").get_by_id(job_id).status == "new"
+
+
+def test_application_rejects_unknown_or_malicious_resume_pair_id(tmp_path) -> None:
     client, job_id = _client_with_jobs(tmp_path)
     outside_pdf = tmp_path / "resume.pdf"
     outside_docx = tmp_path / "resume.docx"
@@ -357,12 +396,23 @@ def test_application_rejects_resume_outside_tailored_directory(tmp_path) -> None
 
     response = client.post(
         f"/jobs/{job_id}/application/preview",
-        data=_application_form(
-            _csrf_token(client, job_id), outside_pdf, outside_docx
-        ),
+        data={**_application_form(_csrf_token(client, job_id), outside_pdf, outside_docx),
+              "resume_pair": "../resume"},
     )
 
-    assert "inside RESUME_DIRECTORY" in response.text
+    assert "available tailored resume pair" in response.text
+    assert "Exact package approval" not in response.text
+
+
+def test_application_rejects_pair_deleted_after_form_was_loaded(tmp_path) -> None:
+    client, job_id = _client_with_jobs(tmp_path)
+    pdf, docx = _application_pair(tmp_path)
+    form = _application_form(_csrf_token(client, job_id), pdf, docx)
+    docx.unlink()
+
+    response = client.post(f"/jobs/{job_id}/application/preview", data=form)
+
+    assert "available tailored resume pair" in response.text
     assert "Exact package approval" not in response.text
 
 

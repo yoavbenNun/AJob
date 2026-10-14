@@ -7,6 +7,7 @@ from pypdf import PdfWriter
 from src.applications.service import (
     CandidateApplicationProfile,
     build_package_preview,
+    discover_resume_pairs,
     validate_candidate_profile,
     verify_package_preview,
 )
@@ -82,3 +83,19 @@ def test_preview_rejects_files_with_only_resume_extensions(tmp_path: Path) -> No
 
     with pytest.raises(ValueError, match="verified PDF and DOCX"):
         build_package_preview(_job(), _profile(), pdf, docx, "")
+
+
+def test_resume_pair_discovery_ignores_orphans_and_uses_opaque_id(tmp_path: Path) -> None:
+    pdf, docx = _resume_pair(tmp_path)
+    (tmp_path / "orphan.pdf").write_bytes(pdf.read_bytes())
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    (nested / "nested.pdf").write_bytes(pdf.read_bytes())
+    (nested / "nested.docx").write_bytes(docx.read_bytes())
+
+    pairs = discover_resume_pairs(tmp_path)
+
+    assert len(pairs) == 1
+    assert pairs[0].label == "resume"
+    assert pairs[0].id != "resume"
+    assert str(tmp_path) not in pairs[0].id

@@ -109,8 +109,9 @@ manually record sent, reply, and follow-up dates. Contact notes and approved
 drafts are stored in `data/outreach.db`, separate from cloud job data. The app
 never fetches LinkedIn pages or sends a message.
 
-The application-package section accepts only matching PDF/DOCX files inside the
-configured `RESUME_DIRECTORY/tailored` folder. It shows the complete candidate
+The application-package section discovers matching PDF/DOCX files inside the
+configured `RESUME_DIRECTORY/tailored` folder and presents them as a safe dropdown,
+so local paths are not typed into or exposed by the form. It shows the complete candidate
 profile, files, and cover note, then requires approval of that exact fingerprinted
 snapshot. Approval stores a local prepared package; it never opens, fills, or
 submits an employer form. After submitting on the employer's site yourself, you

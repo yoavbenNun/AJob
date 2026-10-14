@@ -47,6 +47,14 @@ class ApplicationPackagePreview:
     fingerprint: str
 
 
+@dataclass(frozen=True, slots=True)
+class ResumePairOption:
+    id: str
+    label: str
+    pdf_path: Path
+    docx_path: Path
+
+
 def validate_candidate_profile(profile: CandidateApplicationProfile) -> tuple[str, ...]:
     missing: list[str] = []
     for field_name, label in (
@@ -123,6 +131,51 @@ def verify_package_preview(
     if not hmac.compare_digest(rebuilt.fingerprint, preview.fingerprint):
         raise ValueError("Job, profile, or resume files changed after preview.")
     return rebuilt
+
+
+def discover_resume_pairs(tailored_root: Path | None) -> tuple[ResumePairOption, ...]:
+    """List direct, matching resume pairs without exposing paths as form values."""
+    if tailored_root is None or not tailored_root.is_dir():
+        return ()
+    try:
+        root = tailored_root.resolve()
+    except OSError:
+        return ()
+    grouped: dict[str, dict[str, list[Path]]] = {}
+    try:
+        candidates = tuple(root.iterdir())
+    except OSError:
+        return ()
+    for candidate in candidates:
+        suffix = candidate.suffix.casefold()
+        if suffix not in {".pdf", ".docx"}:
+            continue
+        try:
+            resolved = candidate.resolve(strict=True)
+            resolved.relative_to(root)
+            if not resolved.is_file():
+                continue
+        except (OSError, ValueError):
+            continue
+        grouped.setdefault(candidate.stem, {}).setdefault(suffix, []).append(resolved)
+
+    options: list[tuple[float, ResumePairOption]] = []
+    for label, files in grouped.items():
+        pdf_files = files.get(".pdf", [])
+        docx_files = files.get(".docx", [])
+        if len(pdf_files) != 1 or len(docx_files) != 1:
+            continue
+        pdf_path, docx_path = pdf_files[0], docx_files[0]
+        pair_id = hashlib.sha256(
+            f"{pdf_path.name}\0{docx_path.name}".encode("utf-8")
+        ).hexdigest()
+        try:
+            newest = max(pdf_path.stat().st_mtime, docx_path.stat().st_mtime)
+        except OSError:
+            continue
+        options.append((newest, ResumePairOption(pair_id, label, pdf_path, docx_path)))
+    options.sort(key=lambda item: (-item[0], item[1].label.casefold()))
+    return tuple(option for _, option in options)
 
 
 def _validate_resume_files(pdf_path: Path, docx_path: Path) -> None:

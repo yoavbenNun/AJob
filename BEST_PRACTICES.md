@@ -89,6 +89,9 @@ reusable lesson appears.
 - Application-package approval must be short-lived and single-use. Recompute its
   fingerprint from the current stored job and current resume file hashes before
   persistence; never trust paths, profile fields, or hashes posted back by the browser.
+- Enumerate application files server-side and expose only opaque pair identifiers in
+  forms. Re-enumerate on submission so stale, forged, nested, or symlink-escaped paths
+  never become trusted merely because the browser posted them.
 - Never trust proposed resume text or scores posted by the browser. Recompute the
   proposal from the stored job and allowed local resume, and accept only stable
   server-known change IDs.

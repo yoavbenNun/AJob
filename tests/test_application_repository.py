@@ -1,3 +1,6 @@
+import sqlite3
+
+import pytest
 from src.applications.service import CandidateApplicationProfile, build_package_preview
 from src.models import JobPosting
 from src.storage.application_repository import ApplicationRepository
@@ -92,7 +95,55 @@ def test_manual_submission_rejects_files_changed_after_approval(tmp_path) -> Non
     )
     pdf.write_bytes(b"changed after approval")
 
-    import pytest
     with pytest.raises(ValueError, match="changed after package approval"):
         repository.mark_submitted_manually(package_id, 9, job.job_url)
     assert repository.list_packages_for_job(9, job.job_url)[0]["submission_status"] == "prepared"
+
+
+def test_initialize_migrates_legacy_application_package_schema(tmp_path) -> None:
+    database = tmp_path / "applications.db"
+    with sqlite3.connect(database) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE application_packages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id INTEGER NOT NULL,
+                job_title TEXT NOT NULL,
+                company TEXT NOT NULL,
+                job_url TEXT NOT NULL,
+                resume_pdf_path TEXT NOT NULL,
+                resume_docx_path TEXT NOT NULL,
+                profile_json TEXT NOT NULL,
+                cover_note TEXT NOT NULL DEFAULT '',
+                fingerprint TEXT NOT NULL,
+                approved_at TEXT NOT NULL,
+                submission_status TEXT NOT NULL DEFAULT 'prepared'
+            );
+            """
+        )
+        connection.execute(
+            """INSERT INTO application_packages
+            (job_id, job_title, company, job_url, resume_pdf_path, resume_docx_path,
+             profile_json, cover_note, fingerprint, approved_at, submission_status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (9, "Intern", "Example", "https://example/jobs/legacy",
+             str(tmp_path / "legacy.pdf"), str(tmp_path / "legacy.docx"), "{}", "",
+             "legacy", "2026-01-01T00:00:00+00:00", "prepared"),
+        )
+
+    ApplicationRepository(database).initialize()
+
+    with sqlite3.connect(database) as connection:
+        columns = {
+            row[1]: row for row in connection.execute(
+                "PRAGMA table_info(application_packages)"
+            )
+        }
+    assert columns["submitted_at"]
+    assert columns["resume_pdf_sha256"][3] == 1
+    assert columns["resume_docx_sha256"][3] == 1
+    repository = ApplicationRepository(database)
+    legacy = repository.list_packages_for_job(9, "https://example/jobs/legacy")
+    assert len(legacy) == 1
+    with pytest.raises(ValueError, match="changed after package approval"):
+        repository.mark_submitted_manually(legacy[0]["id"], 9, legacy[0]["job_url"])

@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import parse_qs
 import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -24,6 +25,7 @@ from src.applications.service import (
     ApplicationPackagePreview,
     CandidateApplicationProfile,
     build_package_preview,
+    discover_resume_pairs,
     verify_package_preview,
 )
 from src.matching.resume_matcher import match_resume_to_job
@@ -125,7 +127,7 @@ def create_app(
         return _detail_response(request, job, updated=updated, csrf_token=csrf_token,
                                 resume_matching_enabled=allowed_resume_root is not None,
                                 **_application_context(application_repository, job,
-                                                       tailored_resume_root is not None),
+                                                       tailored_resume_root),
                                 **_outreach_context(outreach_repository, job))
 
     @app.post("/jobs/{job_id}/application/preview", response_class=HTMLResponse)
@@ -136,7 +138,7 @@ def create_app(
         if tailored_resume_root is None:
             return _application_response(
                 request, job, application_repository, outreach_repository, csrf_token,
-                False, "Set RESUME_DIRECTORY to prepare an application package."
+                None, "Set RESUME_DIRECTORY to prepare an application package."
             )
         profile = CandidateApplicationProfile(
             full_name=form.get("full_name", [""])[0].strip(),
@@ -150,27 +152,29 @@ def create_app(
             github_url=form.get("github_url", [""])[0].strip(),
         )
         try:
-            pdf_path = _resolve_resume_path(
-                form.get("resume_pdf_path", [""])[0], tailored_resume_root
+            pair_id = form.get("resume_pair", [""])[0].strip()
+            pair = next(
+                (item for item in discover_resume_pairs(tailored_resume_root)
+                 if hmac.compare_digest(item.id, pair_id)),
+                None,
             )
-            docx_path = _resolve_resume_path(
-                form.get("resume_docx_path", [""])[0], tailored_resume_root
-            )
+            if pair is None:
+                raise ValueError("Choose an available tailored resume pair.")
             preview = build_package_preview(
-                job, profile, pdf_path, docx_path,
+                job, profile, pair.pdf_path, pair.docx_path,
                 form.get("cover_note", [""])[0],
             )
         except (OSError, ValueError) as error:
             return _application_response(
                 request, job, application_repository, outreach_repository, csrf_token,
-                True, str(error), application_profile=profile,
+                tailored_resume_root, str(error), application_profile=profile,
             )
         token = secrets.token_urlsafe(32)
         application_sessions[token] = (time.monotonic(), job_id, preview)
         _expire_application_sessions(application_sessions)
         return _application_response(
             request, job, application_repository, outreach_repository, csrf_token,
-            True, application_preview=preview, application_token=token,
+            tailored_resume_root, application_preview=preview, application_token=token,
             application_profile=profile,
         )
 
@@ -185,7 +189,7 @@ def create_app(
         if session is None or session[1] != job_id:
             return _application_response(
                 request, job, application_repository, outreach_repository, csrf_token,
-                tailored_resume_root is not None,
+                tailored_resume_root,
                 "The application preview expired. Create a new preview.",
             )
         try:
@@ -194,7 +198,7 @@ def create_app(
             application_sessions.pop(token, None)
             return _application_response(
                 request, job, application_repository, outreach_repository, csrf_token,
-                tailored_resume_root is not None, str(error),
+                tailored_resume_root, str(error),
             )
         application_repository.save_profile(verified.profile)
         application_repository.save_approved_package(verified)
@@ -211,7 +215,7 @@ def create_app(
         if form.get("confirm_submission", [""])[0] != "yes":
             return _application_response(
                 request, job, application_repository, outreach_repository, csrf_token,
-                tailored_resume_root is not None,
+                tailored_resume_root,
                 "Confirm that you submitted this application manually.",
             )
         try:
@@ -221,7 +225,7 @@ def create_app(
         except ValueError as error:
             return _application_response(
                 request, job, application_repository, outreach_repository, csrf_token,
-                tailored_resume_root is not None, str(error),
+                tailored_resume_root, str(error),
             )
         if not marked:
             raise HTTPException(status_code=404, detail="Prepared application not found")
@@ -491,12 +495,12 @@ def _application_response(
     application_repository: ApplicationRepository,
     outreach_repository: OutreachRepository,
     csrf_token: str,
-    application_enabled: bool,
+    tailored_resume_root: Path | None,
     application_error: str | None = None,
     **context: object,
 ):
     response_context = _application_context(
-        application_repository, job, application_enabled
+        application_repository, job, tailored_resume_root
     )
     response_context.update(_outreach_context(outreach_repository, job))
     response_context.update(context)
@@ -504,7 +508,7 @@ def _application_response(
         request,
         job,
         csrf_token=csrf_token,
-        resume_matching_enabled=application_enabled,
+        resume_matching_enabled=tailored_resume_root is not None,
         application_error=application_error,
         **response_context,
     )
@@ -599,12 +603,13 @@ def _outreach_context(repository: OutreachRepository, job: JobPosting) -> dict[s
 def _application_context(
     repository: ApplicationRepository,
     job: JobPosting,
-    enabled: bool,
+    tailored_resume_root: Path | None,
 ) -> dict[str, object]:
     return {
-        "application_enabled": enabled,
+        "application_enabled": tailored_resume_root is not None,
         "application_profile": repository.get_profile(),
         "application_packages": repository.list_packages_for_job(job.id, job.job_url),
+        "application_resume_pairs": discover_resume_pairs(tailored_resume_root),
     }
 
 

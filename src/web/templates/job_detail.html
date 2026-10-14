@@ -57,8 +57,8 @@
         <label>Salary expectation<input name="salary_expectation" value="{{ application_profile.salary_expectation }}" placeholder="Optional"></label>
         <label>LinkedIn URL<input name="linkedin_url" type="url" value="{{ application_profile.linkedin_url }}" placeholder="Optional HTTPS URL"></label>
         <label>GitHub URL<input name="github_url" type="url" value="{{ application_profile.github_url }}" placeholder="Optional HTTPS URL"></label>
-        <label class="wide">Tailored PDF path<input name="resume_pdf_path" required placeholder="Path inside RESUME_DIRECTORY\tailored"></label>
-        <label class="wide">Matching DOCX path<input name="resume_docx_path" required placeholder="Path inside RESUME_DIRECTORY\tailored"></label>
+        <label class="wide">Tailored resume pair<select name="resume_pair" required><option value="">Choose a PDF/DOCX pair</option>{% for pair in application_resume_pairs %}<option value="{{ pair.id }}">{{ pair.label }}</option>{% endfor %}</select></label>
+        {% if not application_resume_pairs %}<p class="muted wide">No matching PDF/DOCX pair was found in the tailored resume folder. Generate one above first.</p>{% endif %}
         <label class="wide">Cover note<textarea name="cover_note" maxlength="3000" rows="6" placeholder="Optional; verify every claim"></textarea></label>
         <button type="submit">Review complete package</button>
       </form>
