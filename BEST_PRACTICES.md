@@ -17,6 +17,9 @@ reusable lesson appears.
 - In PowerShell conditions, wrap cmdlet calls such as `Test-Path` in parentheses
   before combining them with `-and` or `-or`; otherwise the operator may be parsed
   as a cmdlet parameter.
+- A Windows dashboard launcher should use the project virtual environment by
+  absolute path and probe the local URL before starting Uvicorn. This avoids
+  duplicate servers and port conflicts when the shortcut is clicked twice.
 
 ## Agent workflow and context
 
