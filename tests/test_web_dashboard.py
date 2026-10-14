@@ -161,6 +161,19 @@ def test_dashboard_filters_to_relevant_jobs_by_default(tmp_path) -> None:
     assert 'enctype="multipart/form-data"' in response.text
 
 
+def test_health_endpoint_identifies_current_ajob_server(tmp_path) -> None:
+    client, _ = _client_with_jobs(tmp_path)
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["name"] == "AJob"
+    assert payload["status"] == "ok"
+    assert isinstance(payload["job_id"], int)
+    assert client.get(f"/jobs/{payload['job_id']}").status_code == 200
+
+
 def test_job_detail_uses_collapsible_content_sections(tmp_path) -> None:
     client, job_id = _client_with_jobs(tmp_path)
 

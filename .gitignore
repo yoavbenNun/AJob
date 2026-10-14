@@ -4,3 +4,4 @@ __pycache__/
 .pytest_cache/
 data/*.db
 config/local_settings.txt
+config/local_server.pid

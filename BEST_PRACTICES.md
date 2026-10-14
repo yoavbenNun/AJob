@@ -20,6 +20,10 @@ reusable lesson appears.
 - A Windows dashboard launcher should use the project virtual environment by
   absolute path and probe the local URL before starting Uvicorn. This avoids
   duplicate servers and port conflicts when the shortcut is clicked twice.
+- A dashboard launcher should identify the current app through a stable health
+  endpoint and exercise a representative detail route, not only the home page.
+  Serialize concurrent launches and stop an unhealthy listener only when its PID
+  was recorded by the launcher; never kill an unrelated process sharing the port.
 - Keep non-ASCII local paths in a UTF-8 ignored settings file instead of shortcut
   arguments; Windows shortcut automation can silently corrupt Unicode arguments.
 

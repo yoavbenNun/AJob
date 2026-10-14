@@ -91,6 +91,12 @@ def create_app(
     app = FastAPI(title="AJob", docs_url=None, redoc_url=None)
     app.mount("/static", StaticFiles(directory=str(WEB_ROOT / "static")), name="static")
 
+    @app.get("/health", include_in_schema=False)
+    def health():
+        jobs = repository.list_all()
+        job_id = next((job.id for job in jobs if job.id is not None), None)
+        return {"name": "AJob", "status": "ok", "job_id": job_id}
+
     @app.get("/", response_class=HTMLResponse)
     def dashboard(
         request: Request,
