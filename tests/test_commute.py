@@ -1,4 +1,8 @@
-from src.location.commute import evaluate_commute, resolve_job_destination
+from src.location.commute import (
+    evaluate_commute,
+    is_israel_or_remote_location,
+    resolve_job_destination,
+)
 
 
 class FakeProvider:
@@ -84,6 +88,21 @@ def test_unknown_location_requires_manual_review() -> None:
     result = evaluate_commute("Rishon Lezion, Israel", "Not specified", FakeProvider(20))
     assert result.status == "unknown"
     assert not result.eligible
+
+
+def test_dashboard_location_scope_accepts_only_israel_and_safe_remote() -> None:
+    for location in (
+        "Tel Aviv, ISR", "Haifa, Israel", "Jerusalem District", "Kiryat Gat",
+        "Remote (Israel)", "Worldwide remote", "תל אביב, ישראל",
+    ):
+        assert is_israel_or_remote_location(location)
+    for location in (
+        "Warsaw, Poland", "London, UK", "Zürich, Switzerland",
+        "Bengaluru, India", "Remote, Poland", "Not specified", "Remote", "Austin, TX",
+        "Seattle", "Remote - Europe", "US Remote", "EMEA Remote",
+        "Fully remote (Germany only)",
+    ):
+        assert not is_israel_or_remote_location(location)
 
 
 def test_detail_location_fallback_reads_google_place_marker() -> None:

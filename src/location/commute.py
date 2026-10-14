@@ -25,6 +25,18 @@ _FOREIGN_COUNTRY_LABELS = frozenset(
 _FOREIGN_CITY_LABELS = frozenset(
     {"beijing", "krakow", "kraków", "london", "munich", "warsaw", "zurich", "zürich"}
 )
+_ISRAEL_LOCATION_LABELS = frozenset(
+    {
+        "israel", "isr", "tel aviv", "haifa", "jerusalem", "herzliya",
+        "petah tikva", "rishon lezion", "rehovot", "raanana", "ra anana",
+        "kfar saba", "netanya", "beer sheva", "beersheba", "yokneam",
+        "caesarea", "hod hasharon", "ramat gan", "bnei brak",
+        "kiryat gat", "yavne", "holon", "ashdod", "modiin", "modi in",
+        "rosh haayin", "rosh ha ayin", "nes ziona",
+        "ישראל", "תל אביב", "חיפה", "ירושלים", "הרצליה",
+        "קריית גת", "יבנה", "חולון", "אשדוד", "מודיעין", "ראש העין", "נס ציונה",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +116,20 @@ def resolve_job_destination(location: str, description: str) -> str:
     return location.strip() or "Not specified"
 
 
+def is_israel_or_remote_location(location: str) -> bool:
+    """Return whether a location is explicitly in Israel or safely remote."""
+    location = location.strip()
+    if not location or location.casefold() == "not specified":
+        return False
+    if _is_unrestricted_remote(location):
+        return True
+    normalized = " ".join(re.sub(r"[^\w]+", " ", location.casefold()).split())
+    return any(
+        re.search(rf"(?<!\w){re.escape(label)}(?!\w)", normalized)
+        for label in _ISRAEL_LOCATION_LABELS
+    )
+
+
 class OpenStreetMapDrivingProvider:
     """No-key geocoding and OSRM routing for low-volume personal use."""
 
@@ -161,13 +187,18 @@ class OpenStreetMapDrivingProvider:
 
 
 def _is_remote(location: str) -> bool:
-    lowered = location.casefold().strip()
-    return (
-        lowered == "remote"
-        or lowered.startswith("fully remote")
-        or lowered.startswith("remote, israel")
-        or lowered.startswith("remote (israel")
-    )
+    lowered = " ".join(location.casefold().split())
+    if lowered in {"remote", "fully remote", "worldwide remote", "remote worldwide"}:
+        return True
+    return bool(re.fullmatch(r"remote\s*[,(-]\s*israel\s*\)?", lowered))
+
+
+def _is_unrestricted_remote(location: str) -> bool:
+    """Accept only remote labels that explicitly permit Israel or worldwide work."""
+    lowered = " ".join(location.casefold().split())
+    if lowered in {"worldwide remote", "remote worldwide", "global remote", "remote anywhere"}:
+        return True
+    return bool(re.fullmatch(r"remote\s*[,(-]\s*israel\s*\)?", lowered))
 
 
 def _is_clearly_outside_israel(location: str) -> bool:

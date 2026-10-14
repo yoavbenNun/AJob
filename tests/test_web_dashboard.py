@@ -13,7 +13,7 @@ def _client_with_jobs(tmp_path):
     repository.initialize()
     job_id = repository.save(
         JobPosting(
-            "Python Software Intern", "Example", "Remote", "https://example.com/jobs/1",
+            "Python Software Intern", "Example", "Remote, Israel", "https://example.com/jobs/1",
             description="Build FastAPI services.", requirements="Python and FastAPI",
         )
     )
@@ -169,6 +169,32 @@ def test_dashboard_can_filter_and_update_a_job_status(tmp_path) -> None:
     assert updated.status_code == 200
     assert "Job status updated" in updated.text
     assert 'status--applied' in updated.text
+
+
+def test_dashboard_hides_foreign_jobs_by_default_and_can_show_them(tmp_path) -> None:
+    database = tmp_path / "jobs.db"
+    repository = JobRepository(database)
+    repository.initialize()
+    repository.save(JobPosting(
+        "Israel Software Intern", "Example", "Tel Aviv, ISR",
+        "https://example.com/jobs/israel",
+    ))
+    repository.save(JobPosting(
+        "Poland Software Intern", "Example", "Warsaw, Poland",
+        "https://example.com/jobs/poland",
+    ))
+    client = TestClient(create_app(
+        database, resume_directory=tmp_path,
+        outreach_database_path=tmp_path / "outreach.db",
+        application_database_path=tmp_path / "applications.db",
+    ))
+
+    default_page = client.get("/")
+    all_locations = client.get("/", params={"location": "all"})
+
+    assert "Israel Software Intern" in default_page.text
+    assert "Poland Software Intern" not in default_page.text
+    assert "Poland Software Intern" in all_locations.text
 
 
 def test_job_detail_calculates_a_local_match_without_exposing_resume_text(tmp_path) -> None:

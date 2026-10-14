@@ -132,6 +132,9 @@ reusable lesson appears.
   must remain eligible for human review instead of causing a false rejection.
 - Keep commute eligibility separate from professional fit. Never recommend a job
   when its location or route cannot be verified; mark it for manual review.
+- Keep foreign discoveries in storage for auditability, but default the dashboard
+  to explicit Israel and safe-remote locations. Provide an opt-in all-locations
+  view instead of deleting historical rows.
 - Driving estimates must name their routing source and limitations. Do not present
   an OSRM estimate as live-traffic travel time.
 - Extract a candidate location only from an explicit resume-header location line.

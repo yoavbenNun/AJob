@@ -54,7 +54,7 @@ body { background: radial-gradient(circle at 85% 0, #e5f5e9 0, transparent 26rem
 .stat-card--accent > span, .stat-card--accent small { color: #d8eddf; }
 .results-heading { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 1rem; }
 .results-heading h2 { margin-bottom: 0; font-family: Georgia, serif; font-size: 2rem; font-weight: 500; }
-.filters { display: grid; grid-template-columns: 1.5fr repeat(3, minmax(135px, .7fr)) auto; align-items: end; border-color: var(--line); border-radius: 18px; box-shadow: 0 8px 30px rgba(31,61,42,.04); }
+.filters { display: grid; grid-template-columns: 1.5fr repeat(4, minmax(125px, .7fr)) auto; align-items: end; border-color: var(--line); border-radius: 18px; box-shadow: 0 8px 30px rgba(31,61,42,.04); }
 input, select { border-radius: 10px; border-color: #ccd8d0; }
 button, .button { border-radius: 10px; background: var(--green); transition: transform .15s ease, background .15s ease; }
 button:hover, .button:hover { background: var(--green-dark); transform: translateY(-1px); }

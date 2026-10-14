@@ -21,7 +21,7 @@
       <div class="hero-summary"><strong>{{ dashboard_stats.new }}</strong><span>new roles ready to review</span></div>
     </section>
     <section class="stats-grid" aria-label="Job search overview">
-      <div class="stat-card"><span>Relevant roles</span><strong>{{ dashboard_stats.relevant }}</strong><small>Across all discoveries</small></div>
+      <div class="stat-card"><span>Relevant roles</span><strong>{{ dashboard_stats.relevant }}</strong><small>Israel and remote</small></div>
       <div class="stat-card stat-card--accent"><span>Needs review</span><strong>{{ dashboard_stats.new }}</strong><small>Your current priority</small></div>
       <div class="stat-card"><span>Reviewed</span><strong>{{ dashboard_stats.reviewed }}</strong><small>Decisions in progress</small></div>
       <div class="stat-card"><span>Applied</span><strong>{{ dashboard_stats.applied }}</strong><small>Applications tracked</small></div>
@@ -34,6 +34,7 @@
         <label>Status<select name="status"><option value="all">All statuses</option>{% for item in statuses %}<option value="{{ item }}" {% if item == selected_status %}selected{% endif %}>{{ item|capitalize }}</option>{% endfor %}</select></label>
         <label>Company<select name="company"><option value="">All companies</option>{% for item in companies %}<option value="{{ item }}" {% if item == selected_company %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
         <label>Jobs<select name="relevance"><option value="relevant" {% if relevance == 'relevant' %}selected{% endif %}>Relevant only</option><option value="all" {% if relevance == 'all' %}selected{% endif %}>All discoveries</option></select></label>
+        <label>Location<select name="location"><option value="israel" {% if location_scope == 'israel' %}selected{% endif %}>Israel + unrestricted remote</option><option value="all" {% if location_scope == 'all' %}selected{% endif %}>All locations</option></select></label>
         <button type="submit">Apply filters</button>
       </form>
       {% if jobs %}

@@ -29,6 +29,7 @@ from src.applications.service import (
     verify_package_preview,
 )
 from src.matching.resume_matcher import match_resume_to_job
+from src.location.commute import is_israel_or_remote_location
 from src.models import JOB_STATUSES, JobPosting
 from src.models import OutreachContact
 from src.outreach.service import (
@@ -90,12 +91,15 @@ def create_app(
         company: str = "",
         query: str = "",
         relevance: str = "relevant",
+        location_scope: str = Query("israel", alias="location"),
         updated: int | None = None,
     ):
         if status_filter != "all" and status_filter not in JOB_STATUSES:
             raise HTTPException(status_code=400, detail="Unknown job status")
         if relevance not in {"all", "relevant"}:
             raise HTTPException(status_code=400, detail="Unknown relevance filter")
+        if location_scope not in {"all", "israel"}:
+            raise HTTPException(status_code=400, detail="Unknown location filter")
 
         all_jobs = repository.list_all()
         jobs = _filter_jobs(
@@ -104,13 +108,18 @@ def create_app(
             company=company,
             query=query,
             relevance=relevance,
+            location_scope=location_scope,
         )
-        companies = sorted({job.company for job in all_jobs}, key=str.casefold)
+        domestic_jobs = [
+            job for job in all_jobs if is_israel_or_remote_location(job.location)
+        ]
+        visible_pool = all_jobs if location_scope == "all" else domestic_jobs
+        companies = sorted({job.company for job in visible_pool}, key=str.casefold)
         dashboard_stats = {
-            "relevant": sum(job.is_relevant for job in all_jobs),
-            "new": sum(job.is_relevant and job.status == "new" for job in all_jobs),
-            "reviewed": sum(job.status == "reviewed" for job in all_jobs),
-            "applied": sum(job.status == "applied" for job in all_jobs),
+            "relevant": sum(job.is_relevant for job in domestic_jobs),
+            "new": sum(job.is_relevant and job.status == "new" for job in domestic_jobs),
+            "reviewed": sum(job.status == "reviewed" for job in domestic_jobs),
+            "applied": sum(job.status == "applied" for job in domestic_jobs),
         }
         return templates.TemplateResponse(
             request,
@@ -123,6 +132,7 @@ def create_app(
                 "selected_company": company,
                 "query": query,
                 "relevance": relevance,
+                "location_scope": location_scope,
                 "updated": updated,
                 "dashboard_stats": dashboard_stats,
             },
@@ -658,7 +668,8 @@ def _get_job_or_404(repository, job_id: int) -> JobPosting:
 
 
 def _filter_jobs(
-    jobs: list[JobPosting], *, status_filter: str, company: str, query: str, relevance: str
+    jobs: list[JobPosting], *, status_filter: str, company: str, query: str,
+    relevance: str, location_scope: str,
 ) -> list[JobPosting]:
     company_key = company.casefold().strip()
     query_key = query.casefold().strip()
@@ -666,6 +677,7 @@ def _filter_jobs(
         job
         for job in jobs
         if (relevance == "all" or job.is_relevant)
+        and (location_scope == "all" or is_israel_or_remote_location(job.location))
         and (status_filter == "all" or job.status == status_filter)
         and (not company_key or job.company.casefold() == company_key)
         and (
