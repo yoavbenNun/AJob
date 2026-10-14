@@ -2,9 +2,14 @@ name: Scheduled job scan
 
 on:
   schedule:
-    # Each Israel target hour has both possible UTC offsets (UTC+2/UTC+3).
-    # The local-time gate below rejects the three DST-inapplicable runs.
-    - cron: "0 5,6,8,9,13,14 * * *"
+    # Keep expressions distinct: github.event.schedule identifies the intended
+    # UTC slot even when GitHub starts the runner hours late.
+    - cron: "0 5 * * *"
+    - cron: "0 6 * * *"
+    - cron: "0 8 * * *"
+    - cron: "0 9 * * *"
+    - cron: "0 13 * * *"
+    - cron: "0 14 * * *"
   workflow_dispatch:
 
 permissions:
@@ -33,6 +38,8 @@ jobs:
       - name: Run only at scheduled Israel times
         id: schedule_gate
         shell: bash
+        env:
+          SCHEDULE_EXPRESSION: ${{ github.event.schedule }}
         run: |
           if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then
             echo "run_scan=true" >> "$GITHUB_OUTPUT"
@@ -40,18 +47,20 @@ jobs:
             exit 0
           fi
 
-          local_hour="$(TZ=Asia/Jerusalem date +%H)"
-          local_time="$(TZ=Asia/Jerusalem date +%H:%M)"
-          case "$local_hour" in
-            08|11|16)
-              echo "run_scan=true" >> "$GITHUB_OUTPUT"
-              echo "Scheduled scan approved for $local_time Asia/Jerusalem."
-              ;;
-            *)
-              echo "run_scan=false" >> "$GITHUB_OUTPUT"
-              echo "Skipping: $local_time Asia/Jerusalem is outside the scheduled scan times."
-              ;;
-          esac
+          set +e
+          gate_output="$(python -m src.scheduling.israel_schedule "$SCHEDULE_EXPRESSION" 2>&1)"
+          gate_status=$?
+          set -e
+          if [ "$gate_status" -eq 0 ]; then
+            echo "run_scan=true" >> "$GITHUB_OUTPUT"
+            echo "Scheduled scan approved for cron slot $SCHEDULE_EXPRESSION."
+          elif [ "$gate_status" -eq 1 ]; then
+            echo "run_scan=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping DST-inapplicable cron slot $SCHEDULE_EXPRESSION."
+          else
+            echo "Schedule gate failed: $gate_output" >&2
+            exit "$gate_status"
+          fi
       - name: Require persistent PostgreSQL storage
         if: ${{ steps.schedule_gate.outputs.run_scan == 'true' }}
         run: |
@@ -59,12 +68,12 @@ jobs:
             echo "DATABASE_URL repository secret is required for scheduled scans." >&2
             exit 1
           fi
-      - name: Validate email configuration
-        if: ${{ steps.schedule_gate.outputs.run_scan == 'true' && env.SMTP_HOST != '' }}
+      - name: Require email configuration
+        if: ${{ steps.schedule_gate.outputs.run_scan == 'true' }}
         run: |
-          for name in SMTP_PORT SMTP_USERNAME SMTP_PASSWORD SMTP_FROM SMTP_TO; do
+          for name in SMTP_HOST SMTP_PORT SMTP_USERNAME SMTP_PASSWORD SMTP_FROM SMTP_TO; do
             if [ -z "${!name}" ]; then
-              echo "$name is required when SMTP_HOST is configured." >&2
+              echo "$name repository secret is required for cloud email scans." >&2
               exit 1
             fi
           done
@@ -72,7 +81,7 @@ jobs:
         if: ${{ steps.schedule_gate.outputs.run_scan == 'true' }}
         run: docker build --tag ai-job-search-agent .
       - name: Scan career pages and send summary
-        if: ${{ steps.schedule_gate.outputs.run_scan == 'true' && env.SMTP_HOST != '' }}
+        if: ${{ steps.schedule_gate.outputs.run_scan == 'true' }}
         run: >-
           docker run --rm --ipc=host
           -e SMTP_HOST -e SMTP_PORT -e SMTP_USERNAME -e SMTP_PASSWORD
@@ -80,6 +89,3 @@ jobs:
           -e DATABASE_URL
           -e CANDIDATE_PROFILE_JSON
           ai-job-search-agent python -m src.main scan --email-summary
-      - name: Scan career pages without email
-        if: ${{ steps.schedule_gate.outputs.run_scan == 'true' && env.SMTP_HOST == '' }}
-        run: docker run --rm --ipc=host -e DATABASE_URL ai-job-search-agent

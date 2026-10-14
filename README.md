@@ -138,12 +138,18 @@ For ranked cloud emails, store the one-line output of `export-safe-profile` as t
 free-form resume prose.
 
 GitHub Actions cron expressions use UTC and do not support a per-schedule time
-zone. The workflow schedules both possible UTC offsets for each target hour,
-then uses the runner's `Asia/Jerusalem` time-zone data to run scans only during
-the `08:00`, `11:00`, and `16:00` Israel hours. This keeps the intended times stable across Israel
-daylight-saving changes. A manual **Run workflow** dispatch bypasses this gate.
-GitHub may delay scheduled workflow starts during periods of high load; the gate
-does not turn delayed GitHub execution into a real-time scheduling guarantee.
+zone. The workflow schedules both possible UTC offsets for each target hour as
+distinct cron expressions, then maps the intended cron slot to `Asia/Jerusalem`.
+It runs only the slots corresponding to `08:00`, `11:00`, and `16:00` Israel time,
+including across daylight-saving changes. A delayed GitHub runner still executes
+the intended scan instead of being rejected based on its actual start time. A
+manual **Run workflow** dispatch bypasses this gate. GitHub may still delay
+scheduled starts or experience delivery failures, so the workflow provides three
+scheduled email attempts per Israel day rather than a hard delivery-time SLA.
+Approved cloud runs require every SMTP secret and fail visibly instead of
+silently succeeding without an email. The delay-safe date reconstruction covers
+ordinary same-day and next-UTC-day runner delays; delays longer than 24 hours are
+outside this workflow's scheduling guarantee.
 
 Run tests with:
 

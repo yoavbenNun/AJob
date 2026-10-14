@@ -132,15 +132,18 @@ reusable lesson appears.
 - Make notification delivery explicit and test SMTP interactions with injected
   clients. A scheduled GitHub-hosted runner has ephemeral local storage, so it
   cannot reliably determine which jobs are new without a persistent store.
+- A cloud workflow whose purpose includes email must fail visibly when any SMTP
+  secret is missing. Do not silently fall back to a successful no-email scan.
 - Cloud matching should use a privacy-reduced profile containing only location,
   canonical skills, section-level skill evidence, and education level. Never put
   contact details or raw resume prose in repository files or workflow logs.
 - GitHub Actions cron expressions are evaluated in UTC and do not follow Israel
   daylight-saving transitions. For fixed Israel local scan times, schedule both
-  possible UTC offsets and use a cheap `TZ=Asia/Jerusalem` gate before expensive
-  work; manual dispatch must bypass that gate. Gate by local hour so ordinary
-  GitHub queue delays do not skip a run. GitHub may still delay starts, so
-  do not represent this as a hard real-time guarantee.
+  possible UTC offsets as distinct cron entries and gate using the intended
+  `github.event.schedule` slot, not the runner's actual start hour. Otherwise a
+  delayed GitHub runner can skip every expensive step while reporting success.
+  Manual dispatch must bypass that gate. GitHub may still delay starts, so do not
+  represent this as a hard real-time guarantee.
 - Treat hosted-runner deprecation annotations as maintenance work even when a run
   succeeds. Keep first-party actions on a runtime-supported major version.
 
