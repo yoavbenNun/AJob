@@ -86,6 +86,9 @@ reusable lesson appears.
 - Treat resume-change approval and application submission as separate consent
   events. A generated resume never authorizes sending an external application;
   show the complete form and require a final submission approval.
+- Application-package approval must be short-lived and single-use. Recompute its
+  fingerprint from the current stored job and current resume file hashes before
+  persistence; never trust paths, profile fields, or hashes posted back by the browser.
 - Never trust proposed resume text or scores posted by the browser. Recompute the
   proposal from the stored job and allowed local resume, and accept only stable
   server-known change IDs.

@@ -41,6 +41,38 @@
     {% endif %}
     {% if tailoring_error %}<p class="error">{{ tailoring_error }}</p>{% endif %}
     {% if tailored_resume_names %}<p class="notice">Created {{ tailored_resume_names|join(' and ') }} in the configured tailored resume folder. The master resume was not changed.</p>{% endif %}
+    <section class="content-section" id="application">
+      <h2>Application package</h2>
+      <p class="muted">Prepare and approve an exact local package. This app never fills or submits an employer form. Submission remains manual on the employer's website.</p>
+      {% if application_error %}<p class="error">{{ application_error }}</p>{% endif %}
+      {% if application_enabled %}
+      <form class="application-form" method="post" action="/jobs/{{ job.id }}/application/preview">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>Full name<input name="full_name" value="{{ application_profile.full_name }}" required></label>
+        <label>Email<input name="email" type="email" value="{{ application_profile.email }}" required></label>
+        <label>Phone<input name="phone" value="{{ application_profile.phone }}" required></label>
+        <label>Location<input name="location" value="{{ application_profile.location }}" required></label>
+        <label>Work authorization<select name="work_authorization" required><option value="unanswered">Choose</option><option value="authorized" {% if application_profile.work_authorization == 'authorized' %}selected{% endif %}>Authorized</option><option value="needs_sponsorship" {% if application_profile.work_authorization == 'needs_sponsorship' %}selected{% endif %}>Needs sponsorship</option><option value="not_authorized" {% if application_profile.work_authorization == 'not_authorized' %}selected{% endif %}>Not authorized</option></select></label>
+        <label>Availability<input name="availability" value="{{ application_profile.availability }}" required></label>
+        <label>Salary expectation<input name="salary_expectation" value="{{ application_profile.salary_expectation }}" placeholder="Optional"></label>
+        <label>LinkedIn URL<input name="linkedin_url" type="url" value="{{ application_profile.linkedin_url }}" placeholder="Optional HTTPS URL"></label>
+        <label>GitHub URL<input name="github_url" type="url" value="{{ application_profile.github_url }}" placeholder="Optional HTTPS URL"></label>
+        <label class="wide">Tailored PDF path<input name="resume_pdf_path" required placeholder="Path inside RESUME_DIRECTORY\tailored"></label>
+        <label class="wide">Matching DOCX path<input name="resume_docx_path" required placeholder="Path inside RESUME_DIRECTORY\tailored"></label>
+        <label class="wide">Cover note<textarea name="cover_note" maxlength="3000" rows="6" placeholder="Optional; verify every claim"></textarea></label>
+        <button type="submit">Review complete package</button>
+      </form>
+      {% else %}<p class="muted">Set RESUME_DIRECTORY and create a tailored PDF/DOCX pair to enable package preparation.</p>{% endif %}
+      {% if application_preview %}
+      <div class="change-review application-preview">
+        <h3>Exact package approval</h3>
+        <p class="error"><strong>This approval prepares files only. It does not submit an application.</strong></p>
+        <dl><dt>Candidate</dt><dd>{{ application_preview.profile.full_name }} · {{ application_preview.profile.email }} · {{ application_preview.profile.phone }}</dd><dt>Location and authorization</dt><dd>{{ application_preview.profile.location }} · {{ application_preview.profile.work_authorization|replace('_', ' ') }} · available {{ application_preview.profile.availability }}</dd><dt>Resume PDF</dt><dd>{{ application_preview.resume_pdf_path }}</dd><dt>Resume DOCX</dt><dd>{{ application_preview.resume_docx_path }}</dd><dt>LinkedIn</dt><dd>{{ application_preview.profile.linkedin_url or 'Not provided' }}</dd><dt>GitHub</dt><dd>{{ application_preview.profile.github_url or 'Not provided' }}</dd><dt>Salary expectation</dt><dd>{{ application_preview.profile.salary_expectation or 'Not provided' }}</dd><dt>Cover note</dt><dd class="preserve-lines">{{ application_preview.cover_note or 'None' }}</dd></dl>
+        <form method="post" action="/jobs/{{ job.id }}/application/approve"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="application_token" value="{{ application_token }}"><button type="submit">Approve this exact package</button></form>
+      </div>
+      {% endif %}
+      {% if application_packages %}<h3>Prepared packages</h3>{% for package in application_packages %}<div class="change-review"><strong>{{ package.approved_at }} · {{ package.submission_status|replace('_', ' ') }}</strong><p>PDF: {{ package.resume_pdf_path }}<br>DOCX: {{ package.resume_docx_path }}</p>{% if package.cover_note %}<p class="preserve-lines"><strong>Cover note:</strong> {{ package.cover_note }}</p>{% endif %}<div class="action-row"><a class="button secondary" href="{{ package.job_url }}" target="_blank" rel="noopener noreferrer">Open employer page manually</a>{% if package.submission_status == 'prepared' %}<form method="post" action="/jobs/{{ job.id }}/application/packages/{{ package.id }}/submitted"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label><input type="checkbox" name="confirm_submission" value="yes" required> I already submitted this manually</label><button type="submit">Record manual submission</button></form>{% else %}<span class="notice">Manual submission recorded {{ package.submitted_at }}</span>{% endif %}</div></div>{% endfor %}{% endif %}
+    </section>
     <section class="content-section" id="outreach">
       <h2>Professional outreach</h2>
       <p class="muted">Use these public search shortcuts, then add a profile you found. The app never scrapes LinkedIn, sends messages, connection requests, or applications.</p>

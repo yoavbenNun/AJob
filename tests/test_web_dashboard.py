@@ -22,8 +22,11 @@ def _client_with_jobs(tmp_path):
             is_relevant=False,
         )
     )
-    return TestClient(create_app(database, resume_directory=tmp_path,
-                                 outreach_database_path=tmp_path / "outreach.db")), job_id
+    return TestClient(create_app(
+        database, resume_directory=tmp_path,
+        outreach_database_path=tmp_path / "outreach.db",
+        application_database_path=tmp_path / "applications.db",
+    )), job_id
 
 
 def test_outreach_requires_preview_and_approval_before_storing_draft(tmp_path) -> None:
@@ -252,6 +255,125 @@ def test_dashboard_rejects_approval_when_resume_changed_after_preview(tmp_path) 
 
     assert "changed after preview" in response.text
     assert not (tmp_path / "tailored").exists()
+
+
+def _application_form(csrf: str, pdf, docx) -> dict[str, str]:
+    return {
+        "csrf_token": csrf,
+        "full_name": "Dana Developer",
+        "email": "dana@example.com",
+        "phone": "+972 50-123-4567",
+        "location": "Tel Aviv, Israel",
+        "work_authorization": "authorized",
+        "availability": "Immediately",
+        "salary_expectation": "",
+        "linkedin_url": "https://linkedin.com/in/dana",
+        "github_url": "https://github.com/dana",
+        "resume_pdf_path": str(pdf),
+        "resume_docx_path": str(docx),
+        "cover_note": "I am interested in this role.",
+    }
+
+
+def _application_pair(tmp_path):
+    from docx import Document
+    from pypdf import PdfWriter
+
+    tailored = tmp_path / "tailored"
+    tailored.mkdir(exist_ok=True)
+    pdf = tailored / "Example-Python-Software-Intern-tailored.pdf"
+    docx = tailored / "Example-Python-Software-Intern-tailored.docx"
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    with pdf.open("wb") as output:
+        writer.write(output)
+    document = Document()
+    document.add_paragraph("Resume")
+    document.save(docx)
+    return pdf, docx
+
+
+def test_application_requires_exact_preview_then_records_manual_submission(tmp_path) -> None:
+    client, job_id = _client_with_jobs(tmp_path)
+    pdf, docx = _application_pair(tmp_path)
+    preview = client.post(
+        f"/jobs/{job_id}/application/preview",
+        data=_application_form(_csrf_token(client, job_id), pdf, docx),
+    )
+
+    assert preview.status_code == 200
+    assert "Exact package approval" in preview.text
+    assert "does not submit an application" in preview.text
+    token = re.search(r'name="application_token" value="([^"]+)"', preview.text).group(1)
+
+    approved = client.post(
+        f"/jobs/{job_id}/application/approve",
+        data={"csrf_token": _csrf_token(client, job_id), "application_token": token},
+    )
+    assert approved.status_code == 200
+    assert "Prepared packages" in approved.text
+    assert "Open employer page manually" in approved.text
+    package_id = re.search(r'/application/packages/(\d+)/submitted', approved.text).group(1)
+
+    replay = client.post(
+        f"/jobs/{job_id}/application/approve",
+        data={"csrf_token": _csrf_token(client, job_id), "application_token": token},
+    )
+    assert "preview expired" in replay.text
+
+    submitted = client.post(
+        f"/jobs/{job_id}/application/packages/{package_id}/submitted",
+        data={"csrf_token": _csrf_token(client, job_id), "confirm_submission": "yes"},
+    )
+    assert "Manual submission recorded" in submitted.text
+    assert 'status--applied' in submitted.text
+
+
+def test_application_rejects_changed_resume_after_preview(tmp_path) -> None:
+    client, job_id = _client_with_jobs(tmp_path)
+    pdf, docx = _application_pair(tmp_path)
+    preview = client.post(
+        f"/jobs/{job_id}/application/preview",
+        data=_application_form(_csrf_token(client, job_id), pdf, docx),
+    )
+    token = re.search(r'name="application_token" value="([^"]+)"', preview.text).group(1)
+    pdf.write_bytes(b"changed after review")
+
+    response = client.post(
+        f"/jobs/{job_id}/application/approve",
+        data={"csrf_token": _csrf_token(client, job_id), "application_token": token},
+    )
+
+    assert "changed after preview" in response.text
+    assert "Prepared packages" not in response.text
+
+
+def test_application_rejects_resume_outside_tailored_directory(tmp_path) -> None:
+    client, job_id = _client_with_jobs(tmp_path)
+    outside_pdf = tmp_path / "resume.pdf"
+    outside_docx = tmp_path / "resume.docx"
+    outside_pdf.write_bytes(b"pdf")
+    outside_docx.write_bytes(b"docx")
+
+    response = client.post(
+        f"/jobs/{job_id}/application/preview",
+        data=_application_form(
+            _csrf_token(client, job_id), outside_pdf, outside_docx
+        ),
+    )
+
+    assert "inside RESUME_DIRECTORY" in response.text
+    assert "Exact package approval" not in response.text
+
+
+def test_application_preview_requires_csrf(tmp_path) -> None:
+    client, job_id = _client_with_jobs(tmp_path)
+    pdf, docx = _application_pair(tmp_path)
+    form = _application_form("", pdf, docx)
+
+    response = client.post(f"/jobs/{job_id}/application/preview", data=form)
+
+    assert response.status_code == 403
 
 
 def test_dashboard_rejects_status_change_without_csrf_token(tmp_path) -> None:

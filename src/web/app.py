@@ -20,6 +20,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from src.applications.service import (
+    ApplicationPackagePreview,
+    CandidateApplicationProfile,
+    build_package_preview,
+    verify_package_preview,
+)
 from src.matching.resume_matcher import match_resume_to_job
 from src.models import JOB_STATUSES, JobPosting
 from src.models import OutreachContact
@@ -35,6 +41,7 @@ from src.resume.tailored_resume import (
     create_resume_artifacts,
 )
 from src.storage.repository_factory import create_job_repository
+from src.storage.application_repository import ApplicationRepository
 from src.storage.outreach_repository import OutreachRepository
 
 
@@ -46,6 +53,7 @@ def create_app(
     database_path: str | Path = Path("data/jobs.db"),
     resume_directory: str | Path | None = None,
     outreach_database_path: str | Path | None = None,
+    application_database_path: str | Path | None = None,
 ) -> FastAPI:
     """Create a local dashboard backed by the configured job repository."""
     repository = create_job_repository(database_path)
@@ -53,12 +61,22 @@ def create_app(
     outreach_path = Path(outreach_database_path) if outreach_database_path else Path("data/outreach.db")
     outreach_repository = OutreachRepository(outreach_path)
     outreach_repository.initialize()
+    application_path = (
+        Path(application_database_path)
+        if application_database_path
+        else Path("data/applications.db")
+    )
+    application_repository = ApplicationRepository(application_path)
+    application_repository.initialize()
     csrf_token = secrets.token_urlsafe(32)
     allowed_resume_root = Path(resume_directory).resolve() if resume_directory else None
     tailored_resume_root = allowed_resume_root / "tailored" if allowed_resume_root else None
     proposal_sessions: dict[str, tuple[float, int, Path, str]] = {}
     outreach_sessions: dict[str, tuple[float, int, int, str]] = {}
     outreach_approval_sessions: dict[str, tuple[float, int, int, str, str, str]] = {}
+    application_sessions: dict[
+        str, tuple[float, int, ApplicationPackagePreview]
+    ] = {}
 
     app = FastAPI(title="AI Job Search Agent", docs_url=None, redoc_url=None)
     app.mount("/static", StaticFiles(directory=str(WEB_ROOT / "static")), name="static")
@@ -106,7 +124,111 @@ def create_app(
         job = _get_job_or_404(repository, job_id)
         return _detail_response(request, job, updated=updated, csrf_token=csrf_token,
                                 resume_matching_enabled=allowed_resume_root is not None,
+                                **_application_context(application_repository, job,
+                                                       tailored_resume_root is not None),
                                 **_outreach_context(outreach_repository, job))
+
+    @app.post("/jobs/{job_id}/application/preview", response_class=HTMLResponse)
+    async def preview_application(request: Request, job_id: int):
+        job = _get_job_or_404(repository, job_id)
+        form = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
+        _validate_csrf(form, csrf_token)
+        if tailored_resume_root is None:
+            return _application_response(
+                request, job, application_repository, outreach_repository, csrf_token,
+                False, "Set RESUME_DIRECTORY to prepare an application package."
+            )
+        profile = CandidateApplicationProfile(
+            full_name=form.get("full_name", [""])[0].strip(),
+            email=form.get("email", [""])[0].strip(),
+            phone=form.get("phone", [""])[0].strip(),
+            location=form.get("location", [""])[0].strip(),
+            work_authorization=form.get("work_authorization", ["unanswered"])[0],
+            availability=form.get("availability", [""])[0].strip(),
+            salary_expectation=form.get("salary_expectation", [""])[0].strip(),
+            linkedin_url=form.get("linkedin_url", [""])[0].strip(),
+            github_url=form.get("github_url", [""])[0].strip(),
+        )
+        try:
+            pdf_path = _resolve_resume_path(
+                form.get("resume_pdf_path", [""])[0], tailored_resume_root
+            )
+            docx_path = _resolve_resume_path(
+                form.get("resume_docx_path", [""])[0], tailored_resume_root
+            )
+            preview = build_package_preview(
+                job, profile, pdf_path, docx_path,
+                form.get("cover_note", [""])[0],
+            )
+        except (OSError, ValueError) as error:
+            return _application_response(
+                request, job, application_repository, outreach_repository, csrf_token,
+                True, str(error), application_profile=profile,
+            )
+        token = secrets.token_urlsafe(32)
+        application_sessions[token] = (time.monotonic(), job_id, preview)
+        _expire_application_sessions(application_sessions)
+        return _application_response(
+            request, job, application_repository, outreach_repository, csrf_token,
+            True, application_preview=preview, application_token=token,
+            application_profile=profile,
+        )
+
+    @app.post("/jobs/{job_id}/application/approve")
+    async def approve_application(request: Request, job_id: int):
+        job = _get_job_or_404(repository, job_id)
+        form = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
+        _validate_csrf(form, csrf_token)
+        _expire_application_sessions(application_sessions)
+        token = form.get("application_token", [""])[0]
+        session = application_sessions.get(token)
+        if session is None or session[1] != job_id:
+            return _application_response(
+                request, job, application_repository, outreach_repository, csrf_token,
+                tailored_resume_root is not None,
+                "The application preview expired. Create a new preview.",
+            )
+        try:
+            verified = verify_package_preview(session[2], job)
+        except (OSError, ValueError) as error:
+            application_sessions.pop(token, None)
+            return _application_response(
+                request, job, application_repository, outreach_repository, csrf_token,
+                tailored_resume_root is not None, str(error),
+            )
+        application_repository.save_profile(verified.profile)
+        application_repository.save_approved_package(verified)
+        application_sessions.pop(token, None)
+        return RedirectResponse(
+            url=f"/jobs/{job_id}#application", status_code=status.HTTP_303_SEE_OTHER
+        )
+
+    @app.post("/jobs/{job_id}/application/packages/{package_id}/submitted")
+    async def record_manual_submission(request: Request, job_id: int, package_id: int):
+        job = _get_job_or_404(repository, job_id)
+        form = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
+        _validate_csrf(form, csrf_token)
+        if form.get("confirm_submission", [""])[0] != "yes":
+            return _application_response(
+                request, job, application_repository, outreach_repository, csrf_token,
+                tailored_resume_root is not None,
+                "Confirm that you submitted this application manually.",
+            )
+        try:
+            marked = application_repository.mark_submitted_manually(
+                package_id, job_id, job.job_url
+            )
+        except ValueError as error:
+            return _application_response(
+                request, job, application_repository, outreach_repository, csrf_token,
+                tailored_resume_root is not None, str(error),
+            )
+        if not marked:
+            raise HTTPException(status_code=404, detail="Prepared application not found")
+        repository.update_status(job_id, "applied")
+        return RedirectResponse(
+            url=f"/jobs/{job_id}#application", status_code=status.HTTP_303_SEE_OTHER
+        )
 
     @app.post("/jobs/{job_id}/outreach/contacts", response_class=HTMLResponse)
     async def add_outreach_contact(request: Request, job_id: int):
@@ -363,6 +485,31 @@ def create_app(
     return app
 
 
+def _application_response(
+    request: Request,
+    job: JobPosting,
+    application_repository: ApplicationRepository,
+    outreach_repository: OutreachRepository,
+    csrf_token: str,
+    application_enabled: bool,
+    application_error: str | None = None,
+    **context: object,
+):
+    response_context = _application_context(
+        application_repository, job, application_enabled
+    )
+    response_context.update(_outreach_context(outreach_repository, job))
+    response_context.update(context)
+    return _detail_response(
+        request,
+        job,
+        csrf_token=csrf_token,
+        resume_matching_enabled=application_enabled,
+        application_error=application_error,
+        **response_context,
+    )
+
+
 def _detail_response(request: Request, job: JobPosting, **context: object):
     return templates.TemplateResponse(
         request,
@@ -387,6 +534,15 @@ def _resolve_resume_path(resume_path: str, allowed_resume_root: Path) -> Path:
 
 def _expire_proposal_sessions(
     sessions: dict[str, tuple[float, int, Path, str]], max_age_seconds: int = 1800
+) -> None:
+    cutoff = time.monotonic() - max_age_seconds
+    for token in [token for token, value in sessions.items() if value[0] < cutoff]:
+        sessions.pop(token, None)
+
+
+def _expire_application_sessions(
+    sessions: dict[str, tuple[float, int, ApplicationPackagePreview]],
+    max_age_seconds: int = 1800,
 ) -> None:
     cutoff = time.monotonic() - max_age_seconds
     for token in [token for token, value in sessions.items() if value[0] < cutoff]:
@@ -438,6 +594,18 @@ def _outreach_context(repository: OutreachRepository, job: JobPosting) -> dict[s
     return {"outreach_contacts": ranked,
             "outreach_drafts": repository.list_approved_drafts(job.id),
             "contact_searches": build_contact_searches(job)}
+
+
+def _application_context(
+    repository: ApplicationRepository,
+    job: JobPosting,
+    enabled: bool,
+) -> dict[str, object]:
+    return {
+        "application_enabled": enabled,
+        "application_profile": repository.get_profile(),
+        "application_packages": repository.list_packages_for_job(job.id, job.job_url),
+    }
 
 
 def _get_job_or_404(repository, job_id: int) -> JobPosting:

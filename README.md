@@ -34,6 +34,7 @@ The current MVP provides:
 - a local FastAPI dashboard for review and status updates
 - human-approved DOCX generation that preserves existing resume evidence
 - a local outreach workspace for ranking user-supplied public contacts and approving message drafts
+- a local application-package workspace with exact preview approval and manual submission tracking
 
 It does **not** scrape LinkedIn, send messages, call paid APIs, or submit applications. Remote execution requires
 your GitHub, Supabase, and SMTP secrets before it can run in the cloud.
@@ -107,6 +108,13 @@ message. You can edit and explicitly approve the exact text, copy it, then
 manually record sent, reply, and follow-up dates. Contact notes and approved
 drafts are stored in `data/outreach.db`, separate from cloud job data. The app
 never fetches LinkedIn pages or sends a message.
+
+The application-package section accepts only matching PDF/DOCX files inside the
+configured `RESUME_DIRECTORY/tailored` folder. It shows the complete candidate
+profile, files, and cover note, then requires approval of that exact fingerprinted
+snapshot. Approval stores a local prepared package; it never opens, fills, or
+submits an employer form. After submitting on the employer's site yourself, you
+can explicitly record that manual submission in the dashboard.
 
 Use custom paths if needed:
 
@@ -210,7 +218,8 @@ privacy. See `docs/cloud-roadmap.md`.
    matching DOCX and PDF files; existing files are never overwritten.
 8. **Notifications (complete):** SMTP summaries support safe-profile scoring and
    commute filtering in scheduled runs.
-9. **Application assistance:** prepare applications, never submit without approval.
+9. **Application assistance (complete):** exact local package previews, immutable
+   approval snapshots, employer-page handoff, and manual submission tracking.
 10. **Professional outreach (complete):** public search shortcuts, ranked manual
     contacts, editable approved drafts, copying, and manual outcome tracking.
 
