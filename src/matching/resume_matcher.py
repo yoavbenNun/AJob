@@ -14,6 +14,13 @@ EXPERIENCE_POINTS = 20
 PROJECT_POINTS = 15
 EDUCATION_POINTS = 5
 
+EDUCATION_FIELD_ALIASES = {
+    "computer science": ("computer science",),
+    "software engineering": ("software engineering",),
+    "computer engineering": ("computer engineering",),
+    "electrical engineering": ("electrical engineering",),
+}
+
 
 @dataclass(frozen=True, slots=True)
 class ScoreComponent:
@@ -203,6 +210,20 @@ def _education_component(
             ),
             (f"Education mismatch: job appears to require a {requirement} degree.",),
         )
+    required_fields = _required_education_fields(requirements)
+    candidate_fields = _education_fields(education)
+    if required_fields and candidate_fields and not set(required_fields).intersection(candidate_fields):
+        return (
+            ScoreComponent(
+                0,
+                EDUCATION_POINTS,
+                "resume degree field does not match the posting's closed field requirement",
+            ),
+            (
+                "Education field mismatch: job requires "
+                f"{', '.join(required_fields)}; resume shows {', '.join(candidate_fields)}.",
+            ),
+        )
     if education.strip():
         return (
             ScoreComponent(EDUCATION_POINTS, EDUCATION_POINTS, "resume includes education"),
@@ -250,7 +271,9 @@ def _required_education_level(title: str, requirements: str) -> int:
 
     hard_levels: list[int] = []
     mode = "unknown"
-    for clause in re.split(r"[;\n.]", requirements.casefold()):
+    for clause in _education_requirement_clauses(requirements):
+        if _negates_requirement(clause):
+            continue
         clause = clause.strip()
         if not clause:
             continue
@@ -260,13 +283,84 @@ def _required_education_level(title: str, requirements: str) -> int:
         if "minimum qualification" in clause or "required" in clause:
             mode = "required"
         levels = _degree_levels(clause)
-        has_hard_marker = any(
-            marker in clause
-            for marker in ("required", "must", "currently pursuing", "enrolled")
-        )
+        has_hard_marker = _has_hard_education_marker(clause)
         if levels and (mode == "required" or has_hard_marker):
             hard_levels.append(min(levels))
     return max(hard_levels, default=0)
+
+
+def _required_education_fields(requirements: str) -> tuple[str, ...]:
+    """Return only explicit, closed degree-field requirements."""
+    required: list[str] = []
+    mode = "unknown"
+    required_degree_context = False
+    for clause in _education_requirement_clauses(requirements):
+        if _negates_requirement(clause):
+            continue
+        if "preferred" in clause or "nice to have" in clause:
+            mode = "preferred"
+            required_degree_context = False
+            continue
+        if "minimum qualification" in clause or "required" in clause:
+            mode = "required"
+        fields = _education_fields(clause)
+        levels = _degree_levels(clause)
+        has_hard_marker = _has_hard_education_marker(clause)
+        is_open = re.search(
+            r"\b(?:related|similar)\s+(?:field|fields|discipline|disciplines)\b|"
+            r"\bor\s+(?:an?\s+)?equivalent(?:\s+discipline|\s+field)?\b",
+            clause,
+        ) is not None
+        degree_context = bool(levels) or (
+            required_degree_context
+            and re.match(
+                r"^(?:required\s+|accepted\s+)?(?:degree\s+)?"
+                r"(?:field|fields|major|majors|discipline|disciplines)\s*:",
+                clause,
+            ) is not None
+        )
+        if fields and degree_context and (mode == "required" or has_hard_marker) and not is_open:
+            required.extend(fields)
+        required_degree_context = bool(levels) and (mode == "required" or has_hard_marker)
+    return tuple(dict.fromkeys(required))
+
+
+def _has_hard_education_marker(clause: str) -> bool:
+    return any(
+        marker in clause for marker in ("required", "must", "pursuing", "enrolled")
+    ) and not _negates_requirement(clause)
+
+
+def _negates_requirement(clause: str) -> bool:
+    return re.search(
+        r"\b(?:is\s+not|isn't|isn’t|not)\s+"
+        r"(?:(?:strictly|necessarily)\s+)?required\b|"
+        r"\bno\b[^.;\n]{0,80}\brequired\b",
+        clause,
+    ) is not None
+
+
+def _education_requirement_clauses(requirements: str) -> tuple[str, ...]:
+    normalized = requirements.casefold()
+    for source, replacement in (
+        ("b.sc.", "bsc"), ("m.sc.", "msc"), ("ph.d.", "phd"),
+        ("b.s.", "bs"), ("m.s.", "ms"),
+    ):
+        normalized = normalized.replace(source, replacement)
+    return tuple(
+        clause.strip()
+        for clause in re.split(r"[;\n.]|,?\s+but\s+|,?\s+however\s+", normalized)
+        if clause.strip()
+    )
+
+
+def _education_fields(text: str) -> tuple[str, ...]:
+    normalized = text.casefold()
+    return tuple(
+        canonical
+        for canonical, aliases in EDUCATION_FIELD_ALIASES.items()
+        if any(re.search(rf"\b{re.escape(alias)}\b", normalized) for alias in aliases)
+    )
 
 
 def _degree_levels(text: str) -> list[int]:

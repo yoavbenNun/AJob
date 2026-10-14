@@ -123,6 +123,8 @@ def test_outreach_rejects_invalid_profile_url(tmp_path) -> None:
         "role_title": "Engineer", "company": "Example", "profile_url": "javascript:bad",
     })
     assert "public HTTP(S) URL" in response.text
+    assert "Tailored resume pair" in response.text
+    assert "Set RESUME_DIRECTORY and create a tailored" not in response.text
 
 
 def _csrf_token(client: TestClient, job_id: int) -> str:
@@ -180,6 +182,8 @@ def test_job_detail_calculates_a_local_match_without_exposing_resume_text(tmp_pa
     assert response.status_code == 200
     assert "/100 fit score" in response.text
     assert "Dana Developer" not in response.text
+    assert "Set RESUME_DIRECTORY and create a tailored" not in response.text
+    assert "Tailored resume pair" in response.text
 
 
 def test_dashboard_previews_and_generates_an_explicitly_approved_tailored_resume(tmp_path) -> None:

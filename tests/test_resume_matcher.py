@@ -266,3 +266,155 @@ M.Sc. Computer Science, Example University
     )
 
     assert match_resume_to_job(resume, job).eligible is True
+
+
+def test_closed_required_degree_fields_reject_different_engineering_major() -> None:
+    resume = parse_resume_text(
+        "Dana Developer\nEDUCATION\nSoftware Engineering | Example University\n2024-2027"
+    )
+    job = JobPosting(
+        title="Software Engineering Student",
+        company="Example",
+        location="Israel",
+        job_url="https://example.com/jobs/closed-major",
+        requirements=(
+            "Minimum Qualifications Pursuing a B.Sc./M.Sc. in Electrical Engineering, "
+            "Computer Engineering. Students must have completed three semesters."
+        ),
+    )
+
+    result = match_resume_to_job(resume, job)
+
+    assert result.eligible is False
+    assert result.score <= 25
+    assert "Education field mismatch" in result.disqualifiers[0]
+
+
+def test_closed_required_degree_fields_accept_listed_major() -> None:
+    resume = parse_resume_text(
+        "Dana Developer\nEDUCATION\nB.Sc. Computer Engineering, Example University"
+    )
+    job = JobPosting(
+        title="Software Engineering Student",
+        company="Example",
+        location="Israel",
+        job_url="https://example.com/jobs/accepted-major",
+        requirements=(
+            "Minimum Qualifications: Pursuing a B.Sc. in Electrical Engineering, "
+            "Computer Engineering."
+        ),
+    )
+
+    assert match_resume_to_job(resume, job).eligible is True
+
+
+def test_related_field_wording_does_not_disqualify_known_major() -> None:
+    resume = parse_resume_text(
+        "Dana Developer\nEDUCATION\nB.Sc. Software Engineering, Example University"
+    )
+    job = JobPosting(
+        title="Software Intern",
+        company="Example",
+        location="Israel",
+        job_url="https://example.com/jobs/related-major",
+        requirements="B.Sc. in Electrical Engineering, Computer Engineering, or related field required.",
+    )
+
+    assert match_resume_to_job(resume, job).eligible is True
+
+
+def test_preferred_degree_field_does_not_disqualify() -> None:
+    resume = parse_resume_text(
+        "Dana Developer\nEDUCATION\nB.Sc. Software Engineering, Example University"
+    )
+    job = JobPosting(
+        title="Software Intern",
+        company="Example",
+        location="Israel",
+        job_url="https://example.com/jobs/preferred-major",
+        requirements="B.Sc. required. Electrical Engineering preferred.",
+    )
+
+    assert match_resume_to_job(resume, job).eligible is True
+
+
+def test_negated_degree_field_requirement_does_not_disqualify() -> None:
+    resume = parse_resume_text(
+        "Dana Developer\nEDUCATION\nB.Sc. Software Engineering, Example University"
+    )
+    job = JobPosting(
+        title="Software Intern", company="Example", location="Israel",
+        job_url="https://example.com/jobs/not-required-major",
+        requirements="A B.Sc. in Electrical Engineering is not required.",
+    )
+
+    assert match_resume_to_job(resume, job).eligible is True
+
+
+def test_common_qualified_and_contracted_negations_do_not_disqualify() -> None:
+    resume = parse_resume_text(
+        "Dana Developer\nEDUCATION\nB.Sc. Software Engineering, Example University"
+    )
+    for index, requirement in enumerate((
+        "A B.Sc. in Electrical Engineering isn't required.",
+        "A B.Sc. in Electrical Engineering is not strictly required.",
+    )):
+        job = JobPosting(
+            title="Software Intern", company="Example", location="Israel",
+            job_url=f"https://example.com/jobs/negated-major-{index}",
+            requirements=requirement,
+        )
+        assert match_resume_to_job(resume, job).eligible is True
+
+
+def test_required_degree_field_can_follow_required_level_clause() -> None:
+    resume = parse_resume_text(
+        "Dana Developer\nEDUCATION\nB.Sc. Software Engineering, Example University"
+    )
+    job = JobPosting(
+        title="Software Intern", company="Example", location="Israel",
+        job_url="https://example.com/jobs/split-major",
+        requirements=(
+            "Minimum Qualifications: B.Sc. required. "
+            "Degree field: Electrical Engineering or Computer Engineering."
+        ),
+    )
+
+    result = match_resume_to_job(resume, job)
+
+    assert result.eligible is False
+    assert "Education field mismatch" in result.disqualifiers[0]
+
+
+def test_job_domain_field_wording_is_not_treated_as_degree_field() -> None:
+    resume = parse_resume_text(
+        "Dana Developer\nEDUCATION\nB.Sc. Software Engineering, Example University"
+    )
+    job = JobPosting(
+        title="Software Intern", company="Example", location="Israel",
+        job_url="https://example.com/jobs/domain-field",
+        requirements=(
+            "Minimum Qualifications: B.Sc. required. "
+            "You will build tools for the electrical engineering field."
+        ),
+    )
+
+    assert match_resume_to_job(resume, job).eligible is True
+
+
+def test_required_degree_after_negated_degree_in_same_sentence_is_enforced() -> None:
+    resume = parse_resume_text(
+        "Dana Developer\nEDUCATION\nB.Sc. Software Engineering, Example University"
+    )
+    job = JobPosting(
+        title="Software Intern", company="Example", location="Israel",
+        job_url="https://example.com/jobs/mixed-negation",
+        requirements=(
+            "A B.Sc. is not required, but an M.Sc. in Electrical Engineering is required."
+        ),
+    )
+
+    result = match_resume_to_job(resume, job)
+
+    assert result.eligible is False
+    assert "master's" in result.disqualifiers[0]

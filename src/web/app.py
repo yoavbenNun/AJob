@@ -253,6 +253,7 @@ def create_app(
         except ValueError as error:
             return _detail_response(request, job, outreach_error=str(error), csrf_token=csrf_token,
                                     resume_matching_enabled=allowed_resume_root is not None,
+                                    **_application_context(application_repository, job, tailored_resume_root),
                                     **_outreach_context(outreach_repository, job))
         return RedirectResponse(url=f"/jobs/{job_id}#outreach", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -281,6 +282,7 @@ def create_app(
             request, job, csrf_token=csrf_token,
             resume_matching_enabled=allowed_resume_root is not None,
             outreach_preview={"contact": contact, "body": body, "kind": kind, "token": token},
+            **_application_context(application_repository, job, tailored_resume_root),
             **_outreach_context(outreach_repository, job),
         )
 
@@ -295,6 +297,7 @@ def create_app(
             return _detail_response(request, job, outreach_error="The outreach preview expired.",
                                     csrf_token=csrf_token,
                                     resume_matching_enabled=allowed_resume_root is not None,
+                                    **_application_context(application_repository, job, tailored_resume_root),
                                     **_outreach_context(outreach_repository, job))
         contact = outreach_repository.get_contact(session[2], job_id)
         if contact is None:
@@ -306,12 +309,14 @@ def create_app(
         except ValueError as error:
             return _detail_response(request, job, outreach_error=str(error), csrf_token=csrf_token,
                                     resume_matching_enabled=allowed_resume_root is not None,
+                                    **_application_context(application_repository, job, tailored_resume_root),
                                     **_outreach_context(outreach_repository, job))
         fingerprint = _outreach_fingerprint(job, contact, generated_body)
         if not secrets.compare_digest(fingerprint, session[3]):
             return _detail_response(request, job, outreach_error="Job or contact changed after preview.",
                                     csrf_token=csrf_token,
                                     resume_matching_enabled=allowed_resume_root is not None,
+                                    **_application_context(application_repository, job, tailored_resume_root),
                                     **_outreach_context(outreach_repository, job))
         confirmation_token = secrets.token_urlsafe(32)
         exact_fingerprint = _outreach_fingerprint(job, contact, f"{kind}\n{body}")
@@ -324,6 +329,7 @@ def create_app(
             request, job, csrf_token=csrf_token,
             resume_matching_enabled=allowed_resume_root is not None,
             outreach_confirmation={"body": body, "kind": kind, "token": confirmation_token},
+            **_application_context(application_repository, job, tailored_resume_root),
             **_outreach_context(outreach_repository, job),
         )
 
@@ -339,6 +345,7 @@ def create_app(
             return _detail_response(request, job, outreach_error="The exact-message approval expired.",
                                     csrf_token=csrf_token,
                                     resume_matching_enabled=allowed_resume_root is not None,
+                                    **_application_context(application_repository, job, tailored_resume_root),
                                     **_outreach_context(outreach_repository, job))
         contact = outreach_repository.get_contact(session[2], job_id)
         if contact is None:
@@ -394,7 +401,13 @@ def create_app(
         _validate_csrf(form, csrf_token)
         resume_path = form.get("resume_path", [""])[0]
         if allowed_resume_root is None:
-            return _detail_response(request, job, match_error="Set RESUME_DIRECTORY to enable dashboard matching.", csrf_token=csrf_token, resume_matching_enabled=False)
+            return _detail_response(
+                request, job,
+                match_error="Set RESUME_DIRECTORY to enable dashboard matching.",
+                csrf_token=csrf_token, resume_matching_enabled=False,
+                **_application_context(application_repository, job, tailored_resume_root),
+                **_outreach_context(outreach_repository, job),
+            )
         if not resume_path.strip():
             return _detail_response(
                 request,
@@ -402,13 +415,20 @@ def create_app(
                 match_error="Enter a local resume path to match this job.",
                 csrf_token=csrf_token,
                 resume_matching_enabled=True,
+                **_application_context(application_repository, job, tailored_resume_root),
+                **_outreach_context(outreach_repository, job),
             )
         try:
             resolved_resume = _resolve_resume_path(resume_path, allowed_resume_root)
             profile = parse_resume(resolved_resume)
             result = match_resume_to_job(profile, job)
         except (OSError, ValueError) as error:
-            return _detail_response(request, job, match_error=f"Match unavailable: {error}", csrf_token=csrf_token, resume_matching_enabled=True)
+            return _detail_response(
+                request, job, match_error=f"Match unavailable: {error}",
+                csrf_token=csrf_token, resume_matching_enabled=True,
+                **_application_context(application_repository, job, tailored_resume_root),
+                **_outreach_context(outreach_repository, job),
+            )
         proposal_token = secrets.token_urlsafe(32)
         proposal_sessions[proposal_token] = (
             time.monotonic(), job_id, resolved_resume,
@@ -425,6 +445,8 @@ def create_app(
             proposal_token=proposal_token,
             csrf_token=csrf_token,
             resume_matching_enabled=True,
+            **_application_context(application_repository, job, tailored_resume_root),
+            **_outreach_context(outreach_repository, job),
         )
 
     @app.post("/jobs/{job_id}/tailor", response_class=HTMLResponse)
@@ -440,6 +462,8 @@ def create_app(
                 tailoring_error="Set RESUME_DIRECTORY to enable tailored resume generation.",
                 csrf_token=csrf_token,
                 resume_matching_enabled=False,
+                **_application_context(application_repository, job, tailored_resume_root),
+                **_outreach_context(outreach_repository, job),
             )
         _expire_proposal_sessions(proposal_sessions)
         proposal_token = form.get("proposal_token", [""])[0]
@@ -450,6 +474,8 @@ def create_app(
                 tailoring_error="The tailoring preview expired. Calculate the match again.",
                 csrf_token=csrf_token,
                 resume_matching_enabled=True,
+                **_application_context(application_repository, job, tailored_resume_root),
+                **_outreach_context(outreach_repository, job),
             )
         approved_change_ids = tuple(dict.fromkeys(form.get("approved_change_id", [])))
         try:
@@ -477,6 +503,8 @@ def create_app(
                 tailoring_error=f"Tailored resume unavailable: {error}",
                 csrf_token=csrf_token,
                 resume_matching_enabled=True,
+                **_application_context(application_repository, job, tailored_resume_root),
+                **_outreach_context(outreach_repository, job),
             )
         return _detail_response(
             request,
@@ -484,6 +512,8 @@ def create_app(
             tailored_resume_names=(artifacts.docx_path.name, artifacts.pdf_path.name),
             csrf_token=csrf_token,
             resume_matching_enabled=True,
+            **_application_context(application_repository, job, tailored_resume_root),
+            **_outreach_context(outreach_repository, job),
         )
 
     return app

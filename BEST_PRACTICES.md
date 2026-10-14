@@ -100,6 +100,9 @@ reusable lesson appears.
   look like a completed application artifact.
 - Local-only web interfaces still need CSRF protection. Never place resume paths
   in query strings, and restrict dashboard file access to an explicit directory.
+- Every job-detail response must rebuild the application and outreach workspace
+  context. POST responses that render the page directly must not silently disable
+  unrelated sections by omitting their template state.
 - Storage adapters must agree on canonical URL identity. Legacy canonicalization
   may update unambiguous rows, but duplicate conflicts require a manual merge and
   must never be silently deleted.
@@ -121,6 +124,9 @@ reusable lesson appears.
   aliases boundary-aware to avoid substring false positives.
 - Treat hard eligibility requirements separately from fit score. A strong skill
   overlap must not rank a PhD-only role above an eligible bachelor's-level role.
+- Enforce a degree-field mismatch only for explicit closed hard requirements and
+  recognized candidate majors. Wording such as "related field" or "equivalent"
+  must remain eligible for human review instead of causing a false rejection.
 - Keep commute eligibility separate from professional fit. Never recommend a job
   when its location or route cannot be verified; mark it for manual review.
 - Driving estimates must name their routing source and limitations. Do not present
