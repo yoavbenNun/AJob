@@ -47,6 +47,52 @@ companies:
       - /job/
     allowed_job_hosts:
       - intel.wd1.myworkdayjobs.com
+  - name: KLA
+    # Official Israel Workday board; includes software student openings.
+    careers_url: https://kla.wd1.myworkdayjobs.com/en-US/Israel
+    enabled: true
+    job_url_patterns:
+      - /job/
+    allowed_job_hosts:
+      - kla.wd1.myworkdayjobs.com
+  - name: F5
+    # Official Workday board with Tel Aviv software and cloud internships.
+    careers_url: https://ffive.wd5.myworkdayjobs.com/en-US/f5jobs
+    enabled: true
+    job_url_patterns:
+      - /job/
+    allowed_job_hosts:
+      - ffive.wd5.myworkdayjobs.com
+  - name: Motorola Solutions
+    careers_url: https://motorolasolutions.wd5.myworkdayjobs.com/en-US/Careers
+    enabled: true
+    job_url_patterns:
+      - /job/
+    allowed_job_hosts:
+      - motorolasolutions.wd5.myworkdayjobs.com
+  - name: Red Hat
+    careers_url: https://redhat.wd5.myworkdayjobs.com/en-US/Jobs
+    enabled: true
+    job_url_patterns:
+      - /job/
+    allowed_job_hosts:
+      - redhat.wd5.myworkdayjobs.com
+  - name: Clarivate
+    # Official Workday source for Jerusalem junior and graduate software roles.
+    careers_url: https://clarivate.wd3.myworkdayjobs.com/en-US/Clarivate_Careers
+    enabled: true
+    job_url_patterns:
+      - /job/
+    allowed_job_hosts:
+      - clarivate.wd3.myworkdayjobs.com
+  - name: Qualcomm
+    # Official Workday source; broader bounded queries surface junior roles when open.
+    careers_url: https://qualcomm.wd12.myworkdayjobs.com/en-US/External
+    enabled: true
+    job_url_patterns:
+      - /job/
+    allowed_job_hosts:
+      - qualcomm.wd12.myworkdayjobs.com
   - name: monday.com
     # The shared role and location filters reject non-Israel/non-junior results.
     careers_url: https://monday.com/careers
@@ -84,14 +130,6 @@ companies:
       - /job/
     allowed_job_hosts:
       - www.cyberark.com
-  - name: Qualcomm
-    careers_url: https://careers.qualcomm.com/careers
-    # Enable after the current ATS tenant and Israel listing are verified.
-    enabled: false
-    job_url_patterns:
-      - /job/
-    allowed_job_hosts:
-      - careers.qualcomm.com
   - name: SAP
     careers_url: https://jobs.sap.com/search/
     # Enable after an Israel-scoped listing is verified end to end.

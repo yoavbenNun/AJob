@@ -13,6 +13,13 @@ from src.filtering.job_filter import classify_job, prefilter_job
 from src.models import Company, JobPosting
 from src.urls import canonical_url
 
+WORKDAY_SEARCH_TERMS = (
+    "student software",
+    "software intern",
+    "junior software",
+    "graduate software",
+)
+
 
 class JobWriter(Protocol):
     """Minimal persistence boundary needed by scan orchestration."""
@@ -137,27 +144,44 @@ class CareersScraper:
         """Read Workday's public careers JSON endpoint for configured tenants."""
         try:
             endpoint = _workday_endpoint(company.careers_url)
-            jobs_by_url: dict[str, JobPosting] = {}
-            for page_number in range(self.max_pages):
-                request = Request(
-                    endpoint,
-                    data=json.dumps(
-                        {"appliedFacets": {}, "limit": 20, "offset": page_number * 20,
-                         "searchText": "student software"}
-                    ).encode("utf-8"),
-                    headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"},
-                    method="POST",
-                )
-                with urlopen(request, timeout=max(1, self.timeout_ms // 1000)) as response:
-                    payload = json.load(response)
-                page_jobs = extract_workday_jobs(company, payload)
-                for job in page_jobs:
-                    jobs_by_url.setdefault(job.job_url, job)
-                if len(page_jobs) < 20:
-                    break
-            return CompanyScanResult(company=company, jobs=list(jobs_by_url.values()))
         except Exception as error:
             return CompanyScanResult(company=company, error=f"Workday API failed: {error}")
+
+        jobs_by_url: dict[str, JobPosting] = {}
+        successful_requests = 0
+        request_errors: list[str] = []
+        # Several narrow searches provide better early-career recall than one
+        # generic query. Failures are isolated so one throttled query cannot
+        # discard useful postings returned by the others.
+        for search_text in WORKDAY_SEARCH_TERMS:
+            for page_number in range(self.max_pages):
+                try:
+                    request = Request(
+                        endpoint,
+                        data=json.dumps(
+                            {"appliedFacets": {}, "limit": 20, "offset": page_number * 20,
+                             "searchText": search_text}
+                        ).encode("utf-8"),
+                        headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"},
+                        method="POST",
+                    )
+                    with urlopen(request, timeout=max(1, self.timeout_ms // 1000)) as response:
+                        payload = json.load(response)
+                    page_jobs = extract_workday_jobs(company, payload)
+                    raw_postings = payload.get("jobPostings", [])
+                    successful_requests += 1
+                    for job in page_jobs:
+                        jobs_by_url.setdefault(job.job_url, job)
+                    if len(raw_postings) < 20:
+                        break
+                except Exception as error:
+                    request_errors.append(f"{search_text}: {error}")
+                    break
+
+        if successful_requests == 0:
+            detail = "; ".join(request_errors[:2]) or "no query completed"
+            return CompanyScanResult(company=company, error=f"Workday API failed: {detail}")
+        return CompanyScanResult(company=company, jobs=list(jobs_by_url.values()))
 
 
 def scan_companies(

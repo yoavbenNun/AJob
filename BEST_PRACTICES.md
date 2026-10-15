@@ -27,6 +27,8 @@ reusable lesson appears.
 - A desktop double-click can create two launcher processes. Coalesce concurrent
   invocations with a non-blocking mutex and hold it briefly after opening the URL;
   a waiting mutex only serializes duplicate browser opens.
+- Version local static asset URLs when shipping visible CSS changes. A reused
+  browser tab can otherwise keep stale styling even after the server restarts.
 - Keep non-ASCII local paths in a UTF-8 ignored settings file instead of shortcut
   arguments; Windows shortcut automation can silently corrupt Unicode arguments.
 
@@ -69,6 +71,11 @@ reusable lesson appears.
 - Workday search landing pages can render no job anchors even when individual
   job-detail URLs are public. Verify rendered listing anchors before enabling a
   Workday source; otherwise keep it disabled pending a dedicated adapter.
+- Workday employers use different early-career labels. Search a small bounded set
+  of student, intern, junior, and graduate software phrases and deduplicate by URL;
+  one deep `student software` query misses legitimate entry-level roles.
+- Keep exactly one configuration entry per company. A later duplicate silently
+  wins in name-indexed views and can make a verified source appear disabled.
 
 ## Relevance filtering
 

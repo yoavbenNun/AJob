@@ -1,11 +1,22 @@
+import json
+from io import BytesIO
+
 from src.models import Company
 from src.scrapers.careers_scraper import (
+    CareersScraper,
+    WORKDAY_SEARCH_TERMS,
     extract_detail_location,
     extract_jobs_from_links,
     extract_requirements,
     extract_workday_jobs,
     preview_companies,
 )
+
+
+def test_workday_queries_cover_common_early_career_wording() -> None:
+    assert WORKDAY_SEARCH_TERMS == (
+        "student software", "software intern", "junior software", "graduate software"
+    )
 
 
 def test_extract_detail_location_from_google_markers() -> None:
@@ -61,6 +72,58 @@ def test_extract_workday_jobs_normalizes_public_api_response() -> None:
     assert jobs[0].title == "Software Student"
     assert jobs[0].location == "Israel, Haifa"
     assert jobs[0].job_url.startswith("https://intel.wd1.myworkdayjobs.com/job/")
+
+
+def test_workday_scan_pages_deduplicates_and_keeps_partial_success(monkeypatch) -> None:
+    company = Company(
+        "Example", "https://example.wd1.myworkdayjobs.com/en-US/External",
+        allowed_job_hosts=("example.wd1.myworkdayjobs.com",),
+    )
+    calls: list[tuple[str, int]] = []
+
+    def fake_urlopen(request, timeout):
+        body = json.loads(request.data)
+        calls.append((body["searchText"], body["offset"]))
+        if body["searchText"] == "software intern":
+            raise TimeoutError("temporary")
+        count = 19 if body["searchText"] == "student software" and body["offset"] == 0 else 1
+        postings = [
+            {
+                "title": f"Software Student {index}",
+                "externalPath": f"/job/Israel/Software-Student-{body['offset'] + index}",
+                "locationsText": "Israel",
+            }
+            for index in range(count)
+        ]
+        if body["searchText"] == "student software" and body["offset"] == 0:
+            postings.append({"title": "Unsafe", "externalPath": "https://evil.example/job/1"})
+        return BytesIO(json.dumps({"jobPostings": postings}).encode())
+
+    monkeypatch.setattr("src.scrapers.careers_scraper.urlopen", fake_urlopen)
+
+    result = CareersScraper(None, max_pages=2)._scan_workday(company)
+
+    assert result.error is None
+    assert len(result.jobs) == 20
+    assert ("student software", 20) in calls
+    assert ("software intern", 0) in calls
+
+
+def test_workday_scan_reports_error_when_every_query_fails(monkeypatch) -> None:
+    company = Company(
+        "Example", "https://example.wd1.myworkdayjobs.com/en-US/External",
+        allowed_job_hosts=("example.wd1.myworkdayjobs.com",),
+    )
+
+    def fail_urlopen(request, timeout):
+        raise TimeoutError("offline")
+
+    monkeypatch.setattr("src.scrapers.careers_scraper.urlopen", fail_urlopen)
+
+    result = CareersScraper(None)._scan_workday(company)
+
+    assert result.jobs == []
+    assert result.error and "offline" in result.error
 
 
 def test_extract_jobs_from_links_filters_and_deduplicates() -> None:

@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ job.title }} · AJob</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}?v=20261015-2">
 </head>
 <body>
   <a class="skip-link" href="#job-content">Skip to job details</a>
   <main class="page-shell detail-shell">
-    <header class="app-bar detail-app-bar"><a class="brand" href="/" aria-label="AJob home"><span class="brand-mark">A</span><span>AJob</span></a><div class="system-state"><span class="system-dot" aria-hidden="true"></span>Private workspace</div></header>
-    <a class="back-link" href="/"><span aria-hidden="true">←</span> All opportunities</a>
+    <header class="app-bar detail-app-bar"><a class="brand" href="/" aria-label="AJob home"><span class="brand-mark">A</span><span class="brand-name">A<span>Job</span></span></a><div class="system-state"><span class="system-dot" aria-hidden="true"></span>Private workspace</div></header>
+    <a class="back-link" href="/"><span class="back-link__icon" aria-hidden="true">←</span><span>All opportunities</span></a>
     <section class="detail-hero" id="job-content" tabindex="-1" aria-labelledby="job-title">
       <div class="detail-company-mark"><img src="{{ url_for('static', path='logos/' ~ company_logos.get(job.company|lower, 'company-generic.svg')) }}" alt="" aria-hidden="true"></div>
       <div class="detail-hero__copy"><p class="eyebrow">{{ job.company }}</p><h1 id="job-title">{{ job.title }}</h1><div class="detail-meta"><span><span aria-hidden="true">●</span>{{ job.location }}</span><span class="status status--{{ job.status }}">{{ job.status|capitalize }}</span></div></div>
@@ -93,7 +93,7 @@
       <div class="collapsible-section__body">
       <p class="safety-note"><strong>Public search, private workspace.</strong> AJob never scrapes LinkedIn or sends messages.</p>
       <div class="step-heading"><span>1</span><div><h3>Find contacts</h3><p>Open a public search, then choose who is relevant.</p></div></div>
-      <div class="search-shortcuts">{% for search in contact_searches %}<a class="button secondary" href="{{ search.url }}" target="_blank" rel="noopener noreferrer">Find {{ search.label }}</a>{% endfor %}</div>
+      <div class="search-shortcuts">{% for search in contact_searches %}<a class="button secondary contact-search-link" href="{{ search.url }}" target="_blank" rel="noopener noreferrer"><span>Find {{ search.label }}</span><span aria-hidden="true">↗</span></a>{% endfor %}</div>
       {% if outreach_error %}<p class="error-panel" role="alert">{{ outreach_error }}</p>{% endif %}
       <details class="nested-disclosure" open><summary><span><strong>Add a contact</strong><small>Save a public profile locally</small></span></summary><div class="nested-disclosure__body">
       <form class="outreach-form" method="post" action="/jobs/{{ job.id }}/outreach/contacts">

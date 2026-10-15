@@ -1,3 +1,5 @@
+from urllib.parse import parse_qs, urlsplit
+
 from src.models import JobPosting, OutreachContact
 from src.outreach.service import (
     build_contact_searches, draft_outreach_message, rank_contact,
@@ -45,3 +47,47 @@ def test_searches_are_public_links_and_drafts_have_distinct_limits() -> None:
     full = draft_outreach_message(job, contact, "full_message")
     assert len(connection) <= 300 and connection != full
     assert validate_approved_body(" Edited ", "full_message") == "Edited"
+
+
+def test_contact_searches_use_broad_role_company_and_real_location() -> None:
+    job = JobPosting(
+        "Backend Software Engineer Student - Payments Platform",
+        "Example Tech", "Tel Aviv, Israel", "https://example.com/job/2",
+    )
+
+    searches = build_contact_searches(job)
+    queries = [parse_qs(urlsplit(item["url"]).query)["q"][0] for item in searches]
+
+    assert all('"Example Tech"' in query for query in queries)
+    assert all('"Tel Aviv"' in query for query in queries)
+    assert any('"talent acquisition"' in query for query in queries)
+    assert any('"R&D manager"' in query and '"team lead"' in query for query in queries)
+    assert any('"backend engineer"' in query for query in queries)
+    assert all(job.title not in query for query in queries)
+
+
+def test_contact_searches_do_not_invent_location_for_remote_jobs() -> None:
+    job = JobPosting("Frontend Intern", "Example", "Remote", "https://example.com/job/3")
+
+    queries = [
+        parse_qs(urlsplit(item["url"]).query)["q"][0]
+        for item in build_contact_searches(job)
+    ]
+
+    assert all("Remote" not in query and "Israel" not in query for query in queries)
+
+
+def test_contact_searches_simplify_multi_location_and_avoid_database_false_match() -> None:
+    job = JobPosting(
+        "Database Software Engineer Student", "Example",
+        "Israel, Haifa; Tel Aviv, Israel", "https://example.com/job/4",
+    )
+
+    queries = [
+        parse_qs(urlsplit(item["url"]).query)["q"][0]
+        for item in build_contact_searches(job)
+    ]
+
+    assert all('"Haifa"' in query and "Tel Aviv" not in query for query in queries)
+    assert all('"data engineer"' not in query for query in queries)
+    assert any('"software engineer"' in query for query in queries)

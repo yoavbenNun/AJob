@@ -46,14 +46,48 @@ def rank_contact(job: JobPosting, contact: OutreachContact) -> RankedContact:
 
 def build_contact_searches(job: JobPosting) -> tuple[dict[str, str], ...]:
     """Build user-opened searches without fetching or scraping profile data."""
+    role_family = _contact_role_family(job.title)
+    location_hint = _contact_location_hint(job.location)
+    context = " ".join(part for part in (f'"{job.company}"', location_hint) if part)
     searches = (
-        ("Recruiters", f'site:linkedin.com/in "{job.company}" recruiter talent acquisition Israel'),
-        ("Hiring managers", f'site:linkedin.com/in "{job.company}" engineering manager "{job.title}"'),
-        ("Relevant team members", f'site:linkedin.com/in "{job.company}" "{job.title}"'),
-        ("University alumni", f'site:linkedin.com/in "{job.company}" software engineer university alumni'),
+        ("Recruiters", f'site:linkedin.com/in {context} (recruiter OR "talent acquisition")'),
+        ("Engineering leaders", f'site:linkedin.com/in {context} ("engineering manager" OR "R&D manager" OR "team lead") "{role_family}"'),
+        ("Software engineers", f'site:linkedin.com/in {context} ("software engineer" OR developer) "{role_family}"'),
+        ("Role specialists", f'site:linkedin.com/in {context} "{role_family}"'),
     )
     return tuple({"label": label, "url": f"https://www.google.com/search?q={quote_plus(query)}"}
                  for label, query in searches)
+
+
+def _contact_role_family(title: str) -> str:
+    """Reduce an ATS title to a broad term people commonly use on profiles."""
+    normalized = re.sub(r"[^a-z0-9]+", " ", title.casefold()).strip()
+    role_families = (
+        (("backend", "back end"), "backend engineer"),
+        (("frontend", "front end"), "frontend engineer"),
+        (("full stack", "fullstack"), "full stack engineer"),
+        (("machine learning", "ml", "artificial intelligence"), "machine learning engineer"),
+        (("data",), "data engineer"),
+        (("devops", "site reliability", "sre"), "DevOps engineer"),
+        (("automation", "qa", "quality assurance"), "automation engineer"),
+        (("embedded", "firmware"), "embedded software engineer"),
+    )
+    for markers, family in role_families:
+        if any(re.search(rf"\b{re.escape(marker)}\b", normalized) for marker in markers):
+            return family
+    return "software engineer"
+
+
+def _contact_location_hint(location: str) -> str:
+    normalized = location.split(";", 1)[0].strip()
+    if not normalized or normalized.casefold() in {"remote", "not specified", "unknown"}:
+        return ""
+    parts = [part.strip() for part in normalized.split(",") if part.strip()]
+    useful = [part for part in parts if not re.search(r"\b(?:locations?|district)\b", part, re.I)]
+    if not useful:
+        return ""
+    place = useful[1] if useful[0].casefold() in {"israel", "isr"} and len(useful) > 1 else useful[0]
+    return f'"{place}"'
 
 
 def draft_outreach_message(job: JobPosting, contact: OutreachContact,

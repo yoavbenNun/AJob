@@ -50,7 +50,10 @@ def test_load_companies_rejects_empty_job_patterns(tmp_path: Path) -> None:
 
 
 def test_default_company_sources_use_safe_enabled_and_disabled_entries() -> None:
-    companies = {company.name: company for company in load_companies("config/companies.yaml")}
+    loaded = load_companies("config/companies.yaml")
+    companies = {company.name: company for company in loaded}
+
+    assert len(companies) == len(loaded)
 
     assert companies["Amazon"].enabled is True
     assert companies["Amazon"].careers_url.endswith("country=ISR")
@@ -60,5 +63,8 @@ def test_default_company_sources_use_safe_enabled_and_disabled_entries() -> None
     assert companies["Apple"].job_url_patterns == ("/en-il/details/",)
     assert companies["NVIDIA"].enabled is True
     assert companies["Intel"].enabled is True
+    for name in ("KLA", "F5", "Motorola Solutions", "Red Hat", "Clarivate", "Qualcomm"):
+        assert companies[name].enabled is True
+        assert "myworkdayjobs.com" in companies[name].careers_url
     assert companies["monday.com"].enabled is True
     assert companies["Wix"].enabled is False
