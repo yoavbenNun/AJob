@@ -56,6 +56,7 @@ from src.storage.outreach_repository import OutreachRepository
 
 
 WEB_ROOT = Path(__file__).parent
+MIN_DASHBOARD_MATCH_SCORE = 30
 templates = Jinja2Templates(directory=str(WEB_ROOT / "templates"))
 COMPANY_LOGOS = {
     "amazon": "amazon.svg",
@@ -126,6 +127,34 @@ def create_app(
             raise HTTPException(status_code=400, detail="Unknown location filter")
 
         all_jobs = repository.list_all()
+        active_resume = get_active_resume(allowed_resume_root)
+        job_matches = {}
+        resume_match_failed_ids = set()
+        resume_match_error = False
+        if active_resume is not None:
+            try:
+                active_profile = parse_resume(active_resume)
+            except Exception:
+                active_profile = None
+                resume_match_error = True
+            if active_profile is not None:
+                for job in all_jobs:
+                    if job.id is None:
+                        continue
+                    try:
+                        job_matches[job.id] = match_resume_to_job(active_profile, job)
+                    except Exception:
+                        # A malformed posting should not disable matching for every job.
+                        resume_match_failed_ids.add(job.id)
+                        continue
+        candidate_eligible_ids = (
+            {
+                job_id for job_id, match in job_matches.items()
+                if match.eligible and match.score >= MIN_DASHBOARD_MATCH_SCORE
+            }
+            if active_resume is not None and active_profile is not None
+            else None
+        )
         jobs = _filter_jobs(
             all_jobs,
             status_filter=status_filter,
@@ -133,32 +162,38 @@ def create_app(
             query=query,
             relevance=relevance,
             location_scope=location_scope,
+            candidate_eligible_ids=candidate_eligible_ids,
         )
+        if active_resume is not None and active_profile is not None:
+            jobs.sort(
+                key=lambda job: (
+                    job_matches[job.id].score
+                    if job.id is not None and job.id in job_matches
+                    else 0
+                ),
+                reverse=True,
+            )
         domestic_jobs = [
             job for job in all_jobs if is_israel_or_remote_location(job.location)
         ]
         visible_pool = all_jobs if location_scope == "all" else domestic_jobs
         companies = sorted({job.company for job in visible_pool}, key=str.casefold)
+
+        def is_candidate_relevant(job: JobPosting) -> bool:
+            return job.is_relevant and (
+                candidate_eligible_ids is None
+                or job.id in candidate_eligible_ids
+            )
+
         dashboard_stats = {
-            "relevant": sum(job.is_relevant for job in domestic_jobs),
-            "new": sum(job.is_relevant and job.status == "new" for job in domestic_jobs),
+            "relevant": sum(is_candidate_relevant(job) for job in domestic_jobs),
+            "new": sum(
+                is_candidate_relevant(job) and job.status == "new"
+                for job in domestic_jobs
+            ),
             "reviewed": sum(job.status == "reviewed" for job in domestic_jobs),
             "applied": sum(job.status == "applied" for job in domestic_jobs),
         }
-        active_resume = get_active_resume(allowed_resume_root)
-        job_matches = {}
-        resume_match_error = False
-        if active_resume is not None:
-            try:
-                active_profile = parse_resume(active_resume)
-                job_matches = {
-                    job.id: match_resume_to_job(active_profile, job)
-                    for job in jobs
-                    if job.id is not None
-                }
-            except Exception:
-                job_matches = {}
-                resume_match_error = True
         resume_errors = {
             "disabled": "Resume updates require RESUME_DIRECTORY.",
             "invalid": "The resume could not be saved. Choose a valid PDF or DOCX up to 10 MB.",
@@ -183,6 +218,7 @@ def create_app(
                 "resume_updated": resume_updated,
                 "resume_error": resume_errors.get(resume_error, ""),
                 "job_matches": job_matches,
+                "resume_match_failed_ids": resume_match_failed_ids,
                 "resume_match_error": resume_match_error,
                 "company_logos": COMPANY_LOGOS,
                 "email_update_enabled": notification_recipient_updater is not None,
@@ -835,13 +871,23 @@ def _get_job_or_404(repository, job_id: int) -> JobPosting:
 def _filter_jobs(
     jobs: list[JobPosting], *, status_filter: str, company: str, query: str,
     relevance: str, location_scope: str,
+    candidate_eligible_ids: set[int] | None = None,
 ) -> list[JobPosting]:
     company_key = company.casefold().strip()
     query_key = query.casefold().strip()
     return [
         job
         for job in jobs
-        if (relevance == "all" or job.is_relevant)
+        if (
+            relevance == "all"
+            or (
+                job.is_relevant
+                and (
+                    candidate_eligible_ids is None
+                    or job.id in candidate_eligible_ids
+                )
+            )
+        )
         and (location_scope == "all" or is_israel_or_remote_location(job.location))
         and (status_filter == "all" or job.status == status_filter)
         and (not company_key or job.company.casefold() == company_key)

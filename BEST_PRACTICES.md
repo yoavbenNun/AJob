@@ -157,6 +157,11 @@ reusable lesson appears.
 - Enforce a degree-field mismatch only for explicit closed hard requirements and
   recognized candidate majors. Wording such as "related field" or "equivalent"
   must remain eligible for human review instead of causing a false rejection.
+- The default "relevant" dashboard must combine role classification, active
+  resume eligibility, and a meaningful resume-match score; keep an explicit
+  all-discoveries view for lower-fit and education-ineligible jobs. When resume
+  matches are available, sort the displayed jobs by score descending. Isolate
+  match failures per posting so one malformed job cannot disable the filter.
 - Keep commute eligibility separate from professional fit. Never recommend a job
   when its location or route cannot be verified; mark it for manual review.
 - Keep foreign discoveries in storage for auditability, but default the dashboard

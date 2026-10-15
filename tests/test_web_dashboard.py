@@ -1,9 +1,12 @@
 from fastapi.testclient import TestClient
+from datetime import datetime, timezone
+from io import BytesIO
 import re
 from docx import Document
 
 from src.models import JobPosting
 from src.applications.service import discover_resume_pairs
+from src.resume.resume_manager import save_active_resume
 from src.storage.job_repository import JobRepository
 from src.web.app import _clean_captured_lines, _summarize_captured_lines, create_app
 
@@ -161,6 +164,98 @@ def test_dashboard_filters_to_relevant_jobs_by_default(tmp_path) -> None:
     assert 'enctype="multipart/form-data"' in response.text
     assert "Update email" in response.text
     assert 'action="/settings/notification-email"' in response.text
+
+
+def test_dashboard_hides_jobs_ineligible_for_active_resume_by_default(tmp_path) -> None:
+    client, _ = _client_with_jobs(tmp_path)
+    repository = JobRepository(tmp_path / "jobs.db")
+    repository.save(JobPosting(
+        "Software Engineering Student", "Apple", "Jerusalem, Israel",
+        "https://example.com/jobs/closed-major",
+        description="Build software.",
+        requirements=(
+            "Minimum Qualifications: Pursuing a B.Sc./M.Sc. in Electrical Engineering, "
+            "Computer Engineering."
+        ),
+    ))
+    repository.save(JobPosting(
+        "Software Engineering PhD Intern", "Google", "Tel Aviv, Israel",
+        "https://example.com/jobs/phd-only",
+        description="Build software.",
+        requirements="Ph.D. in Computer Science required.",
+    ))
+    repository.save(JobPosting(
+        "Junior Software Developer Intern", "Amazon", "Haifa, Israel",
+        "https://example.com/jobs/poor-skill-fit",
+        description="Build Ruby services.",
+        requirements="Ruby required.",
+    ))
+    repository.save(JobPosting(
+        "Python Developer Intern", "Microsoft", "Remote, Israel",
+        "https://example.com/jobs/strong-skill-fit",
+        description="Develop Python applications.",
+        requirements="Python required.",
+        discovered_at=datetime(2000, 1, 1, tzinfo=timezone.utc),
+    ))
+    resume = Document()
+    resume.add_paragraph("Dana Developer")
+    resume.add_paragraph("SKILLS\nPython")
+    resume.add_paragraph(
+        "EDUCATION\nB.Sc. Software Engineering, Example University\n2024-2027"
+    )
+    content = BytesIO()
+    resume.save(content)
+    save_active_resume(tmp_path, "resume.docx", content.getvalue())
+
+    default_page = client.get("/")
+    all_jobs_page = client.get("/", params={"relevance": "all"})
+
+    assert "Python Software Intern" in default_page.text
+    assert default_page.text.index("Python Developer Intern") < default_page.text.index(
+        "Python Software Intern"
+    )
+    assert "Software Engineering Student" not in default_page.text
+    assert "Software Engineering PhD Intern" not in default_page.text
+    assert "Junior Software Developer Intern" not in default_page.text
+    assert "Software Engineering Student" in all_jobs_page.text
+    assert "Software Engineering PhD Intern" in all_jobs_page.text
+    assert "Junior Software Developer Intern" in all_jobs_page.text
+    assert "Not eligible:" in all_jobs_page.text
+
+
+def test_dashboard_reports_a_match_failure_for_only_the_affected_job(
+    monkeypatch, tmp_path
+) -> None:
+    client, _ = _client_with_jobs(tmp_path)
+    repository = JobRepository(tmp_path / "jobs.db")
+    failed_job_id = repository.save(JobPosting(
+        "Python Platform Intern", "Example", "Jerusalem, Israel",
+        "https://example.com/jobs/match-error",
+        description="Build Python services.",
+        requirements="Python required.",
+    ))
+    resume = Document()
+    resume.add_paragraph("SKILLS\nPython, FastAPI")
+    resume.add_paragraph("EDUCATION\nB.Sc. Software Engineering\n2024-2027")
+    content = BytesIO()
+    resume.save(content)
+    save_active_resume(tmp_path, "resume.docx", content.getvalue())
+
+    import src.web.app as web_app
+
+    original_match = web_app.match_resume_to_job
+
+    def fail_one_posting(profile, job):
+        if job.id == failed_job_id:
+            raise ValueError("malformed posting")
+        return original_match(profile, job)
+
+    monkeypatch.setattr(web_app, "match_resume_to_job", fail_one_posting)
+    default_page = client.get("/")
+    all_jobs_page = client.get("/", params={"relevance": "all"})
+
+    assert "Python Platform Intern" not in default_page.text
+    assert "Match score unavailable for this job." in all_jobs_page.text
 
 
 def test_dashboard_updates_cloud_notification_recipient_with_approval(tmp_path) -> None:

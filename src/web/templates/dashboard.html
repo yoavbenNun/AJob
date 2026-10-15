@@ -68,7 +68,7 @@
         <label class="search-field">Search roles<input name="query" value="{{ query }}" placeholder="Title, company, or location"></label>
         <label>Status<select name="status"><option value="all">All statuses</option>{% for item in statuses %}<option value="{{ item }}" {% if item == selected_status %}selected{% endif %}>{{ item|capitalize }}</option>{% endfor %}</select></label>
         <label>Company<select name="company"><option value="">All companies</option>{% for item in companies %}<option value="{{ item }}" {% if item == selected_company %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
-        <label>Jobs<select name="relevance"><option value="relevant" {% if relevance == 'relevant' %}selected{% endif %}>Relevant only</option><option value="all" {% if relevance == 'all' %}selected{% endif %}>All discoveries</option></select></label>
+        <label>Jobs<select name="relevance"><option value="relevant" {% if relevance == 'relevant' %}selected{% endif %}>Relevant, eligible, 30%+ match</option><option value="all" {% if relevance == 'all' %}selected{% endif %}>All discoveries</option></select></label>
         <label>Location<select name="location"><option value="israel" {% if location_scope == 'israel' %}selected{% endif %}>Israel + unrestricted remote</option><option value="all" {% if location_scope == 'all' %}selected{% endif %}>All locations</option></select></label>
         <button type="submit">Apply filters</button>
       </form>
@@ -86,7 +86,7 @@
             <div class="fit-meter" role="progressbar" aria-label="Resume match" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ match.score }}"><span style="width: {{ match.score }}%"></span></div>
             {% if not match.eligible %}<p class="eligibility-warning"><strong>Not eligible:</strong> {{ match.disqualifiers|join(' ') }}</p>{% elif match.tailoring_suggestions %}<ul class="fit-suggestions">{% for suggestion in match.tailoring_suggestions[:2] %}<li>{{ suggestion }}</li>{% endfor %}</ul>{% endif %}
           </div>
-          {% elif resume_match_error %}<p class="match-prompt error">The active resume could not be analyzed. Upload a valid PDF or DOCX.</p>{% else %}<p class="match-prompt">Update your resume to see a match score.</p>{% endif %}
+          {% elif job.id in resume_match_failed_ids %}<p class="match-prompt error">Match score unavailable for this job.</p>{% elif resume_match_error %}<p class="match-prompt error">The active resume could not be analyzed. Upload a valid PDF or DOCX.</p>{% else %}<p class="match-prompt">Update your resume to see a match score.</p>{% endif %}
           <a class="text-link" href="/jobs/{{ job.id }}">Review opportunity <span aria-hidden="true">→</span></a>
         </article>
         {% endfor %}
