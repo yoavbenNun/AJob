@@ -4,14 +4,28 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AJob · Opportunity dashboard</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}?v=20261015-2">
+  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}?v=20261015-3">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
   <main class="page-shell dashboard-shell">
     <header class="app-bar">
-      <a class="brand" href="/" aria-label="AJob home"><span class="brand-mark">A</span><span class="brand-name">A<span>Job</span></span></a>
+      <a class="brand" href="/" aria-label="AJob home"><span class="brand-mark" aria-hidden="true"><span class="brand-glyph">A</span><span class="brand-spark">✦</span></span><span class="brand-lockup"><span class="brand-name">A<span>Job</span></span><span class="brand-tagline">AI career agent</span></span></a>
       <div class="top-actions">
+        <details class="email-menu settings-menu">
+          <summary class="button secondary settings-button">Update email</summary>
+          <div class="settings-popover">
+            <strong>Daily scan recipient</strong>
+            <p>Your current address stays active until a new address is successfully saved to GitHub Secrets.</p>
+            {% if email_update_enabled %}
+            <form method="post" action="/settings/notification-email">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <label>New recipient email<input name="notification_email" type="email" autocomplete="email" required placeholder="name@example.com"></label>
+              <button type="submit">Update three daily emails</button>
+            </form>
+            {% else %}<p class="error" role="alert">Cloud email updates are unavailable.</p>{% endif %}
+          </div>
+        </details>
         <details class="resume-menu">
           <summary class="button resume-button">Update resume</summary>
           <div class="resume-popover">
@@ -46,6 +60,8 @@
     {% if updated %}<p class="notice" role="status">Job status updated.</p>{% endif %}
     {% if resume_updated %}<p class="notice" role="status">Resume updated. <strong>{{ active_resume_name }}</strong> is now active.</p>{% endif %}
     {% if resume_error %}<p class="error-panel" role="alert">{{ resume_error }}</p>{% endif %}
+    {% if email_updated %}<p class="notice" role="status">Daily email recipient updated. Future scan summaries will use the new address.</p>{% endif %}
+    {% if email_error == 'invalid' %}<p class="error-panel" role="alert">Enter a valid recipient email address.</p>{% elif email_error %}<p class="error-panel" role="alert">The email recipient could not be updated. Your existing address is still active.</p>{% endif %}
     <section class="results-panel">
       <div class="results-heading"><div><p class="eyebrow">Opportunity inbox</p><h2>Discovered roles</h2></div><div class="results-meta"><span class="count">{{ jobs|length }} shown</span>{% if query or selected_status != 'all' or selected_company or relevance != 'relevant' or location_scope != 'israel' %}<a class="reset-link" href="/">Reset filters</a>{% endif %}</div></div>
       <form class="filters" method="get" aria-label="Filter jobs">

@@ -6,6 +6,7 @@ repository factory and matching remains in its existing domain service.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import parse_qs
 import hashlib
@@ -33,6 +34,10 @@ from src.matching.resume_matcher import match_resume_to_job
 from src.location.commute import is_israel_or_remote_location
 from src.models import JOB_STATUSES, JobPosting
 from src.models import OutreachContact
+from src.notifications.recipient_settings import (
+    update_cloud_email_recipient,
+    validate_notification_email,
+)
 from src.outreach.service import (
     build_contact_searches,
     draft_outreach_message,
@@ -65,6 +70,7 @@ def create_app(
     resume_directory: str | Path | None = None,
     outreach_database_path: str | Path | None = None,
     application_database_path: str | Path | None = None,
+    notification_recipient_updater: Callable[[str], None] | None = update_cloud_email_recipient,
 ) -> FastAPI:
     """Create a local dashboard backed by the configured job repository."""
     repository = create_job_repository(database_path)
@@ -109,6 +115,8 @@ def create_app(
         updated: int | None = None,
         resume_updated: int | None = None,
         resume_error: str = "",
+        email_updated: int | None = None,
+        email_error: str = "",
     ):
         if status_filter != "all" and status_filter not in JOB_STATUSES:
             raise HTTPException(status_code=400, detail="Unknown job status")
@@ -177,8 +185,28 @@ def create_app(
                 "job_matches": job_matches,
                 "resume_match_error": resume_match_error,
                 "company_logos": COMPANY_LOGOS,
+                "email_update_enabled": notification_recipient_updater is not None,
+                "email_updated": email_updated,
+                "email_error": email_error,
             },
         )
+
+    @app.post("/settings/notification-email")
+    async def update_notification_email(request: Request):
+        form = await request.form()
+        submitted_token = str(form.get("csrf_token", ""))
+        if not secrets.compare_digest(submitted_token, csrf_token):
+            raise HTTPException(status_code=403, detail="Invalid form token")
+        if notification_recipient_updater is None:
+            return RedirectResponse(url="/?email_error=unavailable", status_code=status.HTTP_303_SEE_OTHER)
+        try:
+            recipient = validate_notification_email(str(form.get("notification_email", "")))
+            notification_recipient_updater(recipient)
+        except ValueError:
+            return RedirectResponse(url="/?email_error=invalid", status_code=status.HTTP_303_SEE_OTHER)
+        except (OSError, RuntimeError):
+            return RedirectResponse(url="/?email_error=failed", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url="/?email_updated=1", status_code=status.HTTP_303_SEE_OTHER)
 
     @app.post("/resume")
     async def upload_resume(request: Request):
@@ -630,8 +658,22 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
             "job": job,
             "statuses": JOB_STATUSES,
             "company_logos": COMPANY_LOGOS,
-            "description_lines": _clean_captured_lines(job.description, job),
-            "requirement_lines": _clean_captured_lines(job.requirements, job),
+            "description_lines": _summarize_captured_lines(
+                job.description, job,
+                keywords=("develop", "build", "design", "team", "responsib", "work with", "technology"),
+                limit=5,
+            ),
+            "requirement_lines": _summarize_captured_lines(
+                job.requirements, job,
+                keywords=(
+                    "required", "must", "experience", "years", "degree", "student",
+                    "knowledge", "proficien", "authorization", "citizen", "graduate",
+                    "availability", "location", "language", "python", "java", "c++", "c#",
+                ),
+                limit=7,
+            ),
+            "full_description_lines": _clean_captured_lines(job.description, job),
+            "full_requirement_lines": _clean_captured_lines(job.requirements, job),
             **context,
         },
     )
@@ -660,6 +702,36 @@ def _clean_captured_lines(text: str, job: JobPosting) -> list[str]:
             continue
         cleaned.append(line)
     return cleaned
+
+
+def _summarize_captured_lines(
+    text: str,
+    job: JobPosting,
+    *,
+    keywords: tuple[str, ...],
+    limit: int,
+) -> list[str]:
+    """Select a short, source-faithful set of high-signal display sentences."""
+    candidates: list[str] = []
+    for line in _clean_captured_lines(text, job):
+        parts = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])|\s*[•;]\s*", line)
+        for part in parts:
+            sentence = re.sub(r"\s+", " ", part).strip()
+            if len(sentence) < 3 or not re.search(r"[A-Za-z0-9]", sentence):
+                continue
+            if len(sentence) > 320:
+                continue
+            if sentence.casefold() not in {item.casefold() for item in candidates}:
+                candidates.append(sentence)
+
+    scored = sorted(
+        enumerate(candidates),
+        key=lambda item: (
+            -sum(keyword in item[1].casefold() for keyword in keywords),
+            item[0],
+        ),
+    )[:limit]
+    return [candidates[index] for index, _ in sorted(scored)]
 
 
 def _validate_csrf(form: dict[str, list[str]], expected: str) -> None:

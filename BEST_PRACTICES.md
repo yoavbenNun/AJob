@@ -194,6 +194,16 @@ reusable lesson appears.
   message, so never promise mathematically exact-once email.
 - Treat hosted-runner deprecation annotations as maintenance work even when a run
   succeeds. Keep first-party actions on a runtime-supported major version.
+- When a local settings form updates a hosted secret, pass the secret value over
+  standard input rather than process arguments so it does not appear in command
+  history or process listings. Preserve the old value when validation or the
+  remote update fails.
+
+## Job detail presentation
+
+- Condensed job summaries must stay source-faithful, preserve short technical and
+  eligibility facts, and keep the complete captured source available behind an
+  explicit disclosure. Never trade a hard requirement for cleaner typography.
 
 ## Career platform adapters
 

@@ -5,7 +5,7 @@ from docx import Document
 from src.models import JobPosting
 from src.applications.service import discover_resume_pairs
 from src.storage.job_repository import JobRepository
-from src.web.app import _clean_captured_lines, create_app
+from src.web.app import _clean_captured_lines, _summarize_captured_lines, create_app
 
 
 def _client_with_jobs(tmp_path):
@@ -159,6 +159,32 @@ def test_dashboard_filters_to_relevant_jobs_by_default(tmp_path) -> None:
     assert "company-generic.svg" in response.text
     assert "Update resume" in response.text
     assert 'enctype="multipart/form-data"' in response.text
+    assert "Update email" in response.text
+    assert 'action="/settings/notification-email"' in response.text
+
+
+def test_dashboard_updates_cloud_notification_recipient_with_approval(tmp_path) -> None:
+    updated: list[str] = []
+    database = tmp_path / "jobs.db"
+    JobRepository(database).initialize()
+    client = TestClient(create_app(
+        database,
+        outreach_database_path=tmp_path / "outreach.db",
+        application_database_path=tmp_path / "applications.db",
+        notification_recipient_updater=updated.append,
+    ))
+    page = client.get("/")
+    csrf = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
+
+    response = client.post(
+        "/settings/notification-email",
+        data={"csrf_token": csrf, "notification_email": "new@example.com"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert updated == ["new@example.com"]
+    assert "Daily email recipient updated" in response.text
 
 
 def test_health_endpoint_identifies_current_ajob_server(tmp_path) -> None:
@@ -220,6 +246,61 @@ def test_job_detail_copy_preserves_meaningful_leading_symbols_and_mixed_facts() 
         "-Werror knowledge",
         "C++ experience",
     ]
+
+
+def test_job_detail_summary_keeps_high_signal_sentences_and_limits_length() -> None:
+    job = JobPosting(
+        "Software Intern", "Example", "Tel Aviv", "https://example.com/job",
+        description=(
+            "Welcome to our growing organization. Build Python services with the team. "
+            "Enjoy a collaborative office. Design reliable APIs. Develop internal tools. "
+            "Work with product partners. Learn from mentors. Extra marketing copy."
+        ),
+    )
+
+    result = _summarize_captured_lines(
+        job.description, job,
+        keywords=("build", "design", "develop", "team", "work with"),
+        limit=4,
+    )
+
+    assert len(result) == 4
+    assert "Build Python services with the team." in result
+    assert "Design reliable APIs." in result
+    assert "Welcome to our growing organization." not in result
+
+
+def test_job_detail_summary_preserves_short_technical_requirements() -> None:
+    job = JobPosting(
+        "Software Intern", "Example", "Tel Aviv", "https://example.com/job",
+        requirements="B.Sc.; C++; Python; Long promotional sentence without a requirement.",
+    )
+
+    result = _summarize_captured_lines(
+        job.requirements, job,
+        keywords=("b.sc", "c++", "python"),
+        limit=3,
+    )
+
+    assert result == ["B.Sc.", "C++", "Python"]
+
+
+def test_job_detail_exposes_full_source_when_one_line_contains_omitted_sentences(tmp_path) -> None:
+    long_description = " ".join(f"Sentence {index} about the role." for index in range(1, 9))
+    client, _ = _client_with_jobs(tmp_path)
+    repository = JobRepository(tmp_path / "jobs.db")
+    job_id = repository.save(
+        JobPosting(
+            "Software Intern", "Example", "Tel Aviv", "https://example.com/long-role",
+            description=long_description,
+        )
+    )
+
+    response = client.get(f"/jobs/{job_id}")
+
+    assert response.status_code == 200
+    assert "View full captured description" in response.text
+    assert "Sentence 8 about the role." in response.text
 
 
 def test_dashboard_uploads_resume_and_preserves_local_path_privacy(tmp_path) -> None:
