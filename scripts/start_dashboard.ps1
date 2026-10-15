@@ -16,14 +16,12 @@ $launcherMutex = New-Object System.Threading.Mutex($false, "Local\AJobDashboardL
 $lockAcquired = $false
 
 try {
-    $lockAcquired = $launcherMutex.WaitOne([TimeSpan]::FromSeconds(15))
+    # A desktop double-click can start two launcher processes. Do not queue the
+    # second process: waiting would make it open a second browser tab after the
+    # first launcher releases the mutex.
+    $lockAcquired = $launcherMutex.WaitOne([TimeSpan]::Zero)
     if (-not $lockAcquired) {
-        Add-Type -AssemblyName PresentationFramework
-        [System.Windows.MessageBox]::Show(
-            "AJob is already starting. Please try again in a few seconds.",
-            "AJob"
-        ) | Out-Null
-        exit 1
+        exit 0
     }
 
     if (-not (Test-Path -LiteralPath $pythonPath)) {
@@ -128,6 +126,9 @@ if ($activeListener) {
 }
 
 Start-Process $dashboardUrl
+# Keep the mutex briefly after dispatching the URL so a near-simultaneous
+# launcher process is coalesced instead of opening another tab.
+Start-Sleep -Milliseconds 1500
 }
 finally {
     if ($lockAcquired) {

@@ -24,6 +24,9 @@ reusable lesson appears.
   endpoint and exercise a representative detail route, not only the home page.
   Serialize concurrent launches and stop an unhealthy listener only when its PID
   was recorded by the launcher; never kill an unrelated process sharing the port.
+- A desktop double-click can create two launcher processes. Coalesce concurrent
+  invocations with a non-blocking mutex and hold it briefly after opening the URL;
+  a waiting mutex only serializes duplicate browser opens.
 - Keep non-ASCII local paths in a UTF-8 ignored settings file instead of shortcut
   arguments; Windows shortcut automation can silently corrupt Unicode arguments.
 
