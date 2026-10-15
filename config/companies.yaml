@@ -93,6 +93,15 @@ companies:
       - /job/
     allowed_job_hosts:
       - qualcomm.wd12.myworkdayjobs.com
+  - name: Marvell
+    # Official Workday board with current Israel student engineering postings;
+    # shared filtering checks software responsibilities role by role.
+    careers_url: https://marvell.wd1.myworkdayjobs.com/en-US/MarvellCareers
+    enabled: true
+    job_url_patterns:
+      - /job/
+    allowed_job_hosts:
+      - marvell.wd1.myworkdayjobs.com
   - name: monday.com
     # The shared role and location filters reject non-Israel/non-junior results.
     careers_url: https://monday.com/careers

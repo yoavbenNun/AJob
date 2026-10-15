@@ -307,7 +307,7 @@ def _required_education_fields(requirements: str) -> tuple[str, ...]:
         levels = _degree_levels(clause)
         has_hard_marker = _has_hard_education_marker(clause)
         is_open = re.search(
-            r"\b(?:related|similar)\s+(?:field|fields|discipline|disciplines)\b|"
+            r"\b(?:related|similar)\s+(?:(?:technical|engineering|scientific)\s+)?(?:field|fields|discipline|disciplines)\b|"
             r"\bor\s+(?:an?\s+)?equivalent(?:\s+discipline|\s+field)?\b",
             clause,
         ) is not None

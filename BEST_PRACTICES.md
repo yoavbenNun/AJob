@@ -93,6 +93,14 @@ reusable lesson appears.
   them by design.
 - Do not treat prose such as "mentor junior team members" as evidence that the
   role itself is junior. Detail-page early-career markers need candidate context.
+- Hardware employers and accepted Electrical/Computer Engineering degrees do not
+  establish a hardware role: classify responsibilities separately from candidate
+  degree eligibility. Reject explicit RTL/ASIC/physical-design roles even when
+  their tooling includes Python; inspect generic student titles for actual
+  software-development responsibilities before accepting them.
+- Candidate-context language such as "currently pursuing a degree" is reliable
+  early-career evidence; a bare "pursuing" in company prose is not. Keep degree
+  eligibility wording such as "related technical field" open to related majors.
 
 ## Data safety
 

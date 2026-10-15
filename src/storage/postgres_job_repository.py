@@ -223,6 +223,14 @@ class PostgresJobRepository:
                 (is_relevant, normalized_url),
             )
 
+    def update_relevance(self, job_id: int, is_relevant: bool) -> None:
+        """Reclassify an exact stored row without normalizing legacy URLs."""
+        with self._connect() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE job_postings SET is_relevant = %s WHERE id = %s",
+                (is_relevant, job_id),
+            )
+
     def update_status(self, job_id: int, status: str) -> JobPosting | None:
         _validate_status(status)
         with self._connect() as connection, connection.cursor() as cursor:

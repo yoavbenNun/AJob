@@ -86,9 +86,18 @@ python -m src.main match path\to\resume.pdf --json --limit 20
 python -m src.main match path\to\resume.pdf --origin "Rishon Lezion, Israel"
 python -m src.main list --status new
 python -m src.main status 42 applied
+python -m src.main reclassify
+python -m src.main reclassify --apply
 python -m src.main export-safe-profile path\to\resume.pdf
 python -m src.main tailor-resume path\to\resume.pdf 42 output --change professional_format --approve
 ```
+
+After updating relevance rules, run `reclassify` to preview their effect on every
+stored job, including previously excluded jobs. Review the reported changes, then
+use `reclassify --apply` to update only relevance flags. Captured descriptions,
+requirements, IDs, discovery dates, and application lifecycle statuses are
+preserved. Both commands accept `--database`; `DATABASE_URL` selects the configured
+PostgreSQL store as with other commands. No career pages are fetched.
 
 Set `RESUME_DIRECTORY` to the folder containing resumes, then start the local
 dashboard with `uvicorn src.web.app:app --reload` and open

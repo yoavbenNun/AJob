@@ -19,6 +19,27 @@ SOFTWARE_TERMS = (
     "site reliability",
     "machine learning engineer",
     "qa automation",
+    "firmware",
+    "embedded software",
+)
+HARDWARE_ROLE_TERMS = (
+    "electrical engineer", "electrical engineering", "hardware engineer",
+    "hardware engineering", "asic", "rtl", "vlsi", "physical design",
+    "design verification", "silicon validation", "board design", "circuit design",
+    "analog", "rf engineer", "fpga",
+)
+HARDWARE_FOCUS_TERMS = (
+    "electrical engineer", "electrical engineering", "hardware engineer",
+    "hardware engineering", "rtl", "vlsi", "physical design",
+    "design verification", "silicon validation", "board design", "circuit design",
+    "analog", "rf engineer", "fpga",
+)
+DETAIL_SOFTWARE_TERMS = (
+    "software development", "develop software",
+    "developing software", "build software", "building software", "write software",
+    "writing software", "build and maintain scripts", "python-based tooling",
+    "develop data pipelines", "maintain data pipelines", "low-level software", "backend", "frontend",
+    "firmware development", "develop firmware", "web applications",
 )
 EARLY_CAREER_TERMS = (
     "intern",
@@ -34,9 +55,6 @@ EARLY_CAREER_TERMS = (
     "entry-level",
     "apprentice",
     "early career",
-)
-DETAIL_EARLY_CAREER_TERMS = tuple(
-    term for term in EARLY_CAREER_TERMS if term != "junior"
 )
 SENIOR_TERMS = (
     "senior",
@@ -73,11 +91,29 @@ def classify_job(job: JobPosting) -> FilterDecision:
         return potential
 
     title = _normalize(job.title)
+    details = _normalize(f"{job.description} {job.requirements}")
+    software_title = any(_contains_phrase(title, term) for term in SOFTWARE_TERMS)
+    hardware_focused_title = any(
+        _contains_phrase(title, term) for term in HARDWARE_FOCUS_TERMS
+    )
+    if not software_title or hardware_focused_title:
+        responsibilities = _normalize(re.split(
+            r"minimum qualifications|basic qualifications|requirements|preferred qualifications",
+            job.description, maxsplit=1, flags=re.IGNORECASE,
+        )[0])
+        if not any(_contains_phrase(responsibilities, term) for term in DETAIL_SOFTWARE_TERMS):
+            return FilterDecision(False, "no software-development responsibilities were found")
     if any(_contains_phrase(title, term) for term in EARLY_CAREER_TERMS):
         return FilterDecision(True, "title contains an early-career marker")
 
-    details = _normalize(f"{job.description} {job.requirements}")
-    if any(_contains_phrase(details, term) for term in DETAIL_EARLY_CAREER_TERMS):
+    if re.search(
+        r"\b(?:currently pursuing\b[^.;\n]{0,80}\b(?:bachelor|master|b\.sc|m\.sc|degree|phd|ph\.d)|currently enrolled|pursuing (?:an? |your )?(?:bachelor|master|b\.sc|m\.sc|degree|phd|ph\.d)|students? (?:in|of|who)|"
+        r"suitable for (?:students?|new graduates)|"
+        r"(?:internship|intern|new graduate|new grad|entry.level|early career) (?:position|role|program)|"
+        r"(?:open to|designed for|for) (?:recent |new )?graduates?|"
+        r"(?:recent |new )graduates? (?:are welcome|are encouraged|may apply))\b",
+        details,
+    ):
         return FilterDecision(True, "job details contain an early-career marker")
     if re.search(r"\b(?:0|zero)\s*(?:-|to)\s*[123]\s+years?\b", details):
         return FilterDecision(True, "job details allow zero years of experience")
@@ -89,7 +125,20 @@ def prefilter_job(job: JobPosting) -> FilterDecision:
     title = _normalize(job.title)
     if any(_contains_phrase(title, term) for term in NON_ENGINEERING_ROLE_TERMS):
         return FilterDecision(False, "title describes a non-engineering role")
-    if not any(_contains_phrase(title, term) for term in SOFTWARE_TERMS):
+    software_title = any(_contains_phrase(title, term) for term in SOFTWARE_TERMS)
+    explicit_software_role = any(_contains_phrase(title, term) for term in (
+        "software engineer", "software engineering", "software developer",
+        "software development", "firmware engineer", "firmware developer",
+        "firmware development",
+    ))
+    hardware_focused = any(_contains_phrase(title, term) for term in HARDWARE_FOCUS_TERMS)
+    if any(_contains_phrase(title, term) for term in HARDWARE_ROLE_TERMS) and (
+        not software_title or (hardware_focused and not explicit_software_role)
+    ):
+        return FilterDecision(False, "title describes a hardware or electrical role")
+    if not software_title and not any(
+        _contains_phrase(title, term) for term in EARLY_CAREER_TERMS
+    ):
         return FilterDecision(False, "title is not software-oriented")
     if any(_contains_phrase(title, term) for term in SENIOR_TERMS) or re.search(
         r"\b(?:ii|iii|iv)\b", title

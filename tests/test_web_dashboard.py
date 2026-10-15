@@ -149,7 +149,7 @@ def test_dashboard_filters_to_relevant_jobs_by_default(tmp_path) -> None:
     assert response.status_code == 200
     assert "Python Software Intern" in response.text
     assert "Unreviewed role" not in response.text
-    assert "Your job search command center" in response.text
+    assert "Opportunity desk" in response.text
     assert "AJob" in response.text
     assert "Job Agent" not in response.text
     assert "Relevant roles" in response.text

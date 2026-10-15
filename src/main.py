@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from dataclasses import asdict
 
 from src.config_loader import load_companies
+from src.filtering.job_filter import classify_job
 from src.location.commute import (
     OpenStreetMapDrivingProvider,
     evaluate_commute,
@@ -100,6 +101,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Lifecycle status to show (default: new)",
     )
     list_parser.add_argument("--json", action="store_true", help="Print stable JSON output")
+    reclassify_parser = subparsers.add_parser(
+        "reclassify", help="Preview current relevance rules against all stored jobs"
+    )
+    reclassify_parser.add_argument("--database", type=Path, default=Path("data/jobs.db"))
+    reclassify_parser.add_argument(
+        "--apply", action="store_true", help="Save relevance changes; preserve details and lifecycle statuses"
+    )
     status_parser = subparsers.add_parser("status", help="Set a stored job's lifecycle status")
     status_parser.add_argument("job_id", type=int, help="Stored job ID")
     status_parser.add_argument("status", choices=JOB_STATUSES, help="New lifecycle status")
@@ -213,6 +221,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_list(args)
     if args.command == "status":
         return _run_status(args)
+    if args.command == "reclassify":
+        return _run_reclassify(args)
     if args.command == "tailor-resume":
         return _run_tailor_resume(args)
     return 1
@@ -326,6 +336,33 @@ def _run_list(args: argparse.Namespace) -> int:
         return 0
     except (FileNotFoundError, OSError, ValueError, RuntimeError, sqlite3.Error, PostgresError) as error:
         print(f"List failed: {error}", file=sys.stderr)
+        return 1
+
+
+def _run_reclassify(args: argparse.Namespace) -> int:
+    try:
+        if not os.getenv("DATABASE_URL") and not args.database.is_file():
+            raise FileNotFoundError(f"Job database not found: {args.database}")
+        repository = create_job_repository(args.database)
+        jobs = repository.list_all()
+        changed = 0
+        relevant = 0
+        for job in jobs:
+            decision = classify_job(job)
+            relevant += int(decision.relevant)
+            if decision.relevant == job.is_relevant:
+                continue
+            changed += 1
+            print(f"{job.id}. {job.title}: {job.is_relevant} -> {decision.relevant} ({decision.reason})")
+            if args.apply:
+                repository.update_relevance(job.id, decision.relevant)
+        mode = "Applied" if args.apply else "Dry run"
+        print(f"{mode}: {len(jobs)} jobs checked, {relevant} relevant, {changed} relevance changes.")
+        if not args.apply:
+            print("Use --apply to save relevance changes. Job details and lifecycle statuses are preserved.")
+        return 0
+    except (FileNotFoundError, OSError, ValueError, RuntimeError, sqlite3.Error, PostgresError) as error:
+        print(f"Reclassification failed: {error}", file=sys.stderr)
         return 1
 
 

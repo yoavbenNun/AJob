@@ -322,6 +322,14 @@ def test_related_field_wording_does_not_disqualify_known_major() -> None:
 
     assert match_resume_to_job(resume, job).eligible is True
 
+    # Official Google internships allow a related technical field, including
+    # software engineering; this must not become a closed CS-only requirement.
+    job.requirements = (
+        "Minimum qualifications: Currently enrolled in a Bachelor's or Master's "
+        "degree in Computer Science or a related technical field."
+    )
+    assert match_resume_to_job(resume, job).eligible is True
+
 
 def test_preferred_degree_field_does_not_disqualify() -> None:
     resume = parse_resume_text(

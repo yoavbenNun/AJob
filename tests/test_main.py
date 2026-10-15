@@ -1,4 +1,6 @@
 import json
+import sqlite3
+from dataclasses import asdict
 from pathlib import Path
 
 from src.main import main
@@ -15,6 +17,69 @@ Software Engineering Intern building Python REST APIs.
 EDUCATION
 B.Sc. Computer Science
 """
+
+
+def test_reclassify_previews_then_changes_only_relevance(tmp_path: Path, capsys, monkeypatch) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    database = tmp_path / "jobs.db"
+    repository = JobRepository(database)
+    repository.initialize()
+    for title, relevant, status in (
+        ("Software Engineering Intern", False, "applied"),
+        ("Senior Software Engineer", True, "ignored"),
+    ):
+        repository.save(JobPosting(
+            title, "Example", "Haifa, Israel", f"https://example.com/jobs/{status}",
+            description="Build Python backend services.", requirements="Python and Git",
+            source="official careers", is_relevant=relevant, status=status,
+        ))
+    before = [asdict(job) for job in repository.list_all()]
+
+    assert main(["reclassify", "--database", str(database)]) == 0
+    assert "Dry run" in capsys.readouterr().out
+    assert [asdict(job) for job in repository.list_all()] == before
+
+    assert main(["reclassify", "--database", str(database), "--apply"]) == 0
+    assert "2 relevance changes" in capsys.readouterr().out
+    after = [asdict(job) for job in repository.list_all()]
+    for original, updated in zip(before, after):
+        assert updated.pop("is_relevant") is not original.pop("is_relevant")
+        assert updated == original
+    assert main(["reclassify", "--database", str(database), "--apply"]) == 0
+    assert "0 relevance changes" in capsys.readouterr().out
+
+
+def test_reclassify_missing_database_does_not_create_it(tmp_path: Path, capsys, monkeypatch) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    database = tmp_path / "missing.db"
+    assert main(["reclassify", "--database", str(database)]) == 1
+    assert "Job database not found" in capsys.readouterr().err
+    assert not database.exists()
+
+
+def test_reclassify_preview_does_not_normalize_legacy_urls(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    database = tmp_path / "jobs.db"
+    repository = JobRepository(database)
+    repository.initialize()
+    job_id = repository.save(JobPosting(
+        "Software Intern", "Example", "Israel", "https://example.com/jobs/legacy",
+        is_relevant=False, status="applied",
+    ))
+    legacy_url = "https://example.com/jobs/legacy?utm_source=old"
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE job_postings SET job_url = ? WHERE id = ?", (legacy_url, job_id))
+    original_bytes = database.read_bytes()
+
+    assert main(["reclassify", "--database", str(database)]) == 0
+
+    assert database.read_bytes() == original_bytes
+    assert repository.get_by_id(job_id).job_url == legacy_url
+    assert main(["reclassify", "--database", str(database), "--apply"]) == 0
+    updated = repository.get_by_id(job_id)
+    assert updated.is_relevant is True
+    assert updated.job_url == legacy_url
+    assert updated.status == "applied"
 
 
 def _database_with_jobs(path: Path) -> tuple[JobRepository, int]:

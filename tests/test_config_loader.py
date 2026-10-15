@@ -63,7 +63,7 @@ def test_default_company_sources_use_safe_enabled_and_disabled_entries() -> None
     assert companies["Apple"].job_url_patterns == ("/en-il/details/",)
     assert companies["NVIDIA"].enabled is True
     assert companies["Intel"].enabled is True
-    for name in ("KLA", "F5", "Motorola Solutions", "Red Hat", "Clarivate", "Qualcomm"):
+    for name in ("KLA", "F5", "Motorola Solutions", "Red Hat", "Clarivate", "Qualcomm", "Marvell"):
         assert companies[name].enabled is True
         assert "myworkdayjobs.com" in companies[name].careers_url
     assert companies["monday.com"].enabled is True
