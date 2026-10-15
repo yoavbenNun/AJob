@@ -248,3 +248,11 @@ reusable lesson appears.
 - Reject missing or oversized upload request lengths before multipart parsing, and
   validate that upload directories are real descendants rather than links or
   junctions before writing sensitive resume files.
+
+# Cloud schedule retries
+
+- GitHub Actions cron can be delayed or dropped, and a scan can outlast a short
+  job timeout. Use several same-slot retries away from the hour boundary, keep
+  delivery claims idempotent, and expire abandoned claims before the final
+  retry. The shared workflow concurrency group prevents its own retries from
+  reclaiming a live scan.

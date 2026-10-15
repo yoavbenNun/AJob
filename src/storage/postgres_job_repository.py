@@ -86,7 +86,7 @@ class PostgresJobRepository:
                     last_error = ''
                 WHERE notification_deliveries.status = 'failed'
                    OR (notification_deliveries.status = 'processing'
-                       AND notification_deliveries.claimed_at < NOW() - INTERVAL '20 minutes')
+                       AND notification_deliveries.claimed_at < NOW() - INTERVAL '5 minutes')
                 RETURNING slot_key
                 """,
                 (slot_key,),

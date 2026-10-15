@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 ISRAEL_TIMEZONE = ZoneInfo("Asia/Jerusalem")
 TARGET_LOCAL_HOURS = frozenset({8, 11, 16})
-SCHEDULE_MINUTES = frozenset({17, 47})
+SCHEDULE_MINUTES = frozenset({17, 27, 37, 47, 57})
 CRON_PATTERN = re.compile(r"^(\d{1,2})\s+(\d{1,2})\s+\*\s+\*\s+\*$")
 
 

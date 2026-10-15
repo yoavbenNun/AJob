@@ -53,9 +53,10 @@ def test_runner_delay_does_not_change_intended_slot() -> None:
 
 def test_retry_maps_to_same_canonical_delivery_slot() -> None:
     reference = datetime(2026, 7, 1, 14, 55, tzinfo=timezone.utc)
-    assert delivery_slot_for_schedule("17 13 * * *", reference) == (
-        delivery_slot_for_schedule("47 13 * * *", reference)
-    )
+    expected_slot = delivery_slot_for_schedule("17 13 * * *", reference)
+    for minute in (27, 37, 47, 57):
+        assert should_run_scheduled_scan(f"{minute} 13 * * *", reference)
+        assert delivery_slot_for_schedule(f"{minute} 13 * * *", reference) == expected_slot
 
 
 def test_delay_across_utc_midnight_uses_previous_scheduled_date() -> None:
@@ -95,10 +96,12 @@ def test_cloud_workflow_never_succeeds_without_email_configuration() -> None:
     assert "python -m src.main scan --email-summary" in workflow
     assert 'cron: "0 ' not in workflow
     expressions = re.findall(r'- cron: "([^"]+)"', workflow)
-    assert expressions == [
-        "17 5 * * *", "17 6 * * *", "17 8 * * *",
-        "17 9 * * *", "17 13 * * *", "17 14 * * *",
-        "47 5 * * *", "47 6 * * *", "47 8 * * *",
-        "47 9 * * *", "47 13 * * *", "47 14 * * *",
-    ]
+    assert len(expressions) == 30
+    assert {expression.split()[0] for expression in expressions} == {
+        "17", "27", "37", "47", "57"
+    }
+    assert {expression.split()[1] for expression in expressions} == {
+        "5", "6", "8", "9", "13", "14"
+    }
+    assert "timeout-minutes: 35" in workflow
     assert '--delivery-slot "${{ steps.schedule_gate.outputs.delivery_slot }}"' in workflow

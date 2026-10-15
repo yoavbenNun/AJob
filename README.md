@@ -158,10 +158,11 @@ free-form resume prose.
 GitHub Actions cron expressions use UTC and do not support a per-schedule time
 zone. The workflow schedules both possible UTC offsets for each target hour as
 distinct cron expressions, then maps the intended cron slot to `Asia/Jerusalem`.
-It runs only the slots corresponding to `08:17`, `11:17`, and `16:17` Israel time,
-including across daylight-saving changes. Each slot also has a backup trigger 30
-minutes later. PostgreSQL stores an atomic delivery claim: a successful primary
-email makes its backup a no-op, while a failed or expired claim can be retried.
+It targets `08:17`, `11:17`, and `16:17` Israel time, including across
+daylight-saving changes, with retries every ten minutes through minute `:57`.
+PostgreSQL stores an atomic delivery claim, so retries do not send duplicate
+emails; failed or stale claims can be retried. Scan jobs have a 35-minute limit
+so a slow career-page scan has more time to complete.
 A delayed GitHub runner still executes the intended scan instead of being rejected
 based on its actual start time. A manual **Run workflow** dispatch bypasses this
 gate. GitHub may still delay or omit scheduled starts, and SMTP cannot guarantee

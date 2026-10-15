@@ -283,7 +283,7 @@ def test_expired_delivery_claim_can_be_retried(tmp_path: Path) -> None:
     assert repository.begin_delivery(slot) is True
     with sqlite3.connect(database) as connection:
         connection.execute(
-            "UPDATE notification_deliveries SET claimed_at = datetime('now', '-21 minutes') "
+            "UPDATE notification_deliveries SET claimed_at = datetime('now', '-6 minutes') "
             "WHERE slot_key = ?",
             (slot,),
         )

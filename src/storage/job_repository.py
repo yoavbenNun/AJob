@@ -77,7 +77,7 @@ class JobRepository:
                     last_error = ''
                 WHERE notification_deliveries.status = 'failed'
                    OR (notification_deliveries.status = 'processing'
-                       AND notification_deliveries.claimed_at < datetime('now', '-20 minutes'))
+                       AND notification_deliveries.claimed_at < datetime('now', '-5 minutes'))
                 """,
                 (slot_key,),
             )
