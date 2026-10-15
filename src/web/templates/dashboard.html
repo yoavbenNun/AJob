@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AJob · Opportunity dashboard</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}?v=20261015-4">
+  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}?v=20261015-6">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -94,5 +94,6 @@
       {% else %}<div class="empty"><span class="empty-mark" aria-hidden="true">⌕</span><h2>No matching jobs</h2><p>Try broadening the filters or wait for the next scheduled scan.</p></div>{% endif %}
     </section>
   </main>
+  <script src="{{ url_for('static', path='ui.js') }}?v=20261015-1" defer></script>
 </body>
 </html>
