@@ -537,7 +537,8 @@ def test_dashboard_previews_and_generates_an_explicitly_approved_tailored_resume
     assert preview.status_code == 200
     assert "Tailor your resume" in preview.text
     assert "Current" in preview.text
-    assert "Tailored" in preview.text
+    assert "After these edits" in preview.text
+    assert "These edits improve presentation, not the score" in preview.text
     assert "Choose changes" in preview.text
     assert "Suggested" in preview.text
     assert "Why it’s supported" in preview.text

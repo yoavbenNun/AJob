@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ job.title }} · AJob</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}?v=20261015-6">
+  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}?v=20261015-7">
 </head>
 <body>
   <a class="skip-link" href="#job-content">Skip to job details</a>
@@ -34,8 +34,8 @@
     <details class="content-section collapsible-section" open>
       <summary><span class="section-summary"><h2>Tailor your resume</h2><small>{{ tailoring_proposal.changes|length }} suggested change{% if tailoring_proposal.changes|length != 1 %}s{% endif %}</small></span></summary>
       <div class="collapsible-section__body">
-      <div class="score-preview"><span>Current <strong>{{ tailoring_proposal.before_score }}</strong></span><span aria-hidden="true">→</span><span>Tailored <strong>{{ tailoring_proposal.after_score }}</strong></span></div>
-      <p class="safety-note"><strong>Truth first.</strong> Only facts already supported by your resume can be added.</p>
+      <div class="score-preview"><span>Current score <strong>{{ tailoring_proposal.before_score }}</strong></span><span aria-hidden="true">→</span><span>After these edits <strong>{{ tailoring_proposal.after_score }}</strong></span></div>
+      <p class="safety-note"><strong>These edits improve presentation, not the score.</strong> They reorder and format evidence already in your resume, so the match score stays the same. To improve it, add relevant skills, experience, or projects to your source resume only when they accurately describe your background, then select “Refresh match.”</p>
       <h3 class="subsection-title">Choose changes</h3>
       <form class="match-form" method="post" action="/jobs/{{ job.id }}/tailor">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

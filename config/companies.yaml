@@ -156,13 +156,13 @@ companies:
     allowed_job_hosts:
       - www.appsflyer.com
   - name: Similarweb
-    careers_url: https://www.similarweb.com/corp/careers/jobs/
-    # The public careers page still needs a verified job-feed adapter.
-    enabled: false
+    # Official Greenhouse board exposes public job-detail links.
+    careers_url: https://job-boards.greenhouse.io/similarweb
+    enabled: true
     job_url_patterns:
-      - /job/
+      - /jobs/
     allowed_job_hosts:
-      - www.similarweb.com
+      - job-boards.greenhouse.io
   - name: Wix
     careers_url: https://careers.wix.com/positions
     # The current page loads job data outside normal anchor markup. Keep this
@@ -172,3 +172,69 @@ companies:
       - /position/
     allowed_job_hosts:
       - careers.wix.com
+  - name: Cisco
+    # Official careers listing; shared relevance and Israel filters narrow results.
+    careers_url: https://careers.cisco.com/global/en/search-results?keywords=Israel
+    enabled: true
+    job_url_patterns:
+      - /global/en/job/
+    allowed_job_hosts:
+      - careers.cisco.com
+  - name: Palo Alto Networks
+    # Official Israel careers search; shared filters select relevant roles.
+    careers_url: https://jobs.paloaltonetworks.com/en/search-jobs?l=Israel
+    enabled: true
+    job_url_patterns:
+      - /en/job/
+      - /en/jobs/
+    allowed_job_hosts:
+      - jobs.paloaltonetworks.com
+  - name: Taboola
+    # Official careers page links to its public job detail pages.
+    careers_url: https://www.taboola.com/careers
+    enabled: true
+    job_url_patterns:
+      - /careers/job/
+    allowed_job_hosts:
+      - www.taboola.com
+  - name: Fiverr
+    # Official careers listing; shared filters enforce location and relevance.
+    careers_url: https://www.fiverr.com/jobs
+    enabled: true
+    job_url_patterns:
+      - /jobs/
+    allowed_job_hosts:
+      - www.fiverr.com
+  - name: Rapyd
+    # Official careers listing with public position detail links.
+    careers_url: https://www.rapyd.net/company/careers-search/
+    enabled: true
+    job_url_patterns:
+      - /company/careers/positions/
+    allowed_job_hosts:
+      - www.rapyd.net
+  - name: Pagaya
+    # Official Greenhouse board exposes public job-detail links.
+    careers_url: https://job-boards.greenhouse.io/pagayais
+    enabled: true
+    job_url_patterns:
+      - /jobs/
+    allowed_job_hosts:
+      - job-boards.greenhouse.io
+  - name: Gong
+    # Official Greenhouse board exposes public job-detail links.
+    careers_url: https://job-boards.greenhouse.io/gongio
+    enabled: true
+    job_url_patterns:
+      - /jobs/
+    allowed_job_hosts:
+      - job-boards.greenhouse.io
+  - name: Applied Materials
+    # Official Israel careers listing; shared filters select relevant roles.
+    careers_url: https://jobs.appliedmaterials.com/en/search-jobs
+    enabled: true
+    job_url_patterns:
+      - /en/job/
+      - /en/jobs/
+    allowed_job_hosts:
+      - jobs.appliedmaterials.com

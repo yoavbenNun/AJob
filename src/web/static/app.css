@@ -443,9 +443,12 @@ label { color: #3b526b; font-size: .76rem; }
 .notice, .error-panel { border-radius: 11px; box-shadow: 0 4px 9px #122b4708, 0 12px 26px #122b470a; }
 
 .detail-app-bar { margin-bottom: 1.25rem; }
-.back-link { min-height: 42px; }
-.back-link__icon { width: 32px; height: 32px; border-radius: 9px; background: #ffffffc9; box-shadow: 0 3px 8px #122b470a; transition: transform .16s ease, box-shadow .16s ease; }
-.back-link:hover .back-link__icon { box-shadow: 0 5px 12px #122b4715; transform: translateX(-3px); }
+.back-link { display: inline-flex; align-items: center; gap: .65rem; min-height: 44px; margin: 0 0 1rem; padding: 0 1rem; border: 1px solid #d7e1ed; border-radius: 13px; background: linear-gradient(145deg, #fff, #f4f8fc); box-shadow: 0 4px 12px #15314b0d, inset 0 1px #ffffff; color: #405872; font-size: .82rem; font-weight: 700; text-decoration: none; transition: color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.back-link:hover { border-color: #b5c9dd; background: #fff; box-shadow: 0 9px 20px #173b5b1c, 0 2px 5px #173b5b0b; color: #173b5b; text-decoration: none; transform: translateY(-2px); }
+.back-link:active { box-shadow: 0 2px 6px #173b5b12; transform: translateY(0); }
+.back-link:focus-visible { outline: 3px solid #5b9de5; outline-offset: 3px; }
+.back-link__icon { display: inline; width: auto; height: auto; border: 0; border-radius: 0; background: transparent; box-shadow: none; font-size: 1rem; line-height: 1; transition: transform .18s ease; }
+.back-link:hover .back-link__icon { box-shadow: none; transform: translateX(-3px); }
 .detail-hero { position: relative; padding: clamp(1.1rem, 3vw, 2rem); border-color: #ffffff; border-radius: 22px; background: radial-gradient(circle at 95% 5%, #dceceb 0, transparent 23rem), linear-gradient(120deg, #fff, #f3f7fa); box-shadow: 0 5px 12px #122b470a, 0 22px 54px #122b4716, inset 0 1px 0 #fff; }
 .detail-company-mark { width: 64px; height: 64px; border-radius: 16px; box-shadow: 0 4px 10px #122b470e, 0 12px 24px #122b470a; }
 .detail-hero h1 { font-weight: 720; }

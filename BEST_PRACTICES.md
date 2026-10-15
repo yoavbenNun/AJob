@@ -135,6 +135,9 @@ reusable lesson appears.
   must never be silently deleted.
 - Keep match scoring deterministic and explainable before adding an LLM. Every
   point should map to visible resume/job evidence.
+- Do not present formatting or reordering suggestions as score improvements.
+  Show that the score stays unchanged and explain that only accurate new resume
+  evidence, followed by a fresh match, can change it.
 - Do not award fit points merely because a resume section exists. Experience and
   project points require explicit evidence tied to recognized job skills.
 - Never turn a missing skill into a resume claim. Suggest learning it or adding it

@@ -71,6 +71,23 @@ def test_tailoring_proposal_keeps_score_truthful_and_names_job_output() -> None:
     assert tailored_resume_filename(job) == "Example-Python-Intern-tailored.docx"
 
 
+def test_tailoring_keeps_score_unchanged_when_it_only_changes_presentation() -> None:
+    profile = parse_resume_text(
+        "Dana Developer\nSKILLS\nPython\nEXPERIENCE\n"
+        "Used Kubernetes to deploy a service.\nEDUCATION\nB.Sc. Computer Science"
+    )
+    job = JobPosting(
+        "Software Intern", "Example", "Remote", "https://example.com/jobs/2",
+        requirements="Python and Kubernetes",
+    )
+    match = match_resume_to_job(profile, job)
+
+    proposal = build_tailoring_proposal(profile, job, match)
+    assert "Kubernetes" in profile.skills
+    assert proposal.before_score == proposal.after_score == match.score
+    assert all(change.score_delta == 0 for change in proposal.changes)
+
+
 def test_tailored_resume_cannot_replace_master_resume(tmp_path: Path) -> None:
     profile, job, match = _inputs()
     master = tmp_path / "master.docx"
