@@ -5,7 +5,7 @@ from docx import Document
 from src.models import JobPosting
 from src.applications.service import discover_resume_pairs
 from src.storage.job_repository import JobRepository
-from src.web.app import create_app
+from src.web.app import _clean_captured_lines, create_app
 
 
 def _client_with_jobs(tmp_path):
@@ -124,7 +124,7 @@ def test_outreach_rejects_invalid_profile_url(tmp_path) -> None:
         "role_title": "Engineer", "company": "Example", "profile_url": "javascript:bad",
     })
     assert "public HTTP(S) URL" in response.text
-    assert "Tailored resume pair" in response.text
+    assert "Tailored resume" in response.text
     assert "Set RESUME_DIRECTORY and create a tailored" not in response.text
 
 
@@ -181,13 +181,45 @@ def test_job_detail_uses_collapsible_content_sections(tmp_path) -> None:
 
     assert response.status_code == 200
     assert response.text.count('class="content-section collapsible-section"') >= 5
-    assert "<summary><h2>Description</h2></summary>" in response.text
-    assert "<summary><h2>Requirements</h2></summary>" in response.text
-    assert "<summary><h2>Local match</h2></summary>" in response.text
-    assert "<summary><h2>Application package</h2></summary>" in response.text
-    assert "<summary><h2>Professional outreach</h2></summary>" in response.text
+    assert "<h2>About the role</h2>" in response.text
+    assert "<h2>What they’re looking for</h2>" in response.text
+    assert "<h2>Resume match</h2>" in response.text
+    assert "<h2>Prepare application</h2>" in response.text
+    assert "<h2>Contact people</h2>" in response.text
     assert "AJob" in response.text
     assert "company-generic.svg" in response.text
+
+
+def test_job_detail_copy_removes_source_navigation_without_losing_job_facts() -> None:
+    job = JobPosting(
+        "Python Intern", "Example", "Tel Aviv", "https://example.com/job",
+        description="Skip to main content\nApply now\nPython Intern\nBuild APIs.\nWork with mentors.",
+    )
+
+    assert _clean_captured_lines(job.description, job) == [
+        "Build APIs.",
+        "Work with mentors.",
+    ]
+
+
+def test_job_detail_copy_preserves_meaningful_leading_symbols_and_mixed_facts() -> None:
+    job = JobPosting(
+        "Systems Intern", "Example", "Tel Aviv", "https://example.com/job",
+        description=(
+            "Job ID: 12345\n"
+            "Job ID: 12345 | Tel Aviv\n"
+            "*nix experience\n"
+            "-Werror knowledge\n"
+            "- C++ experience"
+        ),
+    )
+
+    assert _clean_captured_lines(job.description, job) == [
+        "Job ID: 12345 | Tel Aviv",
+        "*nix experience",
+        "-Werror knowledge",
+        "C++ experience",
+    ]
 
 
 def test_dashboard_uploads_resume_and_preserves_local_path_privacy(tmp_path) -> None:
@@ -307,10 +339,10 @@ def test_job_detail_calculates_a_local_match_without_exposing_resume_text(tmp_pa
     )
 
     assert response.status_code == 200
-    assert "/100 fit score" in response.text
+    assert "/100 match" in response.text
     assert "Dana Developer" not in response.text
     assert "Set RESUME_DIRECTORY and create a tailored" not in response.text
-    assert "Tailored resume pair" in response.text
+    assert "Tailored resume" in response.text
 
 
 def test_dashboard_previews_and_generates_an_explicitly_approved_tailored_resume(tmp_path) -> None:
@@ -327,11 +359,12 @@ def test_dashboard_previews_and_generates_an_explicitly_approved_tailored_resume
     )
 
     assert preview.status_code == 200
-    assert "Factual tailoring proposal" in preview.text
-    assert "Score preview:" in preview.text
-    assert "Before:" in preview.text and "After:" in preview.text
+    assert "Tailor your resume" in preview.text
+    assert "Current" in preview.text
+    assert "Tailored" in preview.text
     assert "Choose changes" in preview.text
-    assert "Original:" in preview.text and "Proposed:" in preview.text
+    assert "Suggested" in preview.text
+    assert "Why it’s supported" in preview.text
 
     generated = client.post(
         f"/jobs/{job_id}/tailor",
@@ -433,7 +466,7 @@ def test_application_requires_exact_preview_then_records_manual_submission(tmp_p
     )
 
     assert preview.status_code == 200
-    assert "Exact package approval" in preview.text
+    assert "Review and approve" in preview.text
     assert "does not submit an application" in preview.text
     token = re.search(r'name="application_token" value="([^"]+)"', preview.text).group(1)
 
@@ -532,7 +565,7 @@ def test_application_rejects_unknown_or_malicious_resume_pair_id(tmp_path) -> No
     )
 
     assert "available tailored resume pair" in response.text
-    assert "Exact package approval" not in response.text
+    assert "Review and approve" not in response.text
 
 
 def test_application_rejects_pair_deleted_after_form_was_loaded(tmp_path) -> None:
@@ -544,7 +577,7 @@ def test_application_rejects_pair_deleted_after_form_was_loaded(tmp_path) -> Non
     response = client.post(f"/jobs/{job_id}/application/preview", data=form)
 
     assert "available tailored resume pair" in response.text
-    assert "Exact package approval" not in response.text
+    assert "Review and approve" not in response.text
 
 
 def test_application_preview_requires_csrf(tmp_path) -> None:

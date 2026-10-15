@@ -150,6 +150,9 @@ reusable lesson appears.
   Do not persist the home location, coordinates, or route details in the jobs DB.
 - Detail pages can contain a reliable location even when listing cards do not.
   Prefer explicit accessibility markers such as `place` over guessing from prose.
+- Career pages often leak navigation labels and duplicate headings into captured
+  descriptions. Remove only exact, known page-chrome lines for display, preserve
+  every factual job line, and test that cleanup never rewrites stored source text.
 
 ## Notifications and scheduled runs
 

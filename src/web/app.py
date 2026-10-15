@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import time
 from datetime import date
@@ -625,8 +626,40 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
     return templates.TemplateResponse(
         request,
         "job_detail.html",
-        {"job": job, "statuses": JOB_STATUSES, "company_logos": COMPANY_LOGOS, **context},
+        {
+            "job": job,
+            "statuses": JOB_STATUSES,
+            "company_logos": COMPANY_LOGOS,
+            "description_lines": _clean_captured_lines(job.description, job),
+            "requirement_lines": _clean_captured_lines(job.requirements, job),
+            **context,
+        },
     )
+
+
+def _clean_captured_lines(text: str, job: JobPosting) -> list[str]:
+    """Remove obvious career-site chrome while preserving captured job facts."""
+    ignored = {
+        "skip to main content",
+        "amazon jobs home page",
+        "my career",
+        "apply now",
+        "description",
+        "requirements",
+        "basic qualifications",
+        "preferred qualifications",
+        job.title.casefold().strip(),
+    }
+    cleaned: list[str] = []
+    for raw_line in text.splitlines():
+        line = re.sub(r"^(?:[•*-]\s+)", "", raw_line.strip()).strip()
+        key = line.casefold()
+        if not line or key in ignored or re.fullmatch(r"job id:\s*[\w-]+", key):
+            continue
+        if cleaned and cleaned[-1].casefold() == key:
+            continue
+        cleaned.append(line)
+    return cleaned
 
 
 def _validate_csrf(form: dict[str, list[str]], expected: str) -> None:
