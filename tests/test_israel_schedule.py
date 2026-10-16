@@ -104,4 +104,5 @@ def test_cloud_workflow_never_succeeds_without_email_configuration() -> None:
         "5", "6", "8", "9", "13", "14"
     }
     assert "timeout-minutes: 35" in workflow
+    assert "  queue: max" in workflow
     assert '--delivery-slot "${{ steps.schedule_gate.outputs.delivery_slot }}"' in workflow

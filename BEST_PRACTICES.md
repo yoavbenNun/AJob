@@ -262,5 +262,7 @@ reusable lesson appears.
 - GitHub Actions cron can be delayed or dropped, and a scan can outlast a short
   job timeout. Use several same-slot retries away from the hour boundary, keep
   delivery claims idempotent, and expire abandoned claims before the final
-  retry. The shared workflow concurrency group prevents its own retries from
-  reclaiming a live scan.
+  retry. If a concurrency group serializes scheduled retries, set `queue: max`:
+  GitHub otherwise keeps only one pending run and replaces older pending retries;
+  with `queue: max`, up to 100 pending runs wait. Delivery claims still prevent
+  overlapping retries from sending duplicate mail.
