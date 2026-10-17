@@ -197,6 +197,23 @@ reusable lesson appears.
 
 ## Notifications and scheduled runs
 
+- Pass an explicit `ssl.create_default_context()` to SMTP STARTTLS before login;
+  encryption without certificate and hostname validation does not authenticate
+  the server. Keep plaintext SMTP restricted to loopback development servers.
+- Loopback binding alone is not a browser trust boundary. Allowlist local Host
+  values, reject cross-origin mutations, keep CSRF checks, and deny framing.
+  Exercise these protections without calling real recipient or mail services.
+- Portfolio screenshots must use disposable synthetic stores and resumes, remove
+  cloud configuration before importing the default app, and block external browser
+  traffic. Never capture the personal dashboard as a shortcut to demo assets.
+- Test the secret scanner against ordinary source and a synthetic token before
+  scanning history. detect-secrets' eager string API differs from its file API;
+  use normal file scanning and bound redacted findings to avoid unusable output.
+- When running pytest from an isolated temporary working directory, set explicit
+  project root/confcutdir boundaries and copy required public config fixtures.
+  Otherwise parent discovery can stall and relative fixture paths fail even when
+  the code is correct; never solve isolation by connecting tests to real cloud data.
+
 - Keep SMTP settings exclusively in environment variables or secret stores; do not
   place credentials in YAML, source code, images, or test fixtures that resemble
   real credentials.

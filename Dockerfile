@@ -8,11 +8,12 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt \
+RUN python -m pip install --no-cache-dir --upgrade "pip>=26.2,<27" \
+    && pip install --no-cache-dir -r requirements.txt \
     && playwright install --with-deps chromium
 
 COPY src ./src
-COPY config ./config
+COPY config/companies.yaml ./config/companies.yaml
 
 RUN useradd --create-home appuser \
     && mkdir -p /app/data \

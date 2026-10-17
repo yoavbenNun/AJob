@@ -69,7 +69,9 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       CANDIDATE_PROFILE_JSON: ${{ secrets.CANDIDATE_PROFILE_JSON }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
       - name: Run only at scheduled Israel times
         id: schedule_gate
         shell: bash

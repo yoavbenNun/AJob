@@ -26,7 +26,7 @@ def test_postgres_dashboard_starts_without_schema_ownership(tmp_path, monkeypatc
         tmp_path / "unused.db",
         outreach_database_path=tmp_path / "outreach.db",
         application_database_path=tmp_path / "applications.db",
-    ))
+    ), base_url="http://127.0.0.1")
     assert verified == [True]
     assert client.get("/health").json()["storage"] == "postgres"
 
@@ -51,7 +51,7 @@ def _client_with_jobs(tmp_path):
         database, resume_directory=tmp_path,
         outreach_database_path=tmp_path / "outreach.db",
         application_database_path=tmp_path / "applications.db",
-    )), job_id
+    ), base_url="http://127.0.0.1"), job_id
 
 
 def test_outreach_requires_preview_and_approval_before_storing_draft(tmp_path) -> None:
@@ -212,7 +212,7 @@ def test_dashboard_reloads_scan_sources_from_current_config(tmp_path) -> None:
         outreach_database_path=tmp_path / "outreach.db",
         application_database_path=tmp_path / "applications.db",
         company_config_path=config,
-    ))
+    ), base_url="http://127.0.0.1")
     assert "First Source" in client.get("/").text
 
     config.write_text(
@@ -330,7 +330,7 @@ def test_dashboard_updates_cloud_notification_recipient_with_approval(tmp_path) 
         outreach_database_path=tmp_path / "outreach.db",
         application_database_path=tmp_path / "applications.db",
         notification_recipient_updater=updated.append,
-    ))
+    ), base_url="http://127.0.0.1")
     page = client.get("/")
     csrf = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
 
@@ -556,7 +556,7 @@ def test_dashboard_hides_foreign_jobs_by_default_and_can_show_them(tmp_path) -> 
         database, resume_directory=tmp_path,
         outreach_database_path=tmp_path / "outreach.db",
         application_database_path=tmp_path / "applications.db",
-    ))
+    ), base_url="http://127.0.0.1")
 
     default_page = client.get("/")
     all_locations = client.get("/", params={"location": "all"})

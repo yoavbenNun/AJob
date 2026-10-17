@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import smtplib
+import ssl
 from dataclasses import dataclass
 from email.message import EmailMessage
 from typing import Callable, Mapping
@@ -62,6 +63,10 @@ def load_smtp_settings(environ: Mapping[str, str] | None = None) -> SmtpSettings
     tls_value = values.get("SMTP_USE_TLS", "true").strip().casefold()
     if tls_value not in {"true", "false"}:
         raise ValueError("SMTP_USE_TLS must be true or false.")
+    if tls_value == "false" and values["SMTP_HOST"].strip().casefold() not in {
+        "localhost", "127.0.0.1", "::1",
+    }:
+        raise ValueError("SMTP_USE_TLS=false is restricted to a local development server.")
     return SmtpSettings(
         host=values["SMTP_HOST"].strip(),
         port=port,
@@ -119,7 +124,7 @@ def send_scan_summary(
     message = compose_scan_summary(settings, summary, recommendations)
     with smtp_factory(settings.host, settings.port, timeout=30) as client:
         if settings.use_tls:
-            client.starttls()
+            client.starttls(context=ssl.create_default_context())
         if settings.username:
             client.login(settings.username, settings.password)
         client.send_message(message)

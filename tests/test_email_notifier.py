@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 import pytest
+import ssl
 
 from src.notifications.email_notifier import (
     EmailJobRecommendation,
@@ -63,7 +64,9 @@ def test_send_scan_summary_uses_tls_authentication_and_mocked_smtp() -> None:
         def __exit__(self, *args):
             return None
 
-        def starttls(self):
+        def starttls(self, *, context):
+            assert context.verify_mode == ssl.CERT_REQUIRED
+            assert context.check_hostname is True
             calls.append("starttls")
 
         def login(self, username, password):
@@ -84,6 +87,28 @@ def test_send_scan_summary_uses_tls_authentication_and_mocked_smtp() -> None:
         ("login", "agent@example.test", "not-a-real-secret"),
         ("message", "AJob: 0 new matching job(s)"),
     ]
+
+
+def test_plaintext_smtp_is_only_available_for_local_development() -> None:
+    with pytest.raises(ValueError, match="local development"):
+        load_smtp_settings({**ENV, "SMTP_USE_TLS": "false"})
+    assert not load_smtp_settings({**ENV, "SMTP_HOST": "127.0.0.1", "SMTP_USE_TLS": "false"}).use_tls
+
+
+def test_certificate_failure_aborts_before_smtp_login() -> None:
+    class UntrustedSmtp:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return None
+        def starttls(self, *, context):
+            raise ssl.SSLCertVerificationError("Untrusted test certificate")
+        def login(self, *args):
+            pytest.fail("Credentials must not be sent after TLS failure")
+        def send_message(self, *args):
+            pytest.fail("Mail must not be sent after TLS failure")
+    with pytest.raises(ssl.SSLCertVerificationError):
+        send_scan_summary(load_smtp_settings(ENV), Summary(), smtp_factory=lambda *a, **kw: UntrustedSmtp())
 
 
 def test_compose_scan_summary_lists_new_jobs() -> None:

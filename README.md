@@ -1,258 +1,220 @@
-# AJob
+# AJob — Personal Job Discovery Workspace
 
-AJob is a local-first assistant for discovering relevant student,
-intern, and junior software roles. The long-term goal is to compare roles with a
-resume, explain fit, and prepare tailored application material while keeping all
-rewrites and submissions behind explicit human approval.
+**Active Development** · Python · FastAPI · Playwright · PostgreSQL · SQLite · Docker
 
-## Current scope
+AJob helps an early-career software developer turn scattered career pages into a
+reviewable opportunity inbox. It is a working personal tool built by a third-year
+software engineering student: cloud workers discover jobs, while a local dashboard
+keeps resume analysis and application preparation on the user's computer.
 
-The current MVP provides:
+## Why I built it
 
-- YAML configuration for target companies
-- typed `Company` and `JobPosting` domain models
-- SQLite persistence for discovered jobs
-- a Playwright scanner that visits enabled career pages
-- configurable URL-pattern extraction of job links
-- bounded pagination through listing pages
-- deterministic filtering for early-career software roles
-- full detail-page text and requirements-section extraction for accepted roles
-- local TXT, Markdown, PDF, and DOCX resume parsing
-- normalized contact details, resume sections, and technical skills
-- deterministic resume-to-job scoring from 1 to 100
-- transparent score breakdown, matched skills, missing skills, strengths, and gaps
-- evidence-backed resume tailoring suggestions that do not invent experience
-- resume-header location extraction and driving-commute eligibility
-- automatic rejection of clearly foreign roles and a 90/120 minute commute policy
-- human-readable and stable JSON matching output
-- isolated per-company failures and SQLite persistence
-- a dry-run mode that prints targets without launching a browser
-- lifecycle tracking for new, reviewed, applied, ignored, and rejected jobs
-- PostgreSQL/Supabase storage selected through `DATABASE_URL`
-- email summaries with optional privacy-reduced cloud scoring
-- a scheduled Docker/GitHub Actions deployment
-- a local FastAPI dashboard for review and status updates
-- human-approved DOCX generation that preserves existing resume evidence
-- a local outreach workspace for ranking user-supplied public contacts and approving message drafts
-- a local application-package workspace with exact preview approval and manual submission tracking
+Checking employer sites manually is repetitive, listings overlap, and a job title
+alone rarely establishes eligibility. AJob separates discovery, relevance rules,
+resume evidence, and human decisions so each result can be explained and revisited.
 
-It does **not** scrape LinkedIn, send messages, call paid APIs, or submit applications. Remote execution requires
-your GitHub, Supabase, and SMTP secrets before it can run in the cloud.
+## Interface
+
+All screenshots below use **fictional employers, roles, and resume content**.
+They are demonstrations, not live search results or performance measurements.
+
+![Opportunity dashboard with fictional job matches](docs/images/dashboard.png)
+
+| Job workspace | Explainable resume matching |
+| --- | --- |
+| ![Fictional job detail](docs/images/job-detail.png) | ![Fictional resume match](docs/images/resume-match.png) |
+
+<details>
+<summary>Mobile layout</summary>
+<img src="docs/images/mobile.png" alt="Mobile dashboard with fictional data" width="320">
+</details>
+
+## What it does
+
+- Discovers listings through Playwright and dedicated Workday, Greenhouse, and
+  supported public-feed adapters, with bounded pagination and per-company failures.
+- Filters early-career software roles and stores canonical URLs with idempotent
+  upserts, preserving review and application status across scans.
+- Parses local resumes and calculates deterministic, explainable skill matches,
+  degree eligibility, and optional commute estimates.
+- Presents filtered, score-ranked opportunities in a responsive local dashboard.
+- Runs cloud scans at **08:17, 11:17, and 16:17 Asia/Jerusalem** and sends SMTP
+  summaries after scanning. Persistent delivery slots coordinate retries.
+- Prepares factual resume edits and application packages only after explicit
+  approval. Outreach drafts are copied and sent manually; no applications or
+  LinkedIn messages are sent automatically.
+
+The configured source list is visible in the dashboard. Site availability and
+coverage change; an enabled source does not guarantee listings or personal matches.
 
 ## Architecture
 
-The project uses a small layered structure:
+```mermaid
+flowchart LR
+    Scheduler[Supabase pg_cron / GitHub cron] --> Runner[GitHub Actions + Docker]
+    Runner --> Discovery[Playwright / Public ATS feeds]
+    Discovery --> Rules[Normalize URLs + Relevance rules]
+    Rules --> CloudDB[(PostgreSQL / Supabase)]
+    Rules --> Matching[Privacy-reduced cloud matching]
+    Matching --> SMTP[SMTP summary]
+    CloudDB --> API[Local FastAPI backend]
+    API --> UI[Jinja2 + CSS + JavaScript]
+    Resume[Local resume files] --> API
+    API --> LocalDB[(Local SQLite: outreach + packages)]
+    API --> Files[Approved DOCX / PDF artifacts]
+```
 
-- `config/`: user-editable target company definitions
-- `src/models.py`: domain objects shared by the application
-- `src/config_loader.py`: YAML-to-domain-model boundary
-- `src/storage/`: SQLite and PostgreSQL persistence
-- `src/scrapers/`: Playwright browsing and normalized job-link extraction
-- `src/matching/`, `src/resume/`, `src/notifications/`: scoring, approved resume
-  generation, safe cloud profiles, and email delivery
-- `src/web/`: local FastAPI dashboard
-- `src/outreach/`: deterministic contact ranking and factual message drafting
-- `tests/`: tests for behavior already implemented
+The cloud scanner and dashboard share job storage when `DATABASE_URL` is configured;
+SQLite supports standalone local use. Matching, filtering, scraping, and storage
+remain separate modules. Cloud matching receives a reduced profile, not contact
+information or raw resume text. Local contact and application data stay in separate
+SQLite databases.
 
-The scanner depends on domain models rather than storage or matching logic. This
-keeps Playwright extraction, filtering, and resume matching independently testable
-as they are added.
+Supabase can independently dispatch the GitHub workflow using a repository-scoped
+credential in Vault. GitHub cron remains a fallback. Intended delivery slots follow
+Israel daylight saving time and suppress ordinary duplicate retries. Hosted-runner
+queues can delay scans; SMTP cannot promise exactly-once delivery.
 
-## Setup
+### Technology choices
 
-Python 3.11 or newer is recommended.
+| Layer | Implementation |
+| --- | --- |
+| UI | Server-rendered Jinja2, responsive CSS, vanilla JavaScript |
+| Backend | Python, FastAPI, Uvicorn, typed dataclasses |
+| Discovery | Playwright/Chromium, public ATS JSON feeds, PyYAML configuration |
+| Persistence | PostgreSQL through psycopg; SQLite locally |
+| Resume processing | pypdf, python-docx, ReportLab, python-bidi |
+| Automation | GitHub Actions, Docker, Supabase Cron and Vault |
+| Verification | pytest, mocked integrations, Playwright regression tests |
+
+## Run locally
+
+Python **3.12** is used by CI and the container. From a clean checkout in PowerShell:
 
 ```powershell
-py -m venv .venv
-.venv\Scripts\Activate.ps1
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade "pip>=26.2,<27"
 pip install -r requirements.txt
 playwright install chromium
-```
-
-Playwright uses Chromium to load JavaScript-heavy career pages.
-
-## Run
-
-From the project root:
-
-```powershell
 python -m src.main scan --dry-run
-python -m src.main scan
-python -m src.main parse-resume path\to\resume.pdf
-python -m src.main parse-resume path\to\resume.pdf --json
-python -m src.main match path\to\resume.pdf
-python -m src.main match path\to\resume.pdf --job-id 42
-python -m src.main match path\to\resume.pdf --json --limit 20
-python -m src.main match path\to\resume.pdf --origin "Rishon Lezion, Israel"
-python -m src.main list --status new
-python -m src.main status 42 applied
-python -m src.main reclassify
-python -m src.main reclassify --apply
-python -m src.main export-safe-profile path\to\resume.pdf
-python -m src.main tailor-resume path\to\resume.pdf 42 output --change professional_format --approve
+uvicorn src.web.app:app --host 127.0.0.1 --port 8001
 ```
 
-After updating relevance rules, run `reclassify` to preview their effect on every
-stored job, including previously excluded jobs. Review the reported changes, then
-use `reclassify --apply` to update only relevance flags. Captured descriptions,
-requirements, IDs, discovery dates, and application lifecycle statuses are
-preserved. Both commands accept `--database`; `DATABASE_URL` selects the configured
-PostgreSQL store as with other commands. No career pages are fetched.
+Open `http://127.0.0.1:8001`. With no cloud configuration, the dashboard creates local
+SQLite stores in `data/`; it initially has no discoveries. `--dry-run` previews
+source configuration without fetching career sites or sending mail.
 
-Set `RESUME_DIRECTORY` to the folder containing resumes, then start the local
-dashboard with `uvicorn src.web.app:app --reload` and open
-`http://127.0.0.1:8000`. Dashboard matching accepts only files inside that folder,
-uses POST forms with CSRF protection, and does not put file paths in URLs. The
-dashboard shows each factual change with its original text, proposed text, and
-supporting evidence. Only checked changes are applied. Approval creates separate,
-professionally formatted DOCX and PDF files in `RESUME_DIRECTORY\tailored`; the
-master resume is never changed. The dashboard has no user authentication and must
-not be exposed to the public internet.
-
-Each job page also has a local outreach workspace. It provides public Google
-search shortcuts for recruiters, hiring managers, relevant team members, and
-alumni without scraping results. Add a LinkedIn profile you found, review its
-explainable relevance score, and choose either a short connection note or a full
-message. You can edit and explicitly approve the exact text, copy it, then
-manually record sent, reply, and follow-up dates. Contact notes and approved
-drafts are stored in `data/outreach.db`, separate from cloud job data. The app
-never fetches LinkedIn pages or sends a message.
-
-The application-package section discovers matching PDF/DOCX files inside the
-configured `RESUME_DIRECTORY/tailored` folder and presents them as a safe dropdown,
-so local paths are not typed into or exposed by the form. It shows the complete candidate
-profile, files, and cover note, then requires approval of that exact fingerprinted
-snapshot. Approval stores a local prepared package; it never opens, fills, or
-submits an employer form. After submitting on the employer's site yourself, you
-can explicitly record that manual submission in the dashboard.
-
-Use custom paths if needed:
+To scan a single configured employer manually, without email:
 
 ```powershell
-python -m src.main scan --config config/companies.yaml --database data/jobs.db
+python -m src.main scan --company "COMPANY_FROM_CONFIG" --max-pages 1
 ```
 
-### Optional email summary
+Keep the dashboard bound to loopback. It is a single-user local workspace, **not a
+publicly hosted, authenticated web service**. `scripts/start_dashboard.ps1` provides
+the Windows launcher; optional local database credentials use current-user DPAPI.
+It is unnecessary to configure cloud services to inspect the UI or run unit tests.
 
-Pass `--email-summary` to send one post-scan summary via SMTP. This is opt-in;
-without the flag no email is sent. Configuration is exclusively through process
-environment variables, never configuration files: `SMTP_HOST`, `SMTP_PORT`,
-`SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, and `SMTP_TO` are required.
-`SMTP_USE_TLS` defaults to `true` and may be set to `false` only for SMTP servers
-that do not support STARTTLS. Do not commit these values.
+### Configuration
 
-The repository includes a scheduled GitHub Actions workflow. It requires a
-`DATABASE_URL` repository secret for a persistent PostgreSQL database; without
-it, the workflow fails before scanning rather than silently using the runner's
-ephemeral SQLite filesystem. For Supabase, use its PostgreSQL connection string
-with `sslmode=require` (for example,
-`postgresql://USER:PASSWORD@HOST:5432/postgres?sslmode=require`) and keep the
-entire value in the secret store. Do not print or commit it. Add the SMTP values
-as repository secrets only when email delivery is desired. The workflow container
-has Chromium and its Playwright dependencies installed.
+Environment variables are read from the process; `.env` files are not automatically
+loaded. Supply real values through a trusted secret store or local secure setup,
+never through committed files or command history.
 
-For ranked cloud emails, store the one-line output of `export-safe-profile` as the
-`CANDIDATE_PROFILE_JSON` repository secret. It excludes name, email, phone, and
-free-form resume prose.
+| Variable | Purpose / placeholder |
+| --- | --- |
+| `DATABASE_URL` | Optional PostgreSQL connection supplied securely by your provider; omit for local SQLite |
+| `RESUME_DIRECTORY` | Optional local resume folder, such as `C:\path\to\private-resumes` |
+| `SMTP_HOST`, `SMTP_PORT` | SMTP endpoint, e.g. `smtp.example.test`, `587` |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | SMTP credentials; set securely |
+| `SMTP_FROM`, `SMTP_TO` | Sender and recipient, e.g. `sender@example.test`, `recipient@example.test` |
+| `SMTP_USE_TLS` | Defaults to `true`; disabling it is restricted to loopback development servers |
+| `CANDIDATE_PROFILE_JSON` | Optional reduced profile for cloud matching; keep it private |
 
-GitHub Actions cron expressions use UTC and do not support a per-schedule time
-zone. The workflow schedules both possible UTC offsets for each target hour as
-distinct cron expressions, then maps the intended cron slot to `Asia/Jerusalem`.
-It targets `08:17`, `11:17`, and `16:17` Israel time, including across
-daylight-saving changes, with retries every ten minutes through minute `:57`.
-PostgreSQL stores an atomic delivery claim, so retries do not send duplicate
-emails; failed or stale claims can be retried. Scan jobs have a 35-minute limit
-so a slow career-page scan has more time to complete.
-A delayed GitHub runner still executes the intended scan instead of being rejected
-based on its actual start time. A manual **Run workflow** dispatch bypasses this
-gate. GitHub may still delay or omit scheduled starts, and SMTP cannot guarantee
-exactly-once delivery, so this is a reliability mechanism rather than a hard SLA.
-Approved cloud runs require every SMTP secret and fail visibly instead of
-silently succeeding without an email. The delay-safe date reconstruction covers
-ordinary same-day and next-UTC-day runner delays; delays longer than 24 hours are
-outside this workflow's scheduling guarantee.
+PostgreSQL connections should use `sslmode=verify-full` and a trusted provider CA.
+The dashboard database account needs only SELECT and UPDATE(status) on job postings;
+schema creation belongs to the scanner's initialization path.
 
-Run tests with:
+To prepare a cloud profile, run `python -m src.main export-safe-profile` with a private
+resume path. Review the output locally and store it as a GitHub Actions secret.
+Although contact fields are removed, it still contains matching skills and location.
+
+Cloud scans require persistent PostgreSQL and the SMTP repository secrets. See
+[cloud dispatch setup](docs/cloud-dispatch.md) before configuring your own scheduler.
+Do not dispatch workflows merely to preview this repository.
+
+## Security and privacy
+
+- Loopback Host allowlisting, cross-origin mutation checks, CSRF tokens, and
+  anti-framing/browser security headers protect the local UI boundary.
+- SMTP uses certificate and hostname validation before authentication.
+- Resume uploads have type/size checks and confined filesystem paths. Rewrites and
+  application preparation use explicit approval and server-held fingerprints.
+- Secret and personal-file exclusions apply to Git and the Docker build context.
+  The container copies only the public company configuration.
+- Optional commute estimates send location queries to Nominatim and coordinates
+  to OSRM; they are estimates, not live traffic data.
+
+For verification results, remaining publication gates, and the approved commit-author
+privacy policy, see [publication readiness](docs/publication-readiness.md).
+
+## Tests and security checks
 
 ```powershell
-python -m pytest
+python -m pytest -q
 ```
 
-The command initializes the SQLite database, reads the company configuration,
-visits each enabled page, and stores unique job links. Add `--headed` to watch the
-browser or `--timeout-ms 60000` for slow sites.
-Use `--max-pages 1` to restrict each company to its first results page.
+Tests use synthetic data, temporary stores, and mocked SMTP/HTTP integrations.
+A browser regression test requires installed Chromium. Do not run a live scan or
+send email to validate a code change when a focused test is sufficient.
 
-Microsoft, Google, Amazon, Apple, Intel, NVIDIA, monday.com, and Mobileye are
-enabled. Intel and NVIDIA use a dedicated Workday JSON adapter; Mobileye uses
-its official Lever student listing. There are 48 enabled scan sources, including
-21 additional verified Greenhouse employers. AppsFlyer and Wix use their official
-feeds; SAP coverage is limited to SAP IT Business Systeme. CyberArk/Idira roles
-share the Palo Alto Networks Israel listing to avoid duplicate scans. Check Point
-remains paused because its official listing blocks automated access.
+Optional audit tooling can be installed in a separate virtual environment from
+`requirements-audit.txt`. From the project root, using that environment:
 
-The local dashboard can use the same Supabase database as cloud scans. Its
-dedicated database account needs only SELECT and UPDATE(status) on job_postings;
-dashboard startup verifies the schema without running migrations. The Windows
-launcher reads a current-user DPAPI-encrypted config/database_url.cred, with TLS
-hostname verification against Supabase's official CA certificate. Keep both the
-credential and local certificate file out of Git. Before switching databases,
-preserve lifecycle statuses by canonical job URL and check local outreach and
-application records for job-ID associations.
+```powershell
+python scripts/audit_secrets.py --history
+pip-audit --path .venv/Lib/site-packages --progress-spinner off
+```
 
-Filtering is deliberately conservative and explainable. A role must have a
-software-oriented title, must not contain a clear senior-level marker, and must
-show early-career evidence in its title or fetched job details. Career-site
-markup changes can still require updates to URL patterns or extraction logic.
+The secret scanner uses offline detect-secrets detectors and emits locations only.
+CI also checks source/history secrets and dependency advisories. Advisory results
+are time-dependent and do not replace review of permissions or runtime settings.
 
-Matching is local, deterministic, and explainable. It uses recognized skill
-coverage plus evidence in experience, projects, and education. Scores are useful
-for ranking, not a guarantee of recruiter decisions. Tailoring output is advice
-only and must remain truthful.
+To reproduce the screenshots without accessing personal data or cloud services:
 
-Location eligibility is separate from professional fit. The matcher reads an
-explicit `City, Country` line from the resume header, or accepts `--origin` as a
-private runtime override. Remote roles are accepted, clearly foreign roles are
-rejected, driving estimates up to 90 minutes are suitable, 91-120 minutes are
-borderline, and anything longer is rejected. Unknown locations require manual
-review and are not recommended automatically. Driving estimates use the public
-OpenStreetMap Nominatim and OSRM services for low-volume personal use; they do
-not include live traffic. The resume origin is never written to match JSON or the
-jobs database. Use `--skip-commute-check` only when an explicit manual location
-review is intended. JSON output keeps verified recommendations in `matches` and
-unverified locations in a separate `manual_review` list.
+```powershell
+python scripts/create_portfolio_screenshots.py
+```
 
-Running while the computer is off does not require an external AI API. The planned
-deployment is a scheduled container that runs scanning in the cloud and writes to
-persistent storage. Resume parsing and matching remain local by default for
-privacy. See `docs/cloud-roadmap.md`.
+It uses disposable fictional data and a temporary loopback static server, blocks
+external browser traffic, and writes only the four images under `docs/images/`.
 
-## Roadmap
+## Project layout
 
-1. **Foundation (complete):** config, models, SQLite storage, dry-run scanner.
-2. **Career-page browsing (complete):** Playwright browsing, configurable link
-   extraction, persistence, and clear error handling.
-3. **Role filtering (complete):** bounded pagination, detail-page extraction, and
-   explainable student, intern, junior, and non-senior software-role filtering.
-4. **Resume parsing (complete):** extract contact details, normalized skills,
-   education, experience, projects, and summary locally.
-5. **Matching (complete):** explainable 1–100 job/resume fit scores.
-6. **Tailoring suggestions (complete):** precise, evidence-backed resume advice.
-7. **Approved document generation (complete):** per-change approval creates
-   matching DOCX and PDF files; existing files are never overwritten.
-8. **Notifications (complete):** SMTP summaries support safe-profile scoring and
-   commute filtering in scheduled runs.
-9. **Application assistance (complete):** exact local package previews, immutable
-   approval snapshots, employer-page handoff, and manual submission tracking.
-10. **Professional outreach (complete):** public search shortcuts, ranked manual
-    contacts, editable approved drafts, copying, and manual outcome tracking.
+```text
+src/web/            Local UI and HTTP security boundary
+src/scrapers/       Browser and public-feed discovery
+src/filtering/      Role relevance rules
+src/matching/       Explainable resume scoring
+src/resume/         Local parsing and approved artifact generation
+src/storage/        PostgreSQL and SQLite adapters
+src/scheduling/     Israel-time delivery-slot validation
+src/notifications/  SMTP and recipient settings
+src/applications/  Human-approved application packages
+src/outreach/      Manual-contact workspace
+config/            Public employer configuration
+scripts/           Local launcher, audit, and portfolio tooling
+tests/             Behavior and security regression tests
+```
 
-## Safety principle
+## Limitations and next steps
 
-The system may recommend and prepare actions, but resume rewrites and application
-submission require two separate explicit approvals. Approving resume changes does
-not authorize submitting an application.
+Career-site changes can break adapters, filtering can miss suitable roles, and
+matching is rule-based rather than an LLM judgment. Commute services have their own
+availability and privacy limitations. The local dashboard does not provide
+multi-user authorization. Future work should improve measured adapter coverage,
+false-negative analysis, and dependency reproducibility without weakening privacy.
 
-Resume parsing is entirely local. Text-based PDFs are supported; scanned-image
-PDFs require OCR, which is not included yet. Section and skill extraction uses
-transparent rules, so uncommon headings or technologies may need new aliases.
+A concise, evidence-based project description is available in
+[portfolio and resume notes](docs/portfolio.md).

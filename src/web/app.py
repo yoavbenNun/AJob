@@ -22,6 +22,8 @@ from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+from src.web.security import LocalSecurityMiddleware
 
 from src.applications.service import (
     ApplicationPackagePreview,
@@ -110,6 +112,8 @@ def create_app(
     ] = {}
 
     app = FastAPI(title="AJob", docs_url=None, redoc_url=None)
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]"])
+    app.add_middleware(LocalSecurityMiddleware)
     app.mount("/static", StaticFiles(directory=str(WEB_ROOT / "static")), name="static")
 
     @app.get("/health", include_in_schema=False)
