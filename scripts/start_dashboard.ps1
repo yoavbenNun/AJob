@@ -3,6 +3,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Import-Module (Join-Path $PSHOME "Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1")
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $localSettingsPath = Join-Path $projectRoot "config\local_settings.txt"
 if (-not $ResumeDirectory -and (Test-Path -LiteralPath $localSettingsPath)) {

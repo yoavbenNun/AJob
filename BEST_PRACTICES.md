@@ -203,6 +203,10 @@ reusable lesson appears.
 - Store Windows-only local service credentials with current-user DPAPI encryption,
   exclude the encrypted file from Git, and decrypt only into the launched process
   environment. Do not place secrets in launcher command-line arguments.
+- When launching Windows PowerShell from PowerShell 7, import its Security module
+  from its own PSHOME explicitly; inherited module paths can break DPAPI cmdlets.
+  Validate Supabase TLS with its official database CA and verify-full, rather
+  than disabling certificate verification when the system trust store rejects it.
 - Make notification delivery explicit and test SMTP interactions with injected
   clients. A scheduled GitHub-hosted runner has ephemeral local storage, so it
   cannot reliably determine which jobs are new without a persistent store.
