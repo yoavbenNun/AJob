@@ -3,7 +3,7 @@
 -- restricted to yoavbenNun/AJob, with repository Actions: write permission.
 -- Never put that token in this file, migrations, chat, or command arguments.
 create extension if not exists pg_cron;
-create extension if not exists pg_net;
+create extension if not exists http with schema extensions;
 
 create or replace function public.dispatch_ajob_scan()
 returns bigint
@@ -17,7 +17,7 @@ declare
     utc_offset interval;
     intended_slot text;
     dispatch_token text;
-    request_id bigint;
+    response extensions.http_response;
 begin
     -- Cron is UTC; gate by Israel time so both DST offset candidates are safe.
     if extract(hour from local_now) not in (8, 11, 16)
@@ -37,18 +37,25 @@ begin
     if dispatch_token is null or length(dispatch_token) = 0 then
         raise exception 'Missing AJob dispatch credential';
     end if;
-    select net.http_post(
-        url := 'https://api.github.com/repos/yoavbenNun/AJob/actions/workflows/scheduled-scan.yml/dispatches',
-        headers := jsonb_build_object(
-            'Authorization', 'Bearer ' || dispatch_token,
-            'Accept', 'application/vnd.github+json',
-            'X-GitHub-Api-Version', '2022-11-28',
-            'Content-Type', 'application/json'),
-        body := jsonb_build_object('ref', 'main', 'inputs',
-                    jsonb_build_object('delivery_slot', intended_slot)),
-        timeout_milliseconds := 15000
-    ) into request_id;
-    return request_id;
+    perform extensions.http_set_curlopt('CURLOPT_CONNECTTIMEOUT_MS', '3000');
+    perform extensions.http_set_curlopt('CURLOPT_TIMEOUT_MS', '15000');
+    select * into response from extensions.http(row(
+        'POST',
+        'https://api.github.com/repos/yoavbenNun/AJob/actions/workflows/scheduled-scan.yml/dispatches',
+        array[
+            row('Authorization', 'Bearer ' || dispatch_token)::extensions.http_header,
+            row('User-Agent', 'AJob-Supabase-Dispatcher')::extensions.http_header,
+            row('Accept', 'application/vnd.github+json')::extensions.http_header,
+            row('X-GitHub-Api-Version', '2022-11-28')::extensions.http_header
+        ],
+        'application/json',
+        jsonb_build_object('ref', 'main', 'inputs',
+            jsonb_build_object('delivery_slot', intended_slot))::text
+    )::extensions.http_request);
+    if response.status is distinct from 204 then
+        raise exception 'GitHub workflow dispatch returned HTTP status %', response.status;
+    end if;
+    return response.status::bigint;
 end;
 $$;
 

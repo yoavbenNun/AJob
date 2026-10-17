@@ -288,6 +288,13 @@ reusable lesson appears.
 
 # Cloud schedule retries
 
+- pg_net's pending request table can expose Authorization headers through
+  platform-owned PUBLIC grants that project postgres cannot revoke. For requests
+  carrying reusable credentials, use Supabase's synchronous `http` extension or
+  move dispatch outside the database; never rely on a successful-looking REVOKE.
+  Verify the installed extension's API with a real request: Supabase may lack
+  newer upstream helpers such as `http_headers`; typed header arrays work.
+
 - Independent dispatchers must pass the same canonical Israel delivery-slot key
   as GitHub cron, validated before scanning. A blank manual dispatch intentionally
   bypasses scheduled deduplication; never use it for automated retries. Keep the
