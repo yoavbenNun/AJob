@@ -38,6 +38,11 @@ on:
     - cron: "57 13 * * *"
     - cron: "57 14 * * *"
   workflow_dispatch:
+    inputs:
+      delivery_slot:
+        description: "Optional canonical Israel slot from the external scheduler"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -70,8 +75,15 @@ jobs:
         shell: bash
         env:
           SCHEDULE_EXPRESSION: ${{ github.event.schedule }}
+          DISPATCH_DELIVERY_SLOT: ${{ inputs.delivery_slot }}
         run: |
           if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then
+            if [ -n "$DISPATCH_DELIVERY_SLOT" ]; then
+              slot="$(python -m src.scheduling.israel_schedule --delivery-slot "$DISPATCH_DELIVERY_SLOT")"
+              echo "run_scan=true" >> "$GITHUB_OUTPUT"
+              echo "delivery_slot=$slot" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             echo "run_scan=true" >> "$GITHUB_OUTPUT"
             echo "delivery_slot=" >> "$GITHUB_OUTPUT"
             echo "Manual dispatch: bypassing the scheduled-time gate."

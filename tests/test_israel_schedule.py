@@ -4,7 +4,11 @@ import re
 
 import pytest
 
-from src.scheduling.israel_schedule import delivery_slot_for_schedule, should_run_scheduled_scan
+from src.scheduling.israel_schedule import (
+    delivery_slot_for_schedule,
+    should_run_scheduled_scan,
+    validate_dispatched_slot,
+)
 
 
 @pytest.mark.parametrize(
@@ -87,6 +91,37 @@ def test_invalid_or_combined_cron_is_rejected() -> None:
 def test_invalid_schedule_minute_is_rejected() -> None:
     with pytest.raises(ValueError, match="minute"):
         should_run_scheduled_scan("60 5 * * *")
+
+
+@pytest.mark.parametrize("month,offset,utc_hour", [(7, "+03:00", 5), (12, "+02:00", 6)])
+def test_external_dispatch_shares_cron_delivery_identity(month, offset, utc_hour) -> None:
+    reference = datetime(2026, month, 1, 12, tzinfo=timezone.utc)
+    value = f"2026-{month:02d}-01T08:17:00{offset}"
+    assert validate_dispatched_slot(value, reference) == delivery_slot_for_schedule(
+        f"17 {utc_hour} * * *", reference
+    )
+
+
+@pytest.mark.parametrize("value", [
+    "2026-07-01T08:17:00",             # no timezone
+    "2026-07-01T08:17:00+02:00",       # wrong DST offset
+    "2026-07-01T05:17:00+00:00",       # same instant, noncanonical key
+    "2026-07-01T08:27:00+03:00",       # retries must use primary key
+    "2026-07-01T09:17:00+03:00",       # unconfigured hour
+    "2026-07-01T08:17:01+03:00",       # extra seconds
+    "2026-07-01T16:17:00+03:00",       # future
+    "2026-06-30T08:17:00+03:00",       # expired
+    "2026-07-01T08:17:00+03:00\nrun_scan=true",
+])
+def test_external_dispatch_rejects_invalid_slots(value) -> None:
+    with pytest.raises(ValueError):
+        validate_dispatched_slot(value, datetime(2026, 7, 1, 12, tzinfo=timezone.utc))
+
+
+def test_external_dispatch_slot_passed_as_environment_not_shell_expression() -> None:
+    workflow = Path(".github/workflows/scheduled-scan.yml").read_text(encoding="utf-8")
+    assert "DISPATCH_DELIVERY_SLOT: ${{ inputs.delivery_slot }}" in workflow
+    assert '--delivery-slot "$DISPATCH_DELIVERY_SLOT"' in workflow
 
 
 def test_cloud_workflow_never_succeeds_without_email_configuration() -> None:

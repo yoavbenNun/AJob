@@ -75,13 +75,46 @@ def delivery_slot_for_schedule(
     return canonical.isoformat()
 
 
+def validate_dispatched_slot(
+    value: str, reference_utc: datetime | None = None
+) -> str:
+    """Accept only a recent canonical Israel slot, sharing cron's ledger key."""
+    try:
+        slot = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError("Invalid delivery slot") from error
+    if slot.tzinfo is None:
+        raise ValueError("Delivery slot requires an explicit Israel UTC offset")
+    local = slot.astimezone(ISRAEL_TIMEZONE)
+    if (
+        value != local.isoformat()
+        or local.hour not in TARGET_LOCAL_HOURS
+        or (local.minute, local.second, local.microsecond) != (17, 0, 0)
+    ):
+        raise ValueError("Delivery slot must be a canonical Israel scan time")
+    reference = reference_utc or datetime.now(timezone.utc)
+    if reference.tzinfo is None:
+        raise ValueError("reference_utc must be timezone-aware")
+    if not timedelta(0) <= reference - slot < timedelta(days=1):
+        raise ValueError("Delivery slot must be in the past 24 hours")
+    return local.isoformat()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Decide whether a UTC cron slot maps to an Israel scan hour"
     )
-    parser.add_argument("cron_expression")
+    parser.add_argument("cron_expression", nargs="?")
+    parser.add_argument("--delivery-slot")
     args = parser.parse_args(argv)
     try:
+        if args.delivery_slot is not None:
+            if args.cron_expression is not None:
+                raise ValueError("Choose a cron expression or a delivery slot")
+            print(validate_dispatched_slot(args.delivery_slot))
+            return 0
+        if args.cron_expression is None:
+            raise ValueError("A cron expression or delivery slot is required")
         should_run = should_run_scheduled_scan(args.cron_expression)
     except ValueError as error:
         parser.error(str(error))

@@ -288,6 +288,11 @@ reusable lesson appears.
 
 # Cloud schedule retries
 
+- Independent dispatchers must pass the same canonical Israel delivery-slot key
+  as GitHub cron, validated before scanning. A blank manual dispatch intentionally
+  bypasses scheduled deduplication; never use it for automated retries. Keep the
+  dispatcher credential restricted to repository Actions write access in Vault.
+
 - GitHub Actions cron can be delayed or dropped, and a scan can outlast a short
   job timeout. Use several same-slot retries away from the hour boundary, keep
   delivery claims idempotent, and expire abandoned claims before the final
