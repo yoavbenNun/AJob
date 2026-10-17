@@ -489,6 +489,19 @@ label { color: #3b526b; font-size: .76rem; }
 .hero-summary strong { color: #f2d494; text-shadow: 0 4px 16px #071c2d50; }
 .hero-summary span { color: #d6e4ed; }
 .hero::after { border-color: #d6f2ed24; box-shadow: 0 0 0 2.3rem #d6f2ed0b, 0 0 0 5rem #d6f2ed08; }
+.hero-actions { position: relative; z-index: 2; display: flex; align-items: center; justify-content: flex-end; gap: .65rem; }
+.sources-menu { position: relative; }
+.sources-menu > summary { list-style: none; }
+.sources-menu > summary::-webkit-details-marker { display: none; }
+.sources-menu[open] > summary { box-shadow: 0 0 0 3px #c0dfdc45, 0 3px 8px #071c3030; }
+.sources-popover { position: fixed; inset: auto; z-index: 50; top: var(--sources-top, 8rem); right: var(--sources-right, 2rem); bottom: auto; left: auto; width: min(465px, calc(100vw - 2rem)); max-height: min(70vh, 520px); margin: 0; overflow: auto; padding: 1.1rem; border: 1px solid #d4dee8; border-radius: 15px; background: #fff; color: var(--ink); box-shadow: 0 8px 20px #122b4717, 0 30px 68px #122b472b; }
+.sources-menu.popover-fallback .sources-popover { display: block; }
+.sources-popover > p, .paused-sources p { margin: .4rem 0 .8rem; color: var(--muted); font-size: .77rem; line-height: 1.45; }
+.sources-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem .7rem; margin: 0; padding: 0; list-style: none; }
+.sources-list li { min-width: 0; padding: .45rem .55rem; border: 1px solid #e0e7ef; border-radius: 8px; background: #f8fafc; color: #334b67; font-size: .75rem; font-weight: 650; overflow-wrap: anywhere; }
+.paused-sources { margin-top: .8rem; padding-top: .65rem; border-top: 1px solid #e3e8ef; }
+.paused-sources summary { color: #68788a; font-size: .72rem; font-weight: 650; cursor: pointer; }
+.paused-sources p { margin-bottom: 0; }
 
 form[data-pending="true"] button.is-busy { pointer-events: none; }
 .nested-disclosure > summary, .source-copy > summary, .advanced-option > summary { min-height: 42px; transition: color .15s ease, background .15s ease; }
@@ -528,6 +541,10 @@ form[data-pending="true"] button.is-busy { pointer-events: none; }
   .hero h1 { font-size: 1.9rem; }
   .hero-copy { font-size: .83rem; }
   .desk-action { width: 100%; }
+  .hero-actions { align-items: stretch; flex-direction: column; width: 100%; }
+  .sources-menu { width: 100%; }
+  .sources-button { width: 100%; }
+  .sources-popover { width: calc(100vw - 1.5rem); max-height: calc(100vh - 86px); border-radius: 14px; }
   .stats-grid { gap: .55rem; }
   .stat-card { min-height: 90px; padding: .75rem; border-radius: 11px; }
   .stat-card > span { font-size: .67rem; }

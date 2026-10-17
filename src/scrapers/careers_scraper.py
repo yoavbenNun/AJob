@@ -12,6 +12,8 @@ from playwright.sync_api import Browser, Page, TimeoutError as PlaywrightTimeout
 from src.filtering.job_filter import classify_job, prefilter_job
 from src.models import Company, JobPosting
 from src.urls import canonical_url
+from src.scrapers.greenhouse import fetch_greenhouse_jobs, is_greenhouse_board
+from src.scrapers.paused_sources import scan_public_feed, supported as supports_public_feed
 
 WORKDAY_SEARCH_TERMS = (
     "student software",
@@ -109,6 +111,22 @@ class CareersScraper:
         self.max_pages = max_pages
 
     def scan_company(self, company: Company) -> CompanyScanResult:
+        if supports_public_feed(company):
+            try:
+                jobs = scan_public_feed(company, max(1, self.timeout_ms // 1000), self.max_pages)
+                for job in jobs:
+                    job.requirements = extract_requirements(job.description)
+                return CompanyScanResult(company=company, jobs=jobs)
+            except Exception as error:
+                return CompanyScanResult(company=company, error=f"Public careers feed failed: {error}")
+        if is_greenhouse_board(company.careers_url):
+            try:
+                jobs = fetch_greenhouse_jobs(company, self.timeout_ms)
+                for job in jobs:
+                    job.requirements = extract_requirements(job.description)
+                return CompanyScanResult(company=company, jobs=jobs)
+            except Exception as error:
+                return CompanyScanResult(company=company, error=f"Greenhouse API failed: {error}")
         if (urlsplit(company.careers_url).hostname or "").endswith("myworkdayjobs.com"):
             return self._scan_workday(company)
         page = self.browser.new_page()
@@ -312,13 +330,23 @@ def _read_links(page: Page) -> list[dict[str, str]]:
 def _go_to_next_page(page: Page) -> bool:
     next_controls = page.locator(
         "a[aria-label*='next' i], button[aria-label*='next' i], "
-        "a[title*='next' i], button[title*='next' i]"
+        "a[title*='next' i], button[title*='next' i], "
+        ".pagination a.next:not(.disabled):not([aria-disabled='true'])"
     )
     for index in range(next_controls.count()):
         control = next_controls.nth(index)
         if control.is_visible() and control.is_enabled():
             before_signature = _listing_signature(page)
-            control.click()
+            href = control.get_attribute("href")
+            next_url = urljoin(page.url, href) if href else ""
+            # Follow real same-origin pagination links directly. Site banners
+            # can cover a perfectly usable Next anchor and intercept its click.
+            if (next_url and urlsplit(next_url).scheme in {"http", "https"}
+                    and urlsplit(next_url).netloc == urlsplit(page.url).netloc
+                    and canonical_url(next_url) != canonical_url(page.url)):
+                page.goto(next_url, wait_until="domcontentloaded", timeout=10_000)
+            else:
+                control.click()
             try:
                 page.wait_for_load_state("domcontentloaded", timeout=10_000)
             except PlaywrightTimeoutError:
@@ -337,6 +365,12 @@ def _listing_signature(page: Page) -> tuple[str, ...]:
 
 def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> None:
     """Populate full page text and a focused requirements excerpt, best effort."""
+    if (is_greenhouse_board(job.source) or supports_public_feed(
+        Company(name=job.company, careers_url=job.source)
+    )) and job.description:
+        # The official feed already supplies full content and precise location.
+        # Custom careers sites may return an anti-bot page that would overwrite it.
+        return
     page = browser.new_page()
     try:
         page.goto(job.job_url, wait_until="domcontentloaded", timeout=timeout_ms)

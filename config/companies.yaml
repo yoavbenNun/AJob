@@ -131,30 +131,22 @@ companies:
       - joborderid=
     allowed_job_hosts:
       - careers.checkpoint.com
-  - name: CyberArk
-    careers_url: https://www.cyberark.com/careers/
-    # No stable, enumerable official listing has been verified yet.
-    enabled: false
-    job_url_patterns:
-      - /job/
-    allowed_job_hosts:
-      - www.cyberark.com
   - name: SAP
-    careers_url: https://jobs.sap.com/search/
-    # Enable after an Israel-scoped listing is verified end to end.
-    enabled: false
+    careers_url: https://careers.smartrecruiters.com/SAPITBusinessSysteme
+    # Verified SAP IT tenant linked by SAP Careers; Israel-scoped feed.
+    enabled: true
     job_url_patterns:
-      - /job/
+      - /SAPITBusinessSysteme/
     allowed_job_hosts:
-      - jobs.sap.com
+      - jobs.smartrecruiters.com
   - name: AppsFlyer
-    careers_url: https://www.appsflyer.com/jobs/
-    # The public careers page still needs a verified job-feed adapter.
-    enabled: false
+    careers_url: https://careers.appsflyer.com/
+    # Official embedded job feed supplies full descriptions and locations.
+    enabled: true
     job_url_patterns:
       - /jobs/
     allowed_job_hosts:
-      - www.appsflyer.com
+      - careers.appsflyer.com
   - name: Similarweb
     # Official Greenhouse board exposes public job-detail links.
     careers_url: https://job-boards.greenhouse.io/similarweb
@@ -164,14 +156,13 @@ companies:
     allowed_job_hosts:
       - job-boards.greenhouse.io
   - name: Wix
-    careers_url: https://careers.wix.com/positions
-    # The current page loads job data outside normal anchor markup. Keep this
-    # target documented until a dedicated Wix adapter is added in Phase 3.
-    enabled: false
+    careers_url: https://careers.smartrecruiters.com/Wix2
+    # Official SmartRecruiters tenant, verified via the public postings API.
+    enabled: true
     job_url_patterns:
-      - /position/
+      - /Wix2/
     allowed_job_hosts:
-      - careers.wix.com
+      - jobs.smartrecruiters.com
   - name: Cisco
     # Official careers listing; shared relevance and Israel filters narrow results.
     careers_url: https://careers.cisco.com/global/en/search-results?keywords=Israel
@@ -180,9 +171,10 @@ companies:
       - /global/en/job/
     allowed_job_hosts:
       - careers.cisco.com
-  - name: Palo Alto Networks
-    # Official Israel careers search; shared filters select relevant roles.
-    careers_url: https://jobs.paloaltonetworks.com/en/search-jobs?l=Israel
+  - name: Palo Alto Networks / CyberArk (Idira)
+    # CyberArk recruiting is consolidated here. Scan the combined Israel board
+    # once; the old ?l=Israel search did not actually restrict results to Israel.
+    careers_url: https://jobs.paloaltonetworks.com/en/location/israel-jobs/47263/294640/2
     enabled: true
     job_url_patterns:
       - /en/job/
@@ -238,3 +230,152 @@ companies:
       - /en/jobs/
     allowed_job_hosts:
       - jobs.appliedmaterials.com
+  # Official Greenhouse feeds verified with Israel openings. Full descriptions
+  # and precise locations come from the public API; shared relevance filters apply.
+  - name: Wiz
+    careers_url: https://job-boards.greenhouse.io/wizinc
+    enabled: true
+    job_url_patterns:
+      - /careers/job/
+    allowed_job_hosts:
+      - www.wiz.io
+  - name: SentinelOne
+    careers_url: https://job-boards.greenhouse.io/sentinellabs
+    enabled: true
+    job_url_patterns:
+      - gh_jid=
+    allowed_job_hosts:
+      - www.sentinelone.com
+  - name: Datadog
+    careers_url: https://job-boards.greenhouse.io/datadog
+    enabled: true
+    job_url_patterns:
+      - /detail/
+    allowed_job_hosts:
+      - careers.datadoghq.com
+  - name: Elastic
+    careers_url: https://job-boards.greenhouse.io/elastic
+    enabled: true
+    job_url_patterns:
+      - gh_jid=
+    allowed_job_hosts:
+      - jobs.elastic.co
+  - name: MongoDB
+    careers_url: https://job-boards.greenhouse.io/mongodb
+    enabled: true
+    job_url_patterns:
+      - gh_jid=
+    allowed_job_hosts:
+      - www.mongodb.com
+  - name: Riskified
+    careers_url: https://job-boards.greenhouse.io/riskified
+    enabled: true
+    job_url_patterns:
+      - gh_jid=
+    allowed_job_hosts:
+      - www.riskified.com
+  - name: Forter
+    careers_url: https://job-boards.greenhouse.io/forter
+    enabled: true
+    job_url_patterns:
+      - /forter/jobs/
+    allowed_job_hosts:
+      - job-boards.greenhouse.io
+  - name: Melio
+    careers_url: https://job-boards.greenhouse.io/melio
+    enabled: true
+    job_url_patterns:
+      - /melio/jobs/
+    allowed_job_hosts:
+      - job-boards.greenhouse.io
+  - name: Lightricks
+    careers_url: https://job-boards.greenhouse.io/lightricks
+    enabled: true
+    job_url_patterns:
+      - gh_jid=
+    allowed_job_hosts:
+      - careers.lightricks.com
+  - name: Rubrik
+    careers_url: https://job-boards.greenhouse.io/rubrik
+    enabled: true
+    job_url_patterns:
+      - /company/careers/departments/job.
+    allowed_job_hosts:
+      - www.rubrik.com
+  - name: Cato Networks
+    careers_url: https://job-boards.greenhouse.io/catonetworks
+    enabled: true
+    job_url_patterns:
+      - /careers/careers-post/
+    allowed_job_hosts:
+      - www.catonetworks.com
+  - name: Orca Security
+    careers_url: https://job-boards.greenhouse.io/orcasecurity
+    enabled: true
+    job_url_patterns:
+      - /about/careers/
+    allowed_job_hosts:
+      - orca.security
+  - name: JFrog
+    careers_url: https://job-boards.greenhouse.io/jfrog
+    enabled: true
+    job_url_patterns:
+      - gh_jid=
+    allowed_job_hosts:
+      - join.jfrog.com
+  - name: Datarails
+    careers_url: https://job-boards.greenhouse.io/datarails
+    enabled: true
+    job_url_patterns:
+      - /datarails/jobs/
+    allowed_job_hosts:
+      - job-boards.greenhouse.io
+  - name: Torq
+    careers_url: https://job-boards.greenhouse.io/torq
+    enabled: true
+    job_url_patterns:
+      - /torq/jobs/
+    allowed_job_hosts:
+      - job-boards.greenhouse.io
+  - name: Island
+    careers_url: https://job-boards.greenhouse.io/island
+    enabled: true
+    job_url_patterns:
+      - /island/jobs/
+    allowed_job_hosts:
+      - job-boards.greenhouse.io
+  - name: Via
+    careers_url: https://job-boards.greenhouse.io/via
+    enabled: true
+    job_url_patterns:
+      - /via/jobs/
+    allowed_job_hosts:
+      - job-boards.greenhouse.io
+  - name: Transmit Security
+    careers_url: https://job-boards.greenhouse.io/transmitsecurity
+    enabled: true
+    job_url_patterns:
+      - gh_jid=
+    allowed_job_hosts:
+      - www.transmitsecurity.com
+  - name: Salt Security
+    careers_url: https://job-boards.greenhouse.io/saltsecurity
+    enabled: true
+    job_url_patterns:
+      - gh_jid=
+    allowed_job_hosts:
+      - salt.security
+  - name: Yotpo
+    careers_url: https://job-boards.greenhouse.io/yotpo
+    enabled: true
+    job_url_patterns:
+      - /careers/gid-
+    allowed_job_hosts:
+      - www.yotpo.com
+  - name: Optimove
+    careers_url: https://job-boards.greenhouse.io/optimove
+    enabled: true
+    job_url_patterns:
+      - /optimove/jobs/
+    allowed_job_hosts:
+      - job-boards.eu.greenhouse.io

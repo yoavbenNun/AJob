@@ -67,10 +67,17 @@ def test_default_company_sources_use_safe_enabled_and_disabled_entries() -> None
         assert companies[name].enabled is True
         assert "myworkdayjobs.com" in companies[name].careers_url
     assert companies["monday.com"].enabled is True
-    assert companies["Wix"].enabled is False
-    assert sum(company.enabled for company in loaded) == 24
+    assert companies["Wix"].enabled is True
+    assert companies["AppsFlyer"].enabled is True
+    assert companies["SAP"].enabled is True
+    assert sum(company.enabled for company in loaded) == 48
     for name in (
-        "Similarweb", "Cisco", "Palo Alto Networks", "Taboola", "Fiverr",
+        "Similarweb", "Cisco", "Palo Alto Networks / CyberArk (Idira)", "Taboola", "Fiverr",
         "Rapyd", "Pagaya", "Gong", "Applied Materials",
     ):
         assert companies[name].enabled is True
+    assert "CyberArk" not in companies
+    assert companies["Palo Alto Networks / CyberArk (Idira)"].careers_url.endswith(
+        "/location/israel-jobs/47263/294640/2"
+    )
+    assert [company.name for company in loaded if not company.enabled] == ["Check Point"]

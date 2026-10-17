@@ -25,6 +25,19 @@ class PostgresJobRepository:
             )
         self.database_url = database_url
 
+    def verify_schema(self) -> None:
+        """Check dashboard read access without requiring schema-owner privileges.
+
+        Schema creation and migrations belong to the scanner's initialize path.
+        Selecting explicit columns also fails immediately for an outdated schema.
+        """
+        with self._connect() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT id, title, company, location, job_url, description, "
+                "requirements, source, discovered_at, is_relevant, status "
+                "FROM job_postings LIMIT 0"
+            )
+
     def initialize(self) -> None:
         with self._connect() as connection, connection.cursor() as cursor:
             cursor.execute(

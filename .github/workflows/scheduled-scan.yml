@@ -45,11 +45,14 @@ permissions:
 concurrency:
   group: scheduled-job-scan
   cancel-in-progress: false
+  # Keep scheduled retries queued up to GitHub's 100-pending-run limit. Without
+  # this, GitHub replaces older pending retries before the active scan finishes.
+  queue: max
 
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 75
     env:
       SMTP_HOST: ${{ secrets.SMTP_HOST }}
       SMTP_PORT: ${{ secrets.SMTP_PORT }}

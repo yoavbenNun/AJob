@@ -1,9 +1,35 @@
 import sys
 import types
+from unittest.mock import MagicMock
 
 import pytest
 
 from src.storage.postgres_job_repository import PostgresJobRepository
+
+
+def test_dashboard_schema_check_requires_only_read_access(monkeypatch) -> None:
+    connection = MagicMock()
+    cursor = connection.__enter__.return_value.cursor.return_value.__enter__.return_value
+
+    def read_only_execute(query):
+        assert query.startswith("SELECT ")
+        assert "is_relevant, status FROM job_postings LIMIT 0" in query
+
+    cursor.execute.side_effect = read_only_execute
+    repository = PostgresJobRepository("postgresql://db.example/jobs")
+    monkeypatch.setattr(repository, "_connect", lambda: connection)
+    repository.verify_schema()
+    cursor.execute.assert_called_once()
+
+
+def test_dashboard_schema_check_does_not_hide_missing_schema(monkeypatch) -> None:
+    connection = MagicMock()
+    cursor = connection.__enter__.return_value.cursor.return_value.__enter__.return_value
+    cursor.execute.side_effect = RuntimeError("missing status column")
+    repository = PostgresJobRepository("postgresql://db.example/jobs")
+    monkeypatch.setattr(repository, "_connect", lambda: connection)
+    with pytest.raises(RuntimeError, match="missing status column"):
+        repository.verify_schema()
 
 
 @pytest.mark.parametrize(

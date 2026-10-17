@@ -16,7 +16,7 @@ import os
 import re
 import secrets
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -30,6 +30,7 @@ from src.applications.service import (
     discover_resume_pairs,
     verify_package_preview,
 )
+from src.config_loader import load_companies
 from src.matching.resume_matcher import match_resume_to_job
 from src.location.commute import is_israel_or_remote_location
 from src.models import JOB_STATUSES, JobPosting
@@ -53,6 +54,7 @@ from src.resume.tailored_resume import (
 from src.storage.repository_factory import create_job_repository
 from src.storage.application_repository import ApplicationRepository
 from src.storage.outreach_repository import OutreachRepository
+from src.storage.postgres_job_repository import PostgresJobRepository
 
 
 WEB_ROOT = Path(__file__).parent
@@ -72,10 +74,14 @@ def create_app(
     outreach_database_path: str | Path | None = None,
     application_database_path: str | Path | None = None,
     notification_recipient_updater: Callable[[str], None] | None = update_cloud_email_recipient,
+    company_config_path: str | Path | None = None,
 ) -> FastAPI:
     """Create a local dashboard backed by the configured job repository."""
     repository = create_job_repository(database_path)
-    repository.initialize()
+    if isinstance(repository, PostgresJobRepository):
+        repository.verify_schema()
+    else:
+        repository.initialize()
     outreach_path = Path(outreach_database_path) if outreach_database_path else Path("data/outreach.db")
     outreach_repository = OutreachRepository(outreach_path)
     outreach_repository.initialize()
@@ -87,8 +93,15 @@ def create_app(
     application_repository = ApplicationRepository(application_path)
     application_repository.initialize()
     csrf_token = secrets.token_urlsafe(32)
+    app_started_at = datetime.now(timezone.utc)
     allowed_resume_root = Path(resume_directory).resolve() if resume_directory else None
     tailored_resume_root = allowed_resume_root / "tailored" if allowed_resume_root else None
+    project_root = Path(__file__).resolve().parents[2]
+    company_config = (
+        Path(company_config_path)
+        if company_config_path
+        else project_root / "config" / "companies.yaml"
+    )
     proposal_sessions: dict[str, tuple[float, int, Path, str]] = {}
     outreach_sessions: dict[str, tuple[float, int, int, str]] = {}
     outreach_approval_sessions: dict[str, tuple[float, int, int, str, str, str]] = {}
@@ -103,7 +116,14 @@ def create_app(
     def health():
         jobs = repository.list_all()
         job_id = next((job.id for job in jobs if job.id is not None), None)
-        return {"name": "AJob", "status": "ok", "job_id": job_id}
+        storage = "postgres" if isinstance(repository, PostgresJobRepository) else "sqlite"
+        return {
+            "name": "AJob",
+            "status": "ok",
+            "job_id": job_id,
+            "storage": storage,
+            "started_at": app_started_at.isoformat(),
+        }
 
     @app.get("/", response_class=HTMLResponse)
     def dashboard(
@@ -127,6 +147,13 @@ def create_app(
             raise HTTPException(status_code=400, detail="Unknown location filter")
 
         all_jobs = repository.list_all()
+        configured_companies = load_companies(company_config)
+        scanned_companies = [
+            configured.name for configured in configured_companies if configured.enabled
+        ]
+        paused_companies = [
+            configured.name for configured in configured_companies if not configured.enabled
+        ]
         active_resume = get_active_resume(allowed_resume_root)
         job_matches = {}
         resume_match_failed_ids = set()
@@ -204,6 +231,8 @@ def create_app(
             {
                 "jobs": jobs,
                 "companies": companies,
+                "scanned_companies": scanned_companies,
+                "paused_companies": paused_companies,
                 "statuses": JOB_STATUSES,
                 "selected_status": status_filter,
                 "selected_company": company,

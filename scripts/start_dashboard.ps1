@@ -9,6 +9,7 @@ if (-not $ResumeDirectory -and (Test-Path -LiteralPath $localSettingsPath)) {
     $ResumeDirectory = (Get-Content -LiteralPath $localSettingsPath -Raw -Encoding UTF8).Trim()
 }
 $pythonPath = Join-Path $projectRoot ".venv\Scripts\python.exe"
+$databaseCredentialPath = Join-Path $projectRoot "config\database_url.cred"
 $dashboardUrl = "http://127.0.0.1:8001/"
 $healthUrl = "http://127.0.0.1:8001/health"
 $serverPidPath = Join-Path $projectRoot "config\local_server.pid"
@@ -33,11 +34,56 @@ try {
         exit 1
     }
 
+    if (Test-Path -LiteralPath $databaseCredentialPath) {
+        try {
+            $encryptedDatabaseUrl = Get-Content -LiteralPath $databaseCredentialPath -Raw -Encoding ASCII
+            $secureDatabaseUrl = ConvertTo-SecureString -String $encryptedDatabaseUrl.Trim()
+            $databaseUrlPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureDatabaseUrl)
+            try {
+                $env:DATABASE_URL = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($databaseUrlPointer)
+            }
+            finally {
+                [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($databaseUrlPointer)
+                $secureDatabaseUrl.Dispose()
+            }
+        }
+        catch {
+            Add-Type -AssemblyName PresentationFramework
+            [System.Windows.MessageBox]::Show(
+                "The saved database connection could not be decrypted for this Windows account. Run scripts/import_database_url.ps1 again.",
+                "AJob"
+            ) | Out-Null
+            exit 1
+        }
+    }
+
 function Test-DashboardReady {
     try {
         $healthResponse = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2
         $health = $healthResponse.Content | ConvertFrom-Json
         if ($healthResponse.StatusCode -ne 200 -or $health.name -ne "AJob") {
+            return $false
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$health.started_at)) {
+            return $false
+        }
+        $serverStartedAt = [DateTimeOffset]::Parse([string]$health.started_at).UtcDateTime
+        $dashboardSources = @(
+            (Join-Path $projectRoot "src\web\app.py"),
+            (Join-Path $projectRoot "src\web\templates\dashboard.html"),
+            (Join-Path $projectRoot "src\web\static\app.css"),
+            (Join-Path $projectRoot "src\web\static\ui.js"),
+            (Join-Path $projectRoot "config\companies.yaml")
+        )
+        if (Test-Path -LiteralPath $databaseCredentialPath) {
+            $dashboardSources += $databaseCredentialPath
+        }
+        foreach ($sourcePath in $dashboardSources) {
+            if ((Get-Item -LiteralPath $sourcePath).LastWriteTimeUtc -gt $serverStartedAt) {
+                return $false
+            }
+        }
+        if ($env:DATABASE_URL -and $health.storage -ne "postgres") {
             return $false
         }
         $response = Invoke-WebRequest -Uri $dashboardUrl -UseBasicParsing -TimeoutSec 2
@@ -92,7 +138,7 @@ if (-not (Test-DashboardReady)) {
     }
     $serverCommand += "& '$escapedPython' -m uvicorn src.web.app:app --host 127.0.0.1 --port 8001"
 
-    Start-Process powershell.exe -ArgumentList @(
+    Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @(
         "-NoExit",
         "-ExecutionPolicy", "Bypass",
         "-Command", $serverCommand

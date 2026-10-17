@@ -5,3 +5,6 @@ __pycache__/
 data/*.db
 config/local_settings.txt
 config/local_server.pid
+config/database_url.cred
+config/database_url.cred.tmp
+config/database-ca.pem

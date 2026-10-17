@@ -8,7 +8,27 @@ from src.models import JobPosting
 from src.applications.service import discover_resume_pairs
 from src.resume.resume_manager import save_active_resume
 from src.storage.job_repository import JobRepository
+from src.storage.postgres_job_repository import PostgresJobRepository
 from src.web.app import _clean_captured_lines, _summarize_captured_lines, create_app
+
+
+def test_postgres_dashboard_starts_without_schema_ownership(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://dashboard@db.example/jobs")
+    verified = []
+
+    def forbidden_initialize(self):
+        raise AssertionError("Dashboard must not run PostgreSQL migrations")
+
+    monkeypatch.setattr(PostgresJobRepository, "initialize", forbidden_initialize)
+    monkeypatch.setattr(PostgresJobRepository, "verify_schema", lambda self: verified.append(True))
+    monkeypatch.setattr(PostgresJobRepository, "list_all", lambda self: [])
+    client = TestClient(create_app(
+        tmp_path / "unused.db",
+        outreach_database_path=tmp_path / "outreach.db",
+        application_database_path=tmp_path / "applications.db",
+    ))
+    assert verified == [True]
+    assert client.get("/health").json()["storage"] == "postgres"
 
 
 def _client_with_jobs(tmp_path):
@@ -166,6 +186,49 @@ def test_dashboard_filters_to_relevant_jobs_by_default(tmp_path) -> None:
     assert 'action="/settings/notification-email"' in response.text
 
 
+def test_dashboard_discloses_active_and_paused_scan_sources(tmp_path) -> None:
+    client, _ = _client_with_jobs(tmp_path)
+
+    response = client.get("/")
+
+    assert "Scanning 48 companies" in response.text
+    assert "Companies included in every scan" in response.text
+    assert "Microsoft" in response.text
+    assert "Applied Materials" in response.text
+    assert "1 configured sources paused" in response.text
+    assert "Palo Alto Networks / CyberArk (Idira)" in response.text
+    assert "Check Point" in response.text
+    assert "Wix" in response.text
+
+
+def test_dashboard_reloads_scan_sources_from_current_config(tmp_path) -> None:
+    config = tmp_path / "companies.yaml"
+    config.write_text(
+        "companies:\n  - name: First Source\n    careers_url: https://example.com/jobs\n",
+        encoding="utf-8",
+    )
+    client = TestClient(create_app(
+        tmp_path / "jobs.db",
+        outreach_database_path=tmp_path / "outreach.db",
+        application_database_path=tmp_path / "applications.db",
+        company_config_path=config,
+    ))
+    assert "First Source" in client.get("/").text
+
+    config.write_text(
+        "companies:\n"
+        "  - name: Second Source\n    careers_url: https://example.com/second\n"
+        "  - name: Paused Source\n    careers_url: https://example.com/paused\n    enabled: false\n",
+        encoding="utf-8",
+    )
+    response = client.get("/")
+
+    assert "Scanning 1 companies" in response.text
+    assert "Second Source" in response.text
+    assert "Paused Source" in response.text
+    assert "First Source" not in response.text
+
+
 def test_dashboard_hides_jobs_ineligible_for_active_resume_by_default(tmp_path) -> None:
     client, _ = _client_with_jobs(tmp_path)
     repository = JobRepository(tmp_path / "jobs.db")
@@ -291,7 +354,9 @@ def test_health_endpoint_identifies_current_ajob_server(tmp_path) -> None:
     payload = response.json()
     assert payload["name"] == "AJob"
     assert payload["status"] == "ok"
+    assert payload["storage"] == "sqlite"
     assert isinstance(payload["job_id"], int)
+    assert datetime.fromisoformat(payload["started_at"]).tzinfo is not None
     assert client.get(f"/jobs/{payload['job_id']}").status_code == 200
 
 

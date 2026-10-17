@@ -24,6 +24,13 @@ reusable lesson appears.
   endpoint and exercise a representative detail route, not only the home page.
   Serialize concurrent launches and stop an unhealthy listener only when its PID
   was recorded by the launcher; never kill an unrelated process sharing the port.
+- Include the app startup time in health and compare it with the dashboard source
+  files, including JavaScript, in the Windows launcher. A healthy process can still
+  serve stale templates or assets after an update; restart it only when the tracked
+  AJob PID is behind.
+- When a local launcher selects a configured storage backend, report that backend
+  from the health endpoint and include it in readiness checks. Otherwise a healthy
+  server can keep serving from the wrong database after configuration changes.
 - A desktop double-click can create two launcher processes. Coalesce concurrent
   invocations with a non-blocking mutex and hold it briefly after opening the URL;
   a waiting mutex only serializes duplicate browser opens.
@@ -66,6 +73,11 @@ reusable lesson appears.
   and `+` can represent the same query value and must not create duplicate jobs.
 - Confirm that listing content actually changed after clicking a pagination control;
   a visible or enabled next button does not prove navigation succeeded.
+- Career sites may use plain `.pagination a.next` links without accessibility
+  labels. Test real DOM pagination and ignore disabled links. Verify country
+  filters from actual results: a location-looking query parameter may be ignored.
+- When an acquired company's recruiting moves to its parent, represent the shared
+  coverage explicitly and scan that board once instead of duplicating listings.
 - Do not claim a source is supported when its page exposes no usable job data.
   Disable it explicitly and document the need for a dedicated adapter.
 - Workday search landing pages can render no job anchors even when individual
@@ -104,6 +116,9 @@ reusable lesson appears.
 
 ## Data safety
 
+- A dashboard database role needs job read access and lifecycle-status updates,
+  not schema ownership. Verify required columns without DDL at dashboard startup;
+  keep PostgreSQL schema migrations in the scanner's privileged initialization.
 - Use idempotent URL-based upserts for discovered jobs.
 - Never delete or rewrite an existing jobs database merely because filtering rules
   changed. Introduce an explicit migration or relevance state when needed.
@@ -185,6 +200,9 @@ reusable lesson appears.
 - Keep SMTP settings exclusively in environment variables or secret stores; do not
   place credentials in YAML, source code, images, or test fixtures that resemble
   real credentials.
+- Store Windows-only local service credentials with current-user DPAPI encryption,
+  exclude the encrypted file from Git, and decrypt only into the launched process
+  environment. Do not place secrets in launcher command-line arguments.
 - Make notification delivery explicit and test SMTP interactions with injected
   clients. A scheduled GitHub-hosted runner has ephemeral local storage, so it
   cannot reliably determine which jobs are new without a persistent store.
@@ -234,6 +252,13 @@ reusable lesson appears.
   not support a per-schedule timezone field, so document daylight-saving effects.
 - Do not make automatic PostgreSQL migrations delete or merge existing job rows.
   URL normalization must preserve user-managed lifecycle status and audit history.
+- Show configured scan coverage from the same company configuration used by the
+  scanner. Do not infer the source list from stored jobs: an enabled company with
+  zero discoveries still runs, while paused companies must be labeled separately.
+- Keep disclosure popovers in their owning `<details>` subtree so the summary and
+  panel stay semantically associated. Use the Popover API for top-layer display,
+  synchronize light-dismiss back to `details.open`, and keep an outside-click
+  fallback for browsers without Popover API support.
 
 ## Professional outreach
 
@@ -262,5 +287,7 @@ reusable lesson appears.
 - GitHub Actions cron can be delayed or dropped, and a scan can outlast a short
   job timeout. Use several same-slot retries away from the hour boundary, keep
   delivery claims idempotent, and expire abandoned claims before the final
-  retry. The shared workflow concurrency group prevents its own retries from
-  reclaiming a live scan.
+  retry. If a concurrency group serializes scheduled retries, set `queue: max`:
+  GitHub otherwise keeps only one pending run and replaces older pending retries;
+  with `queue: max`, up to 100 pending runs wait. Delivery claims still prevent
+  overlapping retries from sending duplicate mail.

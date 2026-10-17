@@ -185,9 +185,20 @@ Use `--max-pages 1` to restrict each company to its first results page.
 
 Microsoft, Google, Amazon, Apple, Intel, NVIDIA, monday.com, and Mobileye are
 enabled. Intel and NVIDIA use a dedicated Workday JSON adapter; Mobileye uses
-its official Lever student listing. Wix, Check Point, CyberArk, Qualcomm, SAP,
-AppsFlyer, and Similarweb remain documented but disabled until an enumerable
-official feed or dedicated adapter is verified end to end.
+its official Lever student listing. There are 48 enabled scan sources, including
+21 additional verified Greenhouse employers. AppsFlyer and Wix use their official
+feeds; SAP coverage is limited to SAP IT Business Systeme. CyberArk/Idira roles
+share the Palo Alto Networks Israel listing to avoid duplicate scans. Check Point
+remains paused because its official listing blocks automated access.
+
+The local dashboard can use the same Supabase database as cloud scans. Its
+dedicated database account needs only SELECT and UPDATE(status) on job_postings;
+dashboard startup verifies the schema without running migrations. The Windows
+launcher reads a current-user DPAPI-encrypted config/database_url.cred, with TLS
+hostname verification against Supabase's official CA certificate. Keep both the
+credential and local certificate file out of Git. Before switching databases,
+preserve lifecycle statuses by canonical job URL and check local outreach and
+application records for job-ID associations.
 
 Filtering is deliberately conservative and explainable. A role must have a
 software-oriented title, must not contain a clear senior-level marker, and must
