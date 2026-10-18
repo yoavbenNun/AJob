@@ -142,3 +142,47 @@ def test_safe_cloud_profile_roundtrip_preserves_ongoing_studies():
     assert 'Example University' not in encoded
     cloud_profile = load_safe_profile_json(encoded).to_resume_profile()
     assert not match_resume_to_job(cloud_profile, posting(PALO_TITLE, PALO_REQUIREMENTS)).eligible
+
+
+@pytest.mark.parametrize('title,requirement,education,status', [
+    ('Software Engineer Student, Virtual Platforms, Annapurna Labs',
+     'B.Sc. student in Software Engineering, with at least 2 years remaining until graduation.', '2027', 'ineligible'),
+    ('Software Engineer Student, SPIV team',
+     'B.Sc. student in Software Engineering, with at least 2 years remaining until graduation.', '2027', 'ineligible'),
+    ('Software Student', 'At least 3 full semesters remaining until graduation.', '2027', 'potentially_eligible'),
+    ('Software Student', 'Minimum 2 years until graduation.', '', 'potentially_eligible'),
+    ('Software Student', 'Minimum 1 year until graduation.', '2027', 'potentially_eligible'),
+    ('Software Student', 'Minimum two years until graduation.', '2029', 'student_eligible'),
+    ('Software Student', 'Minimum 2 years of studies remaining until your graduation.', '2027', 'ineligible'),
+    ('Software Student', 'At least 3 semesters remaining.', '2027; 4 semesters remaining', 'student_eligible'),
+    ('Software Student', 'At least 3 semesters remaining.', '2027; 2 semesters remaining', 'ineligible'),
+    ('Software Student', 'At least 3 semesters remaining.', '2027; at least 2 semesters remaining', 'potentially_eligible'),
+    ('Software Student', 'At least 2 years remaining until graduation.', '2028-10-18', 'student_eligible'),
+    ('Software Student', 'At least 2 years remaining until graduation.', '2028-10-17', 'ineligible'),
+    ('Software Student', 'At least 2 years remaining until graduation.', '2028-99-99', 'potentially_eligible'),
+    ('Software Student', 'Preferred Qualifications\n3 semesters remaining until graduation.', '2027', 'student_eligible'),
+    ('Software Engineer', 'Open to third-year students. Python.', '2027', 'student_eligible'),
+])
+def test_remaining_studies_regressions(monkeypatch, title, requirement, education, status):
+    from datetime import datetime
+    from src.matching import eligibility
+
+    class Clock:
+        @staticmethod
+        def now(tz):
+            return datetime(2026, 10, 18, tzinfo=tz)
+
+    monkeypatch.setattr(eligibility, 'datetime', Clock)
+    resume = replace(STUDENT, education='Software Engineering (in progress). Expected graduation: ' + education)
+    job = posting(title, requirement)
+    result = match_resume_to_job(resume, job)
+    assert result.eligibility_status == status
+    assert result.eligibility_reasons
+    assert job.status == 'applied'
+
+
+def test_remaining_studies_leap_year_boundary():
+    from datetime import date
+    from src.matching.eligibility import _remaining_studies
+    resume = replace(STUDENT, education='Expected graduation 2029-02-28')
+    assert _remaining_studies('at least 1 year until graduation', resume, date(2028, 2, 29)) is None

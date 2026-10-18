@@ -1,7 +1,9 @@
 """Conservative student eligibility, independent of technology overlap and storage."""
 
 import re
-from datetime import date
+from calendar import monthrange
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from src.models import JobPosting, ResumeProfile
 
@@ -32,6 +34,52 @@ def candidate_is_studying(resume: ResumeProfile) -> bool:
     return bool(re.search(STUDY, candidate)) or any(year > date.today().year for year in years)
 
 
+def _remaining_studies(clause: str, resume: ResumeProfile, today: date):
+    requirement = re.search(
+        r'\b(\d+|one|two|three|four|five|six)\s+(?:(?:full|academic)\s+)?'
+        r'(years?|semesters?|terms?)\s+(?:of\s+(?:studies|study|your degree)\s+)?'
+        r'(?:remaining|left|(?:until|before|to)\s+(?:your\s+)?graduation)\b',
+        clause,
+    )
+    if not requirement:
+        return None
+    number, unit = requirement.groups()
+    count = int(number) if number.isdigit() else {'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6}[number]
+    if unit.startswith('year') and not re.search(r'graduat|degree|stud', clause):
+        return None
+    if not unit.startswith('year'):
+        stated = re.search(r'\b(?:(at least|minimum)\s+)?(\d+)\s+(?:(?:full|academic)\s+)?'
+                           r'(semesters?|terms?)\s+(?:remaining|left)\b',
+                           _normalize(resume.education + '\n' + resume.summary))
+        if stated and stated[3].rstrip('s') == unit.rstrip('s'):
+            if int(stated[2]) >= count:
+                return None
+            if not stated[1]:
+                return True, f'{count} {unit} remaining required; candidate documents only {stated[2]}.'
+        # Calendar time does not establish completed/full academic semesters.
+        return False, f'{count} {unit} remaining required; remaining academic terms are not documented.'
+    candidate = resume.education + '\n' + resume.summary
+    exact = re.findall(r'\b(20\d{2}-\d{2}-\d{2})\b', candidate)
+    years = re.findall(r'\b(20\d{2})\b', candidate)
+    try:
+        if exact and max(date.fromisoformat(value).year for value in exact) == max(int(value) for value in years):
+            earliest = latest = max(date.fromisoformat(value) for value in exact)
+        elif years:
+            year = max(int(value) for value in years)
+            earliest, latest = date(year, 1, 1), date(year, 12, 31)
+        else:
+            return False, f'{count} years until graduation required; graduation date is not documented.'
+        required = date(today.year + count, today.month,
+                        min(today.day, monthrange(today.year + count, today.month)[1]))
+    except ValueError:
+        return False, 'Graduation date could not be verified against the remaining-study requirement.'
+    if latest < required:
+        return True, f'{count} years until graduation required; even the latest possible graduation ({latest.isoformat()}) is too early.'
+    if earliest < required:
+        return False, f'{count} years until graduation required; graduation year alone cannot establish eligibility.'
+    return None
+
+
 def assess_student_eligibility(resume: ResumeProfile, job: JobPosting) -> tuple[str, tuple[str, ...]]:
     """Reject demonstrated conflicts; unknown facts remain reviewable.
 
@@ -46,6 +94,7 @@ def assess_student_eligibility(resume: ResumeProfile, job: JobPosting) -> tuple[
     student_evidence = student_acceptance_evidence(text)
     student_role = student_evidence or bool(re.search(r'\b(?:student|intern|internship|internships|working student)\b', title))
     conflicts, doubts = [], []
+    today = datetime.now(ZoneInfo('Asia/Jerusalem')).date()
     # Process both sources, preserving each source's heading scope. Description
     # starts outside qualifications; requirements excerpts start inside them.
     for source, initial in ((job.description, 'unknown'), (job.requirements, 'required')):
@@ -64,13 +113,17 @@ def assess_student_eligibility(resume: ResumeProfile, job: JobPosting) -> tuple[
             optional = (bool(re.search(PREFERRED, clause)) or mode == 'preferred'
                         or bool(re.search(r'\bno\b[^.;\n]{0,70}\brequired\b', clause)))
             hard = not optional and (mode == 'required' or bool(re.search(r'\b(?:must|required|minimum|at least)\b', clause)))
+            remaining = _remaining_studies(clause, resume, today) if hard else None
+            if remaining:
+                rejected, reason = remaining
+                (conflicts if rejected else doubts).append(reason)
             if studying and not optional and re.search(STUDENT_EXCLUSION + r'|\bgraduates only\b|\bmust have graduated\b', clause):
                 if student_evidence:
                     doubts.append('Conflicting student acceptance and graduation requirements; confirm eligibility.')
                 else:
                     conflicts.append('Posting explicitly excludes current students or requires graduation.')
             if studying and re.search(DEGREE, clause) and hard:
-                accepts_study = bool(re.search(STUDY, clause))
+                accepts_study = bool(re.search(STUDY, clause)) or bool(re.search(r'\b(?:remaining|left)\b', clause))
                 alternative = bool(re.search(r'\bor\s+(?:\w+\s+){0,3}equivalent|equivalent experience', clause))
                 completed = bool(re.search(r'\b(?:completed|awarded|earned|graduated|graduate[s]?)\b', clause))
                 if not accepts_study and not alternative:
