@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from src.models import JobPosting, ResumeProfile
 from src.resume.resume_parser import SKILL_ALIASES
 from src.matching.eligibility import assess_student_eligibility
+from src.job_content import professional_job_text, clean_job_text, qualification_text
 
 
 SKILL_POINTS = 60
@@ -86,13 +87,14 @@ def match_resume_to_job(resume: ResumeProfile, job: JobPosting) -> MatchResult:
     points only when the resume itself contains that evidence. The returned score
     is always an integer from 1 through 100.
     """
-    job_text = "\n".join((job.title, job.description, job.requirements))
+    job_text = professional_job_text(job.title, job.description, job.requirements)
     required_skills = _extract_known_skills(job_text)
     resume_skills = set(resume.skills)
     matched_skills = tuple(skill for skill in required_skills if skill in resume_skills)
     missing_skills = tuple(skill for skill in required_skills if skill not in resume_skills)
 
-    skill_component = _skill_component(required_skills, matched_skills)
+    explicit_skills = _extract_known_skills(qualification_text(job.requirements))
+    skill_component = _skill_component(required_skills, matched_skills, explicit_skills)
     experience_component = _section_component(
         resume.experience,
         matched_skills,
@@ -106,7 +108,7 @@ def match_resume_to_job(resume: ResumeProfile, job: JobPosting) -> MatchResult:
         "projects",
     )
     education_component, education_disqualifiers = _education_component(
-        resume.education, resume.summary, job.title, job.requirements
+        resume.education, resume.summary, job.title, clean_job_text(job.requirements)
     )
     breakdown = MatchBreakdown(
         skills=skill_component,
@@ -170,7 +172,8 @@ def _contains_alias(text: str, alias: str) -> bool:
 
 
 def _skill_component(
-    required_skills: tuple[str, ...], matched_skills: tuple[str, ...]
+    required_skills: tuple[str, ...], matched_skills: tuple[str, ...],
+    explicit_skills: tuple[str, ...] = (),
 ) -> ScoreComponent:
     if not required_skills:
         return ScoreComponent(
@@ -178,13 +181,16 @@ def _skill_component(
             maximum=SKILL_POINTS,
             reason="no recognized skill requirements were found in the posting",
         )
-    points = round(SKILL_POINTS * len(matched_skills) / len(required_skills))
+    weights = {skill: 2 if skill in explicit_skills else 1 for skill in required_skills}
+    points = round(SKILL_POINTS * sum(weights[skill] for skill in matched_skills) / sum(weights.values()))
     return ScoreComponent(
         points=points,
         maximum=SKILL_POINTS,
         reason=(
             f"{len(matched_skills)} of {len(required_skills)} recognized job skills "
             "are listed on the resume"
+            + ('; explicit qualifications carry twice the weight of supporting role mentions'
+               if explicit_skills and set(required_skills) - set(explicit_skills) else '')
         ),
     )
 

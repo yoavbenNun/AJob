@@ -111,6 +111,22 @@ def test_atomic_commit_and_real_rollback(store):
     assert len(store.prepare_batch('slot')) == 1
 
 
+@pytest.mark.parametrize('durable', [False, True])
+def test_bad_detail_refresh_preserves_valid_posting(repository, store, durable):
+    from dataclasses import replace
+    original = JobPosting('Software Student', 'Example', 'Israel', 'https://example.test/preserve-detail',
+                          description='Develop Python services.', requirements='Python required.', status='applied')
+    job_id = repository.save(original)
+    invalid = replace(original, description='Page not found.', requirements='', status='new')
+    if durable:
+        assert not store.save_discovery(invalid, 'test-detail-slot')
+    else:
+        repository.save(invalid)
+    saved = repository.get_by_id(job_id)
+    assert (saved.description, saved.requirements, saved.status) == (
+        'Develop Python services.', 'Python required.', 'applied')
+
+
 def test_concurrent_discovery_has_one_job_and_one_outbox(repository, store):
     barrier = Barrier(2)
     def discover(index):

@@ -6,11 +6,13 @@ from typing import Any, Protocol
 from urllib.parse import urljoin, urlsplit
 from urllib.request import Request, urlopen
 import json
+import re
 
 from playwright.sync_api import Browser, Page, TimeoutError as PlaywrightTimeoutError
 
 from src.filtering.job_filter import classify_job, prefilter_job
 from src.models import Company, JobPosting
+from src.job_content import description_problem, clean_job_text, QUALIFICATION_HEADING
 from src.urls import canonical_url
 from src.scrapers.greenhouse import fetch_greenhouse_jobs, is_greenhouse_board
 from src.scrapers.paused_sources import scan_public_feed, supported as supports_public_feed
@@ -236,15 +238,21 @@ def scan_companies(
 
                 summary.jobs_found += len(result.jobs)
                 relevant_for_company = 0
+                detail_failure_reported = False
                 for job in result.jobs:
                     prefilter = prefilter_job(job)
                     if not prefilter.relevant:
                         repository.update_relevance_by_url(job.job_url, False)
                         print(f"  Skipped: {job.title} - {prefilter.reason}")
                         continue
-                    _enrich_job(browser, job, timeout_ms)
+                    detail_error = _enrich_job(browser, job, timeout_ms)
+                    invalid_detail = detail_error or description_problem(job.description, job.requirements)
+                    if invalid_detail and not detail_failure_reported:
+                        summary.failures += 1
+                        detail_failure_reported = True
+                        print('  JobDetailUnavailable: retained for the next scheduled scan')
                     decision = classify_job(job)
-                    if not decision.relevant:
+                    if not decision.relevant and not invalid_detail:
                         repository.update_relevance_by_url(job.job_url, False)
                         print(f"  Skipped: {job.title} - {decision.reason}")
                         continue
@@ -363,7 +371,7 @@ def _listing_signature(page: Page) -> tuple[str, ...]:
     return tuple(sorted(set(hrefs)))
 
 
-def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> None:
+def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> str | None:
     """Populate full page text and a focused requirements excerpt, best effort."""
     if (is_greenhouse_board(job.source) or supports_public_feed(
         Company(name=job.company, careers_url=job.source)
@@ -373,11 +381,14 @@ def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> None:
         return
     page = browser.new_page()
     try:
-        page.goto(job.job_url, wait_until="domcontentloaded", timeout=timeout_ms)
+        response = page.goto(job.job_url, wait_until="domcontentloaded", timeout=timeout_ms)
         page.wait_for_timeout(750)
         main = page.locator("main")
         text = main.inner_text() if main.count() else page.locator("body").inner_text()
         normalized = "\n".join(line.strip() for line in text.splitlines() if line.strip())
+        problem = description_problem(normalized, status_code=response.status if response is not None else None)
+        if problem:
+            return 'JobDetailUnavailable'
         if normalized:
             job.description = normalized[:20_000]
             job.requirements = extract_requirements(normalized)
@@ -386,27 +397,18 @@ def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> None:
                 job.location = detail_location
     except Exception:
         # Card data is still useful when an individual detail page is unavailable.
-        return
+        return 'JobDetailUnavailable'
     finally:
         page.close()
 
 
 def extract_requirements(description: str) -> str:
     """Extract a requirements/qualifications section from detail-page text."""
-    headings = (
-        "minimum qualifications",
-        "basic qualifications",
-        "requirements",
-        "qualifications",
-        "what you'll need",
-        "what you will need",
-    )
-    lower = description.casefold()
-    starts = [lower.find(heading) for heading in headings]
-    starts = [start for start in starts if start >= 0]
-    if not starts:
+    description = clean_job_text(description)
+    heading = re.search(r'(?im)^\s*' + QUALIFICATION_HEADING, description)
+    if not heading:
         return ""
-    start = min(starts)
+    start = heading.start()
     return description[start : start + 6_000]
 
 

@@ -13,6 +13,7 @@ from src.filtering.job_filter import classify_job, prefilter_job
 from src.scrapers.careers_scraper import CareersScraper, _enrich_job
 from src.scrapers.greenhouse import is_greenhouse_board
 from src.scrapers.paused_sources import supported
+from src.job_content import description_problem
 
 
 @dataclass
@@ -68,25 +69,30 @@ def source_worker(company, timeout_ms, max_pages, headless, pipe):
             pipe.send(("error", "SourceFetchError"))
             return
         pipe.send(("found", len(result.jobs)))
+        detail_failures = 0
         for job in result.jobs:
             pipe.send(("phase", "processing"))
             started = time.monotonic()
             preliminary = prefilter_job(job)
             pipe.send(("timing", "processing_seconds", time.monotonic() - started))
             if preliminary.relevant:
+                detail_error = None
                 if not ((is_greenhouse_board(job.source) or supported(company)) and job.description):
                     pipe.send(("phase", "http"))
                     started = time.monotonic()
-                    _enrich_job(browser, job, timeout_ms)
+                    detail_error = _enrich_job(browser, job, timeout_ms)
                     pipe.send(("timing", "http_seconds", time.monotonic() - started))
                 pipe.send(("phase", "processing"))
                 started = time.monotonic()
-                accepted = classify_job(job).relevant
+                invalid_detail = detail_error or description_problem(job.description, job.requirements)
+                if invalid_detail:
+                    detail_failures += 1
+                accepted = bool(invalid_detail) or classify_job(job).relevant
                 pipe.send(("timing", "processing_seconds", time.monotonic() - started))
             else:
                 accepted = False
             pipe.send(("job", accepted, job))
-        pipe.send(("done",))
+        pipe.send(("error", "JobDetailUnavailable") if detail_failures else ("done",))
     except Exception as error:
         pipe.send(("error", type(error).__name__))
     finally:

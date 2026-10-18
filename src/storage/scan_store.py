@@ -14,6 +14,7 @@ from pathlib import Path
 import uuid
 
 from src.models import JobPosting
+from src.job_content import description_problem
 from src.urls import canonical_url
 
 
@@ -146,8 +147,13 @@ class ScanStore:
                 payload["discovered_at"] = job.discovered_at.isoformat()
                 self.execute("INSERT INTO notification_outbox(job_id,origin_slot,snapshot) VALUES (?,?,?)", (job.id, slot, json.dumps(payload)))
             else:
-                self.execute("""UPDATE job_postings SET title=?,company=?,location=?,description=?,requirements=?,
-                    source=?,discovered_at=?,is_relevant=? WHERE job_url=?""", values[:3] + values[4:9] + (job.job_url,))
+                valid = description_problem(job.description, job.requirements) is None
+                self.execute("""UPDATE job_postings SET title=?,company=?,location=?,
+                    description=CASE WHEN ? THEN ? ELSE description END,
+                    requirements=CASE WHEN ? THEN ? ELSE requirements END,
+                    source=?,discovered_at=?,is_relevant=? WHERE job_url=?""",
+                    values[:3] + (description_problem(job.description) is None, job.description,
+                                  valid, job.requirements) + values[6:9] + (job.job_url,))
                 job.id = int(self.execute("SELECT id FROM job_postings WHERE job_url=?", (job.job_url,)).fetchone()["id"])
         return bool(inserted)
 

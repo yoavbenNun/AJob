@@ -6,6 +6,7 @@ from datetime import datetime
 from urllib.parse import urlsplit
 
 from src.models import JOB_STATUSES, JobPosting
+from src.job_content import description_problem
 from src.urls import canonical_url
 
 
@@ -167,8 +168,8 @@ class PostgresJobRepository:
                     title = EXCLUDED.title,
                     company = EXCLUDED.company,
                     location = EXCLUDED.location,
-                    description = EXCLUDED.description,
-                    requirements = EXCLUDED.requirements,
+                    description = CASE WHEN %s THEN EXCLUDED.description ELSE job_postings.description END,
+                    requirements = CASE WHEN %s THEN EXCLUDED.requirements ELSE job_postings.requirements END,
                     source = EXCLUDED.source,
                     discovered_at = EXCLUDED.discovered_at,
                     is_relevant = EXCLUDED.is_relevant
@@ -178,6 +179,8 @@ class PostgresJobRepository:
                     job.title, job.company, job.location, job.job_url,
                     job.description, job.requirements, job.source,
                     job.discovered_at, job.is_relevant, job.status,
+                    description_problem(job.description) is None,
+                    description_problem(job.description, job.requirements) is None,
                 ),
             )
             row = cursor.fetchone()

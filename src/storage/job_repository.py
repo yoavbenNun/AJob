@@ -4,6 +4,7 @@ import sqlite3
 from pathlib import Path
 
 from src.models import JOB_STATUSES, JobPosting
+from src.job_content import description_problem
 from src.urls import canonical_url
 
 
@@ -120,8 +121,8 @@ class JobRepository:
                     title = excluded.title,
                     company = excluded.company,
                     location = excluded.location,
-                    description = excluded.description,
-                    requirements = excluded.requirements,
+                    description = CASE WHEN ? THEN excluded.description ELSE job_postings.description END,
+                    requirements = CASE WHEN ? THEN excluded.requirements ELSE job_postings.requirements END,
                     source = excluded.source,
                     discovered_at = excluded.discovered_at,
                     is_relevant = excluded.is_relevant
@@ -137,6 +138,8 @@ class JobRepository:
                     job.discovered_at.isoformat(),
                     int(job.is_relevant),
                     job.status,
+                    description_problem(job.description) is None,
+                    description_problem(job.description, job.requirements) is None,
                 ),
             )
             row = connection.execute(

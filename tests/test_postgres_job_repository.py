@@ -46,6 +46,24 @@ def test_postgres_repository_rejects_incomplete_connection_urls(database_url: st
         PostgresJobRepository(database_url)
 
 
+@pytest.mark.parametrize('description,valid', [('Develop Python services.', True), ('Page not found.', False)])
+def test_postgres_save_preserves_content_on_invalid_refresh(monkeypatch, description, valid):
+    from unittest.mock import MagicMock
+    from src.models import JobPosting
+    connection = MagicMock()
+    cursor = connection.__enter__.return_value.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = {'id': 7}
+    repository = PostgresJobRepository('postgresql://db.example/jobs')
+    monkeypatch.setattr(repository, '_connect', lambda: connection)
+    assert repository.save(JobPosting('Student', 'Example', 'Israel', 'https://example.test/job',
+                                      description=description)) == 7
+    query, values = cursor.execute.call_args.args
+    assert query.count('%s') == len(values)
+    assert values[-2:] == (valid, valid)
+    assert 'ELSE job_postings.description END' in query
+    assert 'ELSE job_postings.requirements END' in query
+
+
 def test_postgres_repository_uses_bounded_connection_timeout(monkeypatch) -> None:
     captured = {}
     connection = object()

@@ -6,6 +6,7 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from src.models import JobPosting, ResumeProfile
+from src.job_content import description_problem, clean_job_text
 
 
 DEGREE = r"\b(?:bsc|bs|bachelor'?s?|degree)\b"
@@ -88,7 +89,10 @@ def assess_student_eligibility(resume: ResumeProfile, job: JobPosting) -> tuple[
     explicitly accepts ongoing studies or equivalent experience.
     """
     studying = candidate_is_studying(resume)
-    text = _normalize(job.description + '\n' + job.requirements)
+    problem = description_problem(job.description, job.requirements)
+    if problem:
+        return 'potentially_eligible', (problem + '; student eligibility cannot be verified.',)
+    text = _normalize(clean_job_text(job.description) + '\n' + clean_job_text(job.requirements))
     title = _normalize(job.title)
     # Student references in company boilerplate are not candidate evidence.
     student_evidence = student_acceptance_evidence(text)
@@ -99,7 +103,7 @@ def assess_student_eligibility(resume: ResumeProfile, job: JobPosting) -> tuple[
     # starts outside qualifications; requirements excerpts start inside them.
     for source, initial in ((job.description, 'unknown'), (job.requirements, 'required')):
         mode = initial
-        normalized = _normalize(source)
+        normalized = _normalize(clean_job_text(source))
         for clause in re.split(r'[\n;.]|\s+but\s+', normalized):
             clause = clause.strip(' -•\t')
             if not clause:
