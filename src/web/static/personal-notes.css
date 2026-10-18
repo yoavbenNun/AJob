@@ -1,0 +1,16 @@
+.job-card__actions { display: flex; align-items: center; justify-content: space-between; gap: .6rem; margin-top: auto; }
+.personal-note { position: relative; }
+.note-trigger { position: relative; display: grid; place-items: center; width: 36px; min-height: 36px; padding: .4rem; border: 1px solid transparent; border-radius: 9px; background: transparent; color: #6a7d94; box-shadow: none; }
+.note-trigger:hover, .note-trigger:focus-visible { color: #285aa2; background: #edf3fc; border-color: #cbdaf0; box-shadow: 0 3px 9px #254a7920; }
+.has-note .note-trigger { color: #285aa2; background: #edf3fc; }
+.has-note .note-trigger::after { content: ''; position: absolute; top: 4px; right: 4px; width: 5px; height: 5px; border-radius: 50%; background: #3974c1; }
+.note-preview { display: none; position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 30; width: max-content; max-width: min(280px, 75vw); max-height: 12rem; overflow: auto; padding: .7rem .85rem; border: 1px solid #d2dbe6; border-radius: 9px; background: #fff; color: #33445b; box-shadow: 0 8px 25px #152b4525; font-size: .8rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.personal-note:not(.is-editing):hover .note-preview, .personal-note:not(.is-editing):focus-within .note-preview { display: block; }
+.note-editor { display: none; position: fixed; inset: auto; left: var(--note-left, 16px); top: var(--note-top, 16px); width: min(340px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; margin: 0; padding: 1rem; border: 1px solid #cbd7e6; border-radius: 12px; background: #fff; color: #24364e; box-shadow: 0 14px 42px #152b4535; z-index: 100; }
+.note-editor.is-open { display: block; }
+.note-form label { font-weight: 700; font-size: .9rem; }
+.note-hint { margin: .4rem 0 .7rem; color: #687a91; font-size: .75rem; line-height: 1.5; }
+.note-form textarea { display: block; width: 100%; min-height: 120px; resize: vertical; box-sizing: border-box; font: inherit; font-size: .88rem; line-height: 1.55; }
+.note-editor__actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .85rem; }
+.note-editor__actions .note-cancel { color: #50637b; background: #f3f6fa; border: 1px solid #d5dfeb; }
+.note-error { color: #a33333; font-size: .8rem; line-height: 1.5; margin: .7rem 0 0; }

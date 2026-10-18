@@ -16,6 +16,7 @@ import os
 import re
 import secrets
 import time
+import sqlite3
 from datetime import date, datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Query, Request, status
@@ -57,6 +58,7 @@ from src.storage.repository_factory import create_job_repository
 from src.storage.application_repository import ApplicationRepository
 from src.storage.outreach_repository import OutreachRepository
 from src.storage.postgres_job_repository import PostgresJobRepository
+from src.storage.personal_notes_repository import PersonalNotesRepository
 
 
 WEB_ROOT = Path(__file__).parent
@@ -77,6 +79,7 @@ def create_app(
     application_database_path: str | Path | None = None,
     notification_recipient_updater: Callable[[str], None] | None = update_cloud_email_recipient,
     company_config_path: str | Path | None = None,
+    personal_notes_database_path: str | Path | None = None,
 ) -> FastAPI:
     """Create a local dashboard backed by the configured job repository."""
     repository = create_job_repository(database_path)
@@ -94,6 +97,10 @@ def create_app(
     )
     application_repository = ApplicationRepository(application_path)
     application_repository.initialize()
+    notes_path = (Path(personal_notes_database_path) if personal_notes_database_path
+                  else Path(database_path).parent / 'personal_notes.db')
+    notes_repository = PersonalNotesRepository(notes_path)
+    notes_repository.initialize()
     csrf_token = secrets.token_urlsafe(32)
     app_started_at = datetime.now(timezone.utc)
     allowed_resume_root = Path(resume_directory).resolve() if resume_directory else None
@@ -238,6 +245,7 @@ def create_app(
             "dashboard.html",
             {
                 "jobs": jobs,
+                "personal_notes": notes_repository.for_jobs(job.id for job in jobs),
                 "companies": companies,
                 "scanned_companies": scanned_companies,
                 "paused_companies": paused_companies,
@@ -263,6 +271,20 @@ def create_app(
                 "email_error": email_error,
             },
         )
+
+    @app.post('/jobs/{job_id}/personal-note')
+    async def save_personal_note(request: Request, job_id: int):
+        form = await request.form()
+        if not secrets.compare_digest(str(form.get('csrf_token', '')), csrf_token):
+            raise HTTPException(status_code=403, detail='Invalid form token')
+        _get_job_or_404(repository, job_id)
+        try:
+            note = notes_repository.save(job_id, form.get('note', ''))
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from None
+        except (sqlite3.Error, OSError):
+            raise HTTPException(status_code=503, detail='Could not save your note. Keep your text and try again.') from None
+        return {'note': note}
 
     @app.post("/settings/notification-email")
     async def update_notification_email(request: Request):
