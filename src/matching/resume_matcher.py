@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from src.models import JobPosting, ResumeProfile
 from src.resume.resume_parser import SKILL_ALIASES
+from src.matching.eligibility import assess_student_eligibility
 
 
 SKILL_POINTS = 60
@@ -64,6 +65,17 @@ class MatchResult:
     strengths: tuple[str, ...]
     gaps: tuple[str, ...]
     tailoring_suggestions: tuple[str, ...]
+    eligibility_status: str
+    eligibility_reasons: tuple[str, ...]
+    technical_score: int
+
+    @property
+    def eligibility_label(self) -> str:
+        return {
+            'student_eligible': 'Student eligible',
+            'potentially_eligible': 'Potentially eligible',
+            'ineligible': 'Ineligible',
+        }[self.eligibility_status]
 
 
 def match_resume_to_job(resume: ResumeProfile, job: JobPosting) -> MatchResult:
@@ -104,7 +116,13 @@ def match_resume_to_job(resume: ResumeProfile, job: JobPosting) -> MatchResult:
     )
     minimum_score_applied = breakdown.total == 0
     score = max(1, min(100, breakdown.total))
-    eligible = not education_disqualifiers
+    technical_score = score
+    eligibility_status, eligibility_reasons = assess_student_eligibility(resume, job)
+    if education_disqualifiers:
+        eligibility_status = 'ineligible'
+        eligibility_reasons = education_disqualifiers + eligibility_reasons
+    disqualifiers = eligibility_reasons if eligibility_status == 'ineligible' else ()
+    eligible = eligibility_status != 'ineligible'
     if not eligible:
         score = min(score, 25)
     strengths = _strengths(resume, matched_skills, experience_component, project_component)
@@ -118,7 +136,7 @@ def match_resume_to_job(resume: ResumeProfile, job: JobPosting) -> MatchResult:
     return MatchResult(
         score=score,
         eligible=eligible,
-        disqualifiers=education_disqualifiers,
+        disqualifiers=disqualifiers,
         minimum_score_applied=minimum_score_applied,
         breakdown=breakdown,
         job_skills=required_skills,
@@ -127,6 +145,9 @@ def match_resume_to_job(resume: ResumeProfile, job: JobPosting) -> MatchResult:
         strengths=strengths,
         gaps=gaps,
         tailoring_suggestions=suggestions,
+        eligibility_status=eligibility_status,
+        eligibility_reasons=eligibility_reasons,
+        technical_score=technical_score,
     )
 
 

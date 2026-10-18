@@ -79,7 +79,7 @@
         <label class="search-field">Search roles<input name="query" value="{{ query }}" placeholder="Title, company, or location"></label>
         <label>Status<select name="status"><option value="all">All statuses</option>{% for item in statuses %}<option value="{{ item }}" {% if item == selected_status %}selected{% endif %}>{{ item|capitalize }}</option>{% endfor %}</select></label>
         <label>Company<select name="company"><option value="">All companies</option>{% for item in companies %}<option value="{{ item }}" {% if item == selected_company %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
-        <label>Jobs<select name="relevance"><option value="relevant" {% if relevance == 'relevant' %}selected{% endif %}>Relevant, eligible, 30%+ match</option><option value="all" {% if relevance == 'all' %}selected{% endif %}>All discoveries</option></select></label>
+        <label>Jobs<select name="relevance"><option value="relevant" {% if relevance == 'relevant' %}selected{% endif %}>Student + possible matches, 30%+</option><option value="possible" {% if relevance == 'possible' %}selected{% endif %}>Possible Matches — review eligibility</option><option value="all" {% if relevance == 'all' %}selected{% endif %}>All discoveries</option></select></label>
         <label>Location<select name="location"><option value="israel" {% if location_scope == 'israel' %}selected{% endif %}>Israel + unrestricted remote</option><option value="all" {% if location_scope == 'all' %}selected{% endif %}>All locations</option></select></label>
         <button type="submit">Apply filters</button>
       </form>
@@ -94,6 +94,7 @@
           {% if match %}
           <div class="fit-summary{% if not match.eligible %} fit-summary--ineligible{% endif %}">
             <div class="fit-score"><strong>{{ match.score }}</strong><span>/100 match</span></div>
+            <p class="eligibility-warning"><strong>{{ match.eligibility_label }}{% if match.eligibility_status == 'potentially_eligible' %} · Possible Matches{% endif %}</strong><br>{{ match.eligibility_reasons|join(' ') }}{% if not match.eligible %}<br>Technical fit: {{ match.technical_score }}/100; prerequisites take priority.{% endif %}</p>
             <div class="fit-meter" role="progressbar" aria-label="Resume match" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ match.score }}"><span style="width: {{ match.score }}%"></span></div>
             {% if not match.eligible %}<p class="eligibility-warning"><strong>Not eligible:</strong> {{ match.disqualifiers|join(' ') }}</p>{% elif match.tailoring_suggestions %}<ul class="fit-suggestions">{% for suggestion in match.tailoring_suggestions[:2] %}<li>{{ suggestion }}</li>{% endfor %}</ul>{% endif %}
           </div>

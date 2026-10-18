@@ -145,7 +145,7 @@ def create_app(
     ):
         if status_filter != "all" and status_filter not in JOB_STATUSES:
             raise HTTPException(status_code=400, detail="Unknown job status")
-        if relevance not in {"all", "relevant"}:
+        if relevance not in {"all", "relevant", "possible"}:
             raise HTTPException(status_code=400, detail="Unknown relevance filter")
         if location_scope not in {"all", "israel"}:
             raise HTTPException(status_code=400, detail="Unknown location filter")
@@ -195,12 +195,16 @@ def create_app(
             location_scope=location_scope,
             candidate_eligible_ids=candidate_eligible_ids,
         )
+        if relevance == 'possible':
+            jobs = [job for job in jobs if job.id in job_matches
+                    and job_matches[job.id].eligibility_status == 'potentially_eligible']
         if active_resume is not None and active_profile is not None:
             jobs.sort(
                 key=lambda job: (
+                    job.id in job_matches and job_matches[job.id].eligibility_status == 'student_eligible',
                     job_matches[job.id].score
                     if job.id is not None and job.id in job_matches
-                    else 0
+                    else 0,
                 ),
                 reverse=True,
             )
@@ -916,7 +920,8 @@ def _filter_jobs(
             or (
                 job.is_relevant
                 and (
-                    candidate_eligible_ids is None
+                    relevance == 'possible'
+                    or candidate_eligible_ids is None
                     or job.id in candidate_eligible_ids
                 )
             )

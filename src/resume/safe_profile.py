@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass, asdict
 
 from src.models import ResumeProfile
+from src.matching.eligibility import candidate_is_studying
 from src.resume.resume_parser import SKILL_ALIASES, extract_skills
 
 
@@ -45,7 +46,8 @@ def build_safe_profile(profile: ResumeProfile) -> SafeCandidateProfile:
         skills=profile.skills,
         experience_skills=_skills_in_section(profile.experience, profile.skills),
         project_skills=_skills_in_section(profile.projects, profile.skills),
-        education_level=_education_label(profile.education),
+        education_level=(_education_label(profile.education)
+                         + (' (in progress)' if candidate_is_studying(profile) else '')),
     )
 
 

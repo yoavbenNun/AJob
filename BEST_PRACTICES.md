@@ -172,6 +172,10 @@ reusable lesson appears.
   aliases boundary-aware to avoid substring false positives.
 - Treat hard eligibility requirements separately from fit score. A strong skill
   overlap must not rank a PhD-only role above an eligible bachelor's-level role.
+- A degree being pursued is not an awarded degree. Interpret qualifications in
+  context, including completion, preferred requirements and student alternatives.
+  Keep ambiguous eligibility reviewable and visible separately in dashboard/mail;
+  never delete discoveries or change application status when matching rules change.
 - Enforce a degree-field mismatch only for explicit closed hard requirements and
   recognized candidate majors. Wording such as "related field" or "equivalent"
   must remain eligible for human review instead of causing a false rejection.

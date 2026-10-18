@@ -19,6 +19,8 @@ class EmailJobRecommendation:
     score: int
     eligible: bool
     reason: str
+    eligibility_status: str = 'student_eligible'
+    eligibility_reason: str = ''
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,26 +90,44 @@ def compose_scan_summary(
     message["From"] = settings.sender
     message["To"] = settings.recipient
     new_jobs = tuple(getattr(summary, "new_jobs", ()))
-    notified_count = len(new_jobs) if recommendations is None else len(recommendations)
-    message["Subject"] = f"AJob: {notified_count} new matching job(s)"
     if recommendations is not None:
-        details = "\n".join(
-            f"- {item.score}/100 - {item.title} at {item.company}\n"
-            f"  {item.location} | {'eligible' if item.eligible else 'manual review'}\n"
-            f"  {item.reason}\n  {item.job_url}"
-            for item in sorted(recommendations, key=lambda item: item.score, reverse=True)
-        ) or "No new jobs passed both resume and commute eligibility checks."
+        recommendations = tuple(item for item in recommendations
+                                if item.eligible and item.eligibility_status != 'ineligible')
+    notified_count = len(new_jobs) if recommendations is None else sum(
+        item.eligibility_status == 'student_eligible' for item in recommendations)
+    message["Subject"] = f"AJob: {notified_count} new matching job(s)"
+    possible_count = sum(item.eligibility_status == 'potentially_eligible' for item in (recommendations or ()))
+    if possible_count:
+        message.replace_header('Subject', f'{message["Subject"]}; {possible_count} possible match(es)')
+    if recommendations is not None:
+        groups = []
+        for status, heading in (('student_eligible', 'Student eligible'),
+                                ('potentially_eligible', 'Possible Matches — confirm eligibility')):
+            entries = [
+                f"- {item.score}/100 - {item.title} at {item.company}\n"
+                f"  {item.location} | {heading}\n"
+                f"  {item.eligibility_reason}\n  {item.reason}\n  {item.job_url}"
+                for item in sorted(recommendations, key=lambda item: item.score, reverse=True)
+                if item.eligibility_status == status
+            ]
+            if entries:
+                groups.append(heading + '\n' + '\n'.join(entries))
+        details = '\n\n'.join(groups) or "No new jobs passed both resume and commute eligibility checks."
     else:
         details = "\n".join(
             f"- {job.title} at {job.company}\n  {job.location}\n  {job.job_url}"
             for job in new_jobs
         ) or "No new matching jobs were discovered."
+    eligibility_summary = (f"Possible matches requiring review: {possible_count}\n"
+                           if recommendations is not None else
+                           "Eligibility not assessed; discovered roles require review.\n")
     message.set_content(
         f"AJob scan {getattr(summary, 'status', 'complete')}.\n\n"
         f"Companies scanned: {summary.companies_scanned}\n"
         f"Candidates found: {summary.jobs_found}\n"
         f"Relevant roles saved: {summary.jobs_saved}\n"
         f"New relevant roles: {len(new_jobs)}\n"
+        f"{eligibility_summary}"
         f"Company failures: {summary.failures}\n"
         f"Failure reason: {getattr(summary, 'failure_reason', '') or 'none'}\n"
         f"\n{details}\n"

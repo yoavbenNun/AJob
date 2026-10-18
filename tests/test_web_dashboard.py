@@ -286,6 +286,39 @@ def test_dashboard_hides_jobs_ineligible_for_active_resume_by_default(tmp_path) 
     assert "Not eligible:" in all_jobs_page.text
 
 
+def test_student_eligibility_dashboard_possible_filter_and_status_preservation(tmp_path):
+    client, _ = _client_with_jobs(tmp_path)
+    repository = JobRepository(tmp_path / 'jobs.db')
+    blocked_id = repository.save(JobPosting(
+        'Graduate Bootcamp', 'Example', 'Israel', 'https://example.test/graduate',
+        requirements='Qualifications\nB.Sc. in Software Engineering. Python.', status='applied'))
+    repository.save(JobPosting('Junior Python Developer', 'Example', 'Israel', 'https://example.test/junior',
+                               requirements='Python.'))
+    document = Document()
+    document.add_paragraph('Example Candidate\nThird-year Software Engineering student')
+    document.add_paragraph('SKILLS\nPython')
+    document.add_paragraph('EDUCATION\nB.Sc. Software Engineering (in progress)')
+    content = BytesIO()
+    document.save(content)
+    save_active_resume(tmp_path, 'student.docx', content.getvalue())
+    default = client.get('/')
+    possible = client.get('/', params={'relevance': 'possible'})
+    all_jobs = client.get('/', params={'relevance': 'all'})
+    assert default.status_code == possible.status_code == all_jobs.status_code == 200
+    assert 'Graduate Bootcamp' not in default.text
+    assert default.text.index('Python Software Intern') < default.text.index('Junior Python Developer')
+    assert 'Junior Python Developer' in possible.text
+    assert 'Python Software Intern' not in possible.text
+    assert 'Graduate Bootcamp' not in possible.text
+    assert 'Potentially eligible' in possible.text
+    assert 'Graduate Bootcamp' in all_jobs.text
+    assert 'still studying' in all_jobs.text
+    detail = client.post(f'/jobs/{blocked_id}/match', data={'csrf_token': _csrf_token(client, blocked_id)})
+    assert 'Ineligible' in detail.text
+    assert 'Technical fit:' in detail.text
+    assert repository.get_by_id(blocked_id).status == 'applied'
+
+
 def test_dashboard_reports_a_match_failure_for_only_the_affected_job(
     monkeypatch, tmp_path
 ) -> None:

@@ -493,6 +493,8 @@ def _cloud_recommendations(summary) -> tuple[EmailJobRecommendation, ...] | None
                 score=result.score,
                 eligible=True,
                 reason=" ".join(reasons),
+                eligibility_status=result.eligibility_status,
+                eligibility_reason=' '.join(result.eligibility_reasons),
             )
         )
     return tuple(recommendations)

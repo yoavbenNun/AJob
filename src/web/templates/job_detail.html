@@ -25,6 +25,7 @@
       {% if match_error %}<p class="error-panel" role="alert">{{ match_error }}</p>{% endif %}
       {% if match_result %}<div class="match-result">
         <div class="match-score-card"><strong>{{ match_result.score }}</strong><span>/100 match</span>{% if not match_result.eligible %}<em>Eligibility needs review</em>{% endif %}</div>
+        <p class="eligibility-warning"><strong>{{ match_result.eligibility_label }}</strong><br>{{ match_result.eligibility_reasons|join(' ') }}<br>Technical fit: {{ match_result.technical_score }}/100. Eligibility is assessed separately from skill overlap.</p>
         <div class="match-facts"><div><h3>Strengths</h3><div class="skill-chips">{% for item in match_result.matched_skills %}<span>{{ item }}</span>{% else %}<span class="chip-muted">No direct matches yet</span>{% endfor %}</div></div><div><h3>Gaps</h3><div class="skill-chips skill-chips--gap">{% for item in match_result.missing_skills %}<span>{{ item }}</span>{% else %}<span class="chip-muted">No major gaps found</span>{% endfor %}</div></div></div>
         {% if match_result.tailoring_suggestions %}<div class="match-actions"><h3>Ways to improve</h3><ol>{% for item in match_result.tailoring_suggestions %}<li>{{ item }}</li>{% endfor %}</ol></div>{% endif %}
       </div>{% endif %}

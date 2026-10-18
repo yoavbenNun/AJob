@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 
 from src.models import JobPosting
+from src.matching.eligibility import student_acceptance_evidence
 
 
 SOFTWARE_TERMS = (
@@ -105,6 +106,9 @@ def classify_job(job: JobPosting) -> FilterDecision:
             return FilterDecision(False, "no software-development responsibilities were found")
     if any(_contains_phrase(title, term) for term in EARLY_CAREER_TERMS):
         return FilterDecision(True, "title contains an early-career marker")
+
+    if student_acceptance_evidence(details):
+        return FilterDecision(True, "job details explicitly accept ongoing studies")
 
     if re.search(
         r"\b(?:currently pursuing\b[^.;\n]{0,80}\b(?:bachelor|master|b\.sc|m\.sc|degree|phd|ph\.d)|currently enrolled|pursuing (?:an? |your )?(?:bachelor|master|b\.sc|m\.sc|degree|phd|ph\.d)|students? (?:in|of|who)|"
