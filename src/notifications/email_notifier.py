@@ -103,12 +103,13 @@ def compose_scan_summary(
             for job in new_jobs
         ) or "No new matching jobs were discovered."
     message.set_content(
-        "AJob scan complete.\n\n"
+        f"AJob scan {getattr(summary, 'status', 'complete')}.\n\n"
         f"Companies scanned: {summary.companies_scanned}\n"
         f"Candidates found: {summary.jobs_found}\n"
         f"Relevant roles saved: {summary.jobs_saved}\n"
         f"New relevant roles: {len(new_jobs)}\n"
         f"Company failures: {summary.failures}\n"
+        f"Failure reason: {getattr(summary, 'failure_reason', '') or 'none'}\n"
         f"\n{details}\n"
     )
     return message
@@ -128,3 +129,34 @@ def send_scan_summary(
         if settings.username:
             client.login(settings.username, settings.password)
         client.send_message(message)
+
+
+class DeliveryError(RuntimeError):
+    def __init__(self, error, uncertain):
+        super().__init__(type(error).__name__)
+        self.uncertain = uncertain
+
+
+def send_prepared_summary(settings, message, smtp_factory=smtplib.SMTP):
+    """A disconnect after DATA starts may mean accepted mail; never auto-retry it."""
+    started = accepted = False
+    try:
+        with smtp_factory(settings.host, settings.port, timeout=30) as client:
+            if settings.use_tls:
+                client.starttls(context=ssl.create_default_context())
+            if settings.username:
+                client.login(settings.username, settings.password)
+            started = True
+            refused = client.send_message(message)
+            if refused:
+                # A returned refusal dictionary means OTHER recipients may have
+                # accepted DATA. Retrying the whole message could duplicate it.
+                raise smtplib.SMTPException('Partial recipient acceptance')
+            accepted = True
+    except Exception as error:
+        # QUIT failure does not undo a positive DATA acknowledgement.
+        if accepted:
+            return
+        definite = isinstance(error, (smtplib.SMTPDataError,
+            smtplib.SMTPRecipientsRefused, smtplib.SMTPSenderRefused))
+        raise DeliveryError(error, started and not definite) from error

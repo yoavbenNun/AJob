@@ -20,7 +20,6 @@ from src.matching.resume_matcher import match_resume_to_job
 from src.notifications.email_notifier import (
     EmailJobRecommendation,
     load_smtp_settings,
-    send_scan_summary,
 )
 from src.models import JOB_STATUSES
 from src.scrapers.careers_scraper import preview_companies, scan_companies
@@ -63,6 +62,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--delivery-slot",
         help="Stable scheduled-delivery key used to prevent duplicate cloud emails",
     )
+    scan_parser.add_argument('--source-budget-seconds', type=float, default=300)
+    scan_parser.add_argument('--scan-budget-seconds', type=float, default=3600)
+    migration_parser = subparsers.add_parser('prepare-scan-storage', help='Explicitly apply reliability schema; requires deployment approval for cloud')
+    migration_parser.add_argument('--database', type=Path, default=Path('data/jobs.db'))
+    for command in ('scheduled-tick', 'scan-report'):
+        command_parser = subparsers.add_parser(command)
+        command_parser.add_argument('--database', type=Path, default=Path('data/jobs.db'))
+        command_parser.add_argument('--config', type=Path, default=Path('config/companies.yaml'))
     resume_parser = subparsers.add_parser(
         "parse-resume", help="Parse a local resume without sending it anywhere"
     )
@@ -136,6 +143,36 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command in {'scheduled-tick', 'scan-report'}:
+        from src.scheduling.window_runner import scheduled_tick
+        from src.storage.window_store import WindowStore
+        try:
+            repository = create_job_repository(args.database)
+            if args.command == 'scheduled-tick':
+                if not os.environ.get('DATABASE_URL'):
+                    raise ValueError('scheduled-tick requires persistent PostgreSQL')
+                return scheduled_tick(load_companies(args.config), repository, load_smtp_settings,
+                                      recommendations=_cloud_recommendations)
+            store = WindowStore(repository)
+            try:
+                store.verify_schema()
+                print(json.dumps(store.report(days=7)))
+            finally:
+                store.close()
+            return 0
+        except (PostgresError, RuntimeError, sqlite3.Error, ValueError) as error:
+            print(f'Scheduled operation failed ({type(error).__name__}).', file=sys.stderr)
+            return 1
+    if args.command == 'prepare-scan-storage':
+        from src.storage.scan_store import ScanStore
+        repository = create_job_repository(args.database)
+        store = ScanStore(repository)
+        try:
+            store.execute('SELECT id FROM job_postings LIMIT 0')
+            store.migrate()
+        finally:
+            store.close()
+        return 0
     if args.command == "scan":
         companies = load_companies(args.config)
         if args.company:
@@ -153,48 +190,31 @@ def main(argv: Sequence[str] | None = None) -> int:
             preview_companies(companies)
             return 0
 
-        repository = None
-        delivery_claimed = False
         try:
             repository = create_job_repository(args.database)
-            repository.initialize()
+            if args.email_summary:
+                from src.notifications.durable_scan import run_durable_scan
+                return run_durable_scan(
+                    companies, repository, load_smtp_settings, args.delivery_slot,
+                    recommendations=_cloud_recommendations,
+                    source_seconds=args.source_budget_seconds,
+                    scan_seconds=args.scan_budget_seconds,
+                    headless=not args.headed, timeout_ms=args.timeout_ms,
+                    max_pages=max(1, args.max_pages),
+                )
             if args.delivery_slot:
-                if not args.email_summary:
-                    raise ValueError("--delivery-slot requires --email-summary")
-                delivery_claimed = repository.begin_delivery(args.delivery_slot)
-                if not delivery_claimed:
-                    print(f"Delivery slot {args.delivery_slot} was already sent or is active.")
-                    return 0
-            summary = scan_companies(
-                companies,
-                repository,
-                headless=not args.headed,
-                timeout_ms=args.timeout_ms,
-                max_pages=max(1, args.max_pages),
-            )
+                raise ValueError('--delivery-slot requires --email-summary')
+            repository.initialize()
+            summary = scan_companies(companies, repository, headless=not args.headed,
+                                     timeout_ms=args.timeout_ms, max_pages=max(1, args.max_pages))
         except (PostgresError, RuntimeError, sqlite3.Error, ValueError) as error:
-            if repository is not None and delivery_claimed:
-                repository.fail_delivery(args.delivery_slot, type(error).__name__)
-            print(f"Scan failed: storage unavailable ({type(error).__name__}).", file=sys.stderr)
+            print(f'Scan failed ({type(error).__name__}); verify storage migration and configuration.', file=sys.stderr)
             return 1
-        print(
-            f"Scan complete: {summary.companies_scanned} companies, "
-            f"{summary.jobs_found} candidates, {summary.jobs_relevant} relevant, "
-            f"{summary.failures} failures."
-        )
-        if args.email_summary:
-            try:
-                recommendations = _cloud_recommendations(summary)
-                send_scan_summary(load_smtp_settings(), summary, recommendations)
-                if delivery_claimed:
-                    repository.complete_delivery(args.delivery_slot)
-                print("Email summary sent.")
-            except (OSError, ValueError) as error:
-                if delivery_claimed:
-                    repository.fail_delivery(args.delivery_slot, type(error).__name__)
-                print(f"Email summary failed: {error}", file=sys.stderr)
-                return 1
+        print(f'Scan complete: {summary.companies_scanned} companies, '
+              f'{summary.jobs_found} candidates, {summary.jobs_relevant} relevant, '
+              f'{summary.failures} failures.')
         return 1 if summary.failures else 0
+
     if args.command == "parse-resume":
         profile = parse_resume(args.resume)
         if args.json:

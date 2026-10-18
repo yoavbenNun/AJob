@@ -374,3 +374,11 @@ def test_tailor_resume_command_creates_approved_docx_and_pdf(tmp_path: Path, cap
     assert (output / "Example-Python-Software-Intern-tailored.docx").is_file()
     assert (output / "Example-Python-Software-Intern-tailored.pdf").is_file()
     assert "created" in capsys.readouterr().out
+
+
+def test_report_rejects_invalid_connection_without_echoing_value(monkeypatch,capsys):
+    monkeypatch.setenv('DATABASE_URL','invalid-nonsecret-configuration')
+    assert main(['scan-report']) == 1
+    output=capsys.readouterr()
+    assert 'ValueError' in output.err
+    assert 'invalid-nonsecret-configuration' not in output.err

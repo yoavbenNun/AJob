@@ -126,18 +126,19 @@ def test_external_dispatch_slot_passed_as_environment_not_shell_expression() -> 
 
 def test_cloud_workflow_never_succeeds_without_email_configuration() -> None:
     workflow = Path(".github/workflows/scheduled-scan.yml").read_text(encoding="utf-8")
-    assert "for name in SMTP_HOST SMTP_PORT SMTP_USERNAME SMTP_PASSWORD SMTP_FROM SMTP_TO" in workflow
+    assert "Require email configuration" not in workflow  # mail configuration cannot prevent discovery
     assert "Scan career pages without email" not in workflow
-    assert "python -m src.main scan --email-summary" in workflow
+    assert "python -m src.main scheduled-tick" in workflow
     assert 'cron: "0 ' not in workflow
     expressions = re.findall(r'- cron: "([^"]+)"', workflow)
-    assert len(expressions) == 30
+    assert len(expressions) == 12
     assert {expression.split()[0] for expression in expressions} == {
-        "17", "27", "37", "47", "57"
+        "17", "47"
     }
     assert {expression.split()[1] for expression in expressions} == {
         "5", "6", "8", "9", "13", "14"
     }
     assert "timeout-minutes: 75" in workflow
-    assert "  queue: max" in workflow
-    assert '--delivery-slot "${{ steps.schedule_gate.outputs.delivery_slot }}"' in workflow
+    assert "queue: max" not in workflow
+    assert "cancel-in-progress: false" in workflow
+    assert "python -m src.main scan-report" in workflow
