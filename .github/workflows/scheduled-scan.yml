@@ -2,45 +2,24 @@ name: Scheduled job scan
 
 on:
   schedule:
-    # Keep expressions distinct: github.event.schedule identifies the intended
-    # UTC slot even when GitHub starts the runner hours late.
-    # Avoid minute 0, when GitHub-hosted schedules are most likely to be delayed.
+    # Backup wake-ups; the database chooses current work, not this cron's age.
+    # Supabase pg_cron is the independent primary watchdog.
     - cron: "17 5 * * *"
     - cron: "17 6 * * *"
     - cron: "17 8 * * *"
     - cron: "17 9 * * *"
     - cron: "17 13 * * *"
     - cron: "17 14 * * *"
-    # Retry every ten minutes through :57 to recover from delayed or failed
-    # starts. Persistent delivery records suppress duplicate emails.
-    - cron: "27 5 * * *"
-    - cron: "27 6 * * *"
-    - cron: "27 8 * * *"
-    - cron: "27 9 * * *"
-    - cron: "27 13 * * *"
-    - cron: "27 14 * * *"
-    - cron: "37 5 * * *"
-    - cron: "37 6 * * *"
-    - cron: "37 8 * * *"
-    - cron: "37 9 * * *"
-    - cron: "37 13 * * *"
-    - cron: "37 14 * * *"
     - cron: "47 5 * * *"
     - cron: "47 6 * * *"
     - cron: "47 8 * * *"
     - cron: "47 9 * * *"
     - cron: "47 13 * * *"
     - cron: "47 14 * * *"
-    - cron: "57 5 * * *"
-    - cron: "57 6 * * *"
-    - cron: "57 8 * * *"
-    - cron: "57 9 * * *"
-    - cron: "57 13 * * *"
-    - cron: "57 14 * * *"
   workflow_dispatch:
     inputs:
       delivery_slot:
-        description: "Optional canonical Israel slot from the external scheduler"
+        description: "Optional canonical origin slot for audit; current DB work is selected"
         required: false
         type: string
 
@@ -50,9 +29,8 @@ permissions:
 concurrency:
   group: scheduled-job-scan
   cancel-in-progress: false
-  # Keep scheduled retries queued up to GitHub's 100-pending-run limit. Without
-  # this, GitHub replaces older pending retries before the active scan finishes.
-  queue: max
+  # Default single pending run: newer wake-ups replace redundant pending ones.
+  # All wake-ups reconcile DB windows, so replacing a trigger cannot lose a slot.
 
 jobs:
   scan:
@@ -72,67 +50,32 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      - name: Run only at scheduled Israel times
-        id: schedule_gate
+      - name: Validate optional dispatch origin
         shell: bash
         env:
-          SCHEDULE_EXPRESSION: ${{ github.event.schedule }}
           DISPATCH_DELIVERY_SLOT: ${{ inputs.delivery_slot }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then
-            if [ -n "$DISPATCH_DELIVERY_SLOT" ]; then
-              slot="$(python -m src.scheduling.israel_schedule --delivery-slot "$DISPATCH_DELIVERY_SLOT")"
-              echo "run_scan=true" >> "$GITHUB_OUTPUT"
-              echo "delivery_slot=$slot" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "run_scan=true" >> "$GITHUB_OUTPUT"
-            echo "delivery_slot=" >> "$GITHUB_OUTPUT"
-            echo "Manual dispatch: bypassing the scheduled-time gate."
-            exit 0
+          if [ -n "$DISPATCH_DELIVERY_SLOT" ]; then
+            python -m src.scheduling.israel_schedule --delivery-slot "$DISPATCH_DELIVERY_SLOT"
           fi
-
-          set +e
-          gate_output="$(python -m src.scheduling.israel_schedule "$SCHEDULE_EXPRESSION" 2>&1)"
-          gate_status=$?
-          set -e
-          if [ "$gate_status" -eq 0 ]; then
-            echo "run_scan=true" >> "$GITHUB_OUTPUT"
-            echo "delivery_slot=$gate_output" >> "$GITHUB_OUTPUT"
-            echo "Scheduled scan approved for cron slot $SCHEDULE_EXPRESSION."
-          elif [ "$gate_status" -eq 1 ]; then
-            echo "run_scan=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping DST-inapplicable cron slot $SCHEDULE_EXPRESSION."
-          else
-            echo "Schedule gate failed: $gate_output" >&2
-            exit "$gate_status"
-          fi
+          echo "Wake-up only: current database windows determine scan and mail work."
       - name: Require persistent PostgreSQL storage
-        if: ${{ steps.schedule_gate.outputs.run_scan == 'true' }}
         run: |
           if [ -z "$DATABASE_URL" ]; then
             echo "DATABASE_URL repository secret is required for scheduled scans." >&2
             exit 1
           fi
-      - name: Require email configuration
-        if: ${{ steps.schedule_gate.outputs.run_scan == 'true' }}
-        run: |
-          for name in SMTP_HOST SMTP_PORT SMTP_USERNAME SMTP_PASSWORD SMTP_FROM SMTP_TO; do
-            if [ -z "${!name}" ]; then
-              echo "$name repository secret is required for cloud email scans." >&2
-              exit 1
-            fi
-          done
       - name: Build scanner image
-        if: ${{ steps.schedule_gate.outputs.run_scan == 'true' }}
         run: docker build --tag ai-job-search-agent .
-      - name: Scan career pages and send summary
-        if: ${{ steps.schedule_gate.outputs.run_scan == 'true' }}
+      - name: Reconcile windows and retry pending notifications
         run: >-
           docker run --rm --ipc=host
           -e SMTP_HOST -e SMTP_PORT -e SMTP_USERNAME -e SMTP_PASSWORD
           -e SMTP_FROM -e SMTP_TO -e SMTP_USE_TLS
           -e DATABASE_URL
           -e CANDIDATE_PROFILE_JSON
-          ai-job-search-agent python -m src.main scan --email-summary
-          --delivery-slot "${{ steps.schedule_gate.outputs.delivery_slot }}"
+          ai-job-search-agent python -m src.main scheduled-tick
+      - name: Publish business status independently of workflow result
+        if: ${{ always() }}
+        run: |
+          docker run --rm -e DATABASE_URL ai-job-search-agent python -m src.main scan-report >> "$GITHUB_STEP_SUMMARY"

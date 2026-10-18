@@ -317,10 +317,30 @@ reusable lesson appears.
   bypasses scheduled deduplication; never use it for automated retries. Keep the
   dispatcher credential restricted to repository Actions write access in Vault.
 
-- GitHub Actions cron can be delayed or dropped, and a scan can outlast a short
-  job timeout. Use several same-slot retries away from the hour boundary, keep
-  delivery claims idempotent, and expire abandoned claims before the final
-  retry. If a concurrency group serializes scheduled retries, set `queue: max`:
-  GitHub otherwise keeps only one pending run and replaces older pending retries;
-  with `queue: max`, up to 100 pending runs wait. Delivery claims still prevent
-  overlapping retries from sending duplicate mail.
+- GitHub cron can be delayed or dropped. Use the existing independent pg_cron
+  watchdog and durable DB windows to select current work. Keep only one pending
+  GitHub wake-up; do not queue every retry with `queue: max`. Coalescing wake-ups
+  is safe only when the DB, rather than an individual event, owns pending work.
+- Scan and mail retries are separate. Bound attempts/backoff; expire/fence leases.
+  Protect scan claiming with a short transaction lock, not a session lock held
+  for the whole scan: an expired but connected owner must not block later windows.
+
+## Durable scan notification boundaries
+
+- Commit each discovery and its outbox row atomically. Scan completion and SMTP
+  acceptance are separate states. An interrupted DATA exchange is uncertain;
+  never expire that state back to pending. Use frozen messages and reconcile it.
+- Bound whole source workers, not just individual HTTP calls. Only the parent
+  writes DB state, so killing a stuck browser cannot strand discoveries in memory.
+- Session advisory locks require a session pooler or direct PostgreSQL connection;
+  transaction pooling cannot safely provide this scanner ownership guarantee.
+
+- Freeze batch membership atomically at preparation, including an empty batch.
+  Freezing only the rendered message allows a concurrent retry to attach unseen
+  jobs while another sender renders, silently consuming jobs absent from its mail.
+- Validate PostgreSQL concurrency with separate connections/processes and injected
+  transaction failures. Verify session-lock release through an actual session
+  pooler; SQLite success or direct PostgreSQL tests alone do not establish it.
+- Test rollback semantics, not only additive schema access: old job storage can
+  remain compatible while its sender ignores the durable outbox. Pause/drain mixed
+  versions and preserve pending/uncertain state; do not replay mail after restore.

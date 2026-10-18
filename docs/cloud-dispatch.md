@@ -1,51 +1,38 @@
-# Independent cloud dispatch
+# Independent cloud dispatch (round 2, deployment pending)
 
-GitHub scheduled runs can be created hours late. Supabase `pg_cron` can dispatch
-the existing GitHub workflow without waiting for GitHub's cron service. This
-still depends on Supabase availability, GitHub API availability, and runner
-capacity; dispatch acceptance is not proof of scan completion or email receipt.
+GitHub cron creation can be delayed for hours. Reuse the existing Supabase
+pg_cron/http/Vault dispatcher as the primary due-work watchdog, with GitHub cron as
+backup. `supabase-dispatch.sql` is a reviewed deployment template only; this round
+does not apply it or change cloud configuration.
 
-## Deployment
+The watchdog checks every five minutes but calls GitHub only for actionable DB
+work, with healthy-lease suppression and dispatch cooldown/error backoff. It seeds
+three canonical Israel windows daily and dispatches a generic wake-up. The worker
+selects current windows and pending deliveries; a delayed event cannot replay an
+old window. The existing named cron job is replaced in place, not duplicated.
 
-1. Deploy the workflow and scheduling helper on `main` first.
-2. Create a fine-grained GitHub token restricted to `yoavbenNun/AJob`, granting
-   repository **Actions: write**, with an expiry and renewal reminder. No source
-   code write permission is needed. Store it using Supabase Vault's UI under
-   `ajob_github_dispatch_token`; never paste it into a committed SQL file or chat.
-3. Enable the Supabase `http` extension if needed, then review and execute
-   `supabase-dispatch.sql` as the database administrator. It installs one named
-   job and restricts the dispatch function to its owner. The synchronous `http`
-   extension sends the request without storing its Authorization header in the
-   pg_net request queue.
-4. Verify `cron.job` contains `ajob-cloud-dispatch`. At the next intended time,
-   inspect `cron.job_run_details` for a successful dispatch (GitHub returns HTTP
-   204), then inspect the matching Actions run and
-   the existing notification delivery ledger. Verify the actual email arrives.
-   A token expiry, 401/403, or a paused project must be investigated explicitly.
+Before an approved rollout:
 
-The intended Israel scan slots are 08:17, 11:17, and 16:17, with attempts at
-:27, :37, :47, and :57 in the same hour. UTC candidate hours cover both Israel
-offsets; the SQL function gates on `Asia/Jerusalem`. Every attempt sends the
-same canonical slot string as GitHub's original cron, so the persistent delivery
-ledger suppresses duplicate sends. The workflow rejects noncanonical, future,
-or older-than-24-hour supplied slots. Manual dispatch with no input retains its
-existing immediate-scan behavior and does not participate in scheduled deduplication.
+1. Pause triggers, drain old workers and back up the DB. Apply 001 and 002 locally
+   in a disposable clone, then apply production only with explicit approval.
+2. Deploy the round-2 workflow/code before replacing the dispatch function.
+3. Reuse the existing fine-grained token restricted to `yoavbenNun/AJob` with
+   **Actions: write**, stored in Vault as `ajob_github_dispatch_token`. Never place
+   its value in SQL, source, command arguments, logs or chat. No new permission or
+   secret is required. The documented existing expiry is 2027-01-15; verify it
+   privately before rollout and arrange renewal separately.
+4. Review/run the template as the approved owner using the existing pg_cron/http
+   extensions. It uses synchronous http, not pg_net's credential-bearing queue.
+5. Inspect cron.job_run_details **and dispatcher_state**. HTTP rejection is stored
+   as an error code with backoff; a technically successful cron invocation is not
+   proof of dispatch, execution, scanning or inbox delivery. Run `scan-report` and
+   verify expected DB outcomes and actual email receipt.
 
-The deployed AJob token expires on 2027-01-15. Renew it in GitHub and update
-the existing Vault secret before that date to keep independent dispatch working.
+To pause this dispatcher without changing GitHub fallback, an authorized operator
+can run `select cron.unschedule('ajob-cloud-dispatch');`. For rollback pause both
+trigger sources, retain outbox/leases and reconcile uncertain delivery first.
 
-GitHub cron remains as a fallback. The workflow concurrency queue and delivery
-claims still apply. Retries are bounded; a failing scan that occupies all retry
-attempts can exhaust the window. SMTP is at-least-once, so an ambiguous connection
-failure after acceptance may still result in duplicate mail.
-
-To disable this additional dispatcher without affecting GitHub's fallback:
-
-```sql
-select cron.unschedule('ajob-cloud-dispatch');
-```
-
-References: [Supabase Cron](https://supabase.com/docs/guides/cron),
-[Vault](https://supabase.com/docs/guides/database/vault),
-[Supabase http extension](https://supabase.com/docs/guides/database/extensions/http),
-[GitHub workflow dispatch API](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event).
+See [round-2 design, rollout and seven-day acceptance](round2-reliability.md).
+The watchdog reuses existing infrastructure; no extra cloud service or paid tier
+is introduced. Actions/DB usage remains metered under the existing plans. GitHub
+API and runner availability still limit timeliness; no hard delivery SLA is claimed.
