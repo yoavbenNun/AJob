@@ -17,6 +17,7 @@ import re
 import secrets
 import time
 import sqlite3
+import threading
 from datetime import date, datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Query, Request, status
@@ -59,11 +60,13 @@ from src.storage.application_repository import ApplicationRepository
 from src.storage.outreach_repository import OutreachRepository
 from src.storage.postgres_job_repository import PostgresJobRepository
 from src.storage.personal_notes_repository import PersonalNotesRepository
+from src.storage.dismissal_repository import DismissalRepository
 
 
 WEB_ROOT = Path(__file__).parent
 MIN_DASHBOARD_MATCH_SCORE = 30
 templates = Jinja2Templates(directory=str(WEB_ROOT / "templates"))
+templates.env.filters["status_label"] = lambda value: "Dismissed" if value == "ignored" else value.capitalize()
 COMPANY_LOGOS = {
     "amazon": "amazon.svg",
     "apple": "apple.svg",
@@ -101,6 +104,9 @@ def create_app(
                   else Path(database_path).parent / 'personal_notes.db')
     notes_repository = PersonalNotesRepository(notes_path)
     notes_repository.initialize()
+    dismissals = DismissalRepository(notes_path)
+    dismissals.initialize()
+    dismissal_lock = threading.Lock()
     csrf_token = secrets.token_urlsafe(32)
     app_started_at = datetime.now(timezone.utc)
     allowed_resume_root = Path(resume_directory).resolve() if resume_directory else None
@@ -150,7 +156,10 @@ def create_app(
         email_updated: int | None = None,
         email_error: str = "",
     ):
-        if status_filter != "all" and status_filter not in JOB_STATUSES:
+        selected_statuses = tuple(dict.fromkeys(
+            "ignored" if value == "dismissed" else value
+            for value in request.query_params.getlist("status") if value and value != "all"))
+        if any(value not in JOB_STATUSES for value in selected_statuses):
             raise HTTPException(status_code=400, detail="Unknown job status")
         if relevance not in {"all", "relevant", "possible"}:
             raise HTTPException(status_code=400, detail="Unknown relevance filter")
@@ -195,7 +204,7 @@ def create_app(
         )
         jobs = _filter_jobs(
             all_jobs,
-            status_filter=status_filter,
+            status_filter=selected_statuses,
             company=company,
             query=query,
             relevance=relevance,
@@ -222,7 +231,7 @@ def create_app(
         companies = sorted({job.company for job in visible_pool}, key=str.casefold)
 
         def is_candidate_relevant(job: JobPosting) -> bool:
-            return job.is_relevant and (
+            return job.status != "ignored" and job.is_relevant and (
                 candidate_eligible_ids is None
                 or job.id in candidate_eligible_ids
             )
@@ -250,7 +259,8 @@ def create_app(
                 "scanned_companies": scanned_companies,
                 "paused_companies": paused_companies,
                 "statuses": JOB_STATUSES,
-                "selected_status": status_filter,
+                "selected_status": "all" if not selected_statuses else selected_statuses[0],
+                "selected_statuses": selected_statuses,
                 "selected_company": company,
                 "query": query,
                 "relevance": relevance,
@@ -271,6 +281,35 @@ def create_app(
                 "email_error": email_error,
             },
         )
+
+    @app.post('/jobs/{job_id}/dismissal')
+    async def change_dismissal(request: Request, job_id: int):
+        form = await request.form()
+        if not secrets.compare_digest(str(form.get('csrf_token', '')), csrf_token):
+            raise HTTPException(status_code=403, detail='Invalid form token')
+        action = form.get('action')
+        if action not in {'dismiss', 'restore'}:
+            raise HTTPException(status_code=400, detail='Unknown dismissal action')
+        # Serialize local history + cloud status changes; conditional updates also
+        # protect against status edits by another dashboard process.
+        with dismissal_lock:
+            job = _get_job_or_404(repository, job_id)
+            target = 'ignored'
+            try:
+                if action == 'dismiss' and job.status != 'ignored':
+                    dismissals.remember(job_id, job.status)
+                elif action == 'restore' and job.status == 'ignored':
+                    target = dismissals.previous(job_id) or 'reviewed'
+                else:
+                    return {'status': job.status, 'changed': False}
+                changed = repository.update_status(job_id, target, expected_status=job.status)
+                if changed is None:
+                    raise HTTPException(status_code=409, detail='The job changed. Refresh and try again.')
+            except HTTPException:
+                raise
+            except Exception:
+                raise HTTPException(status_code=503, detail='Could not save this change. Please try again.') from None
+        return {'status': target, 'changed': True}
 
     @app.post('/jobs/{job_id}/personal-note')
     async def save_personal_note(request: Request, job_id: int):
@@ -928,10 +967,12 @@ def _get_job_or_404(repository, job_id: int) -> JobPosting:
 
 
 def _filter_jobs(
-    jobs: list[JobPosting], *, status_filter: str, company: str, query: str,
+    jobs: list[JobPosting], *, status_filter: str | tuple[str, ...], company: str, query: str,
     relevance: str, location_scope: str,
     candidate_eligible_ids: set[int] | None = None,
 ) -> list[JobPosting]:
+    selected = {status_filter} if isinstance(status_filter, str) else set(status_filter)
+    selected.discard("all")
     company_key = company.casefold().strip()
     query_key = query.casefold().strip()
     return [
@@ -949,7 +990,7 @@ def _filter_jobs(
             )
         )
         and (location_scope == "all" or is_israel_or_remote_location(job.location))
-        and (status_filter == "all" or job.status == status_filter)
+        and (job.status in selected if selected else job.status != "ignored")
         and (not company_key or job.company.casefold() == company_key)
         and (
             not query_key

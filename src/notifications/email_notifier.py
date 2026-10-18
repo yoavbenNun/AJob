@@ -89,10 +89,13 @@ def compose_scan_summary(
     message = EmailMessage()
     message["From"] = settings.sender
     message["To"] = settings.recipient
-    new_jobs = tuple(getattr(summary, "new_jobs", ()))
+    discovered = tuple(getattr(summary, "new_jobs", ()))
+    dismissed_urls = {job.job_url for job in discovered if job.status == "ignored"}
+    new_jobs = tuple(job for job in discovered if job.status != "ignored")
     if recommendations is not None:
         recommendations = tuple(item for item in recommendations
-                                if item.eligible and item.eligibility_status != 'ineligible')
+                                if item.eligible and item.eligibility_status != 'ineligible'
+                                and item.job_url not in dismissed_urls)
     notified_count = len(new_jobs) if recommendations is None else sum(
         item.eligibility_status == 'student_eligible' for item in recommendations)
     message["Subject"] = f"AJob: {notified_count} new matching job(s)"

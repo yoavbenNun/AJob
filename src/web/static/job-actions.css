@@ -1,0 +1,19 @@
+.status-filter { display: grid; gap: .45rem; min-width: 0; font-size: .8rem; font-weight: 600; }
+.status-picker { position: relative; font-weight: 400; }
+.status-picker summary { cursor: pointer; padding: .85rem; border: 1px solid #d8e1ee; border-radius: 12px; background: white; min-height: 44px; overflow-wrap: anywhere; }
+.status-picker fieldset { position: absolute; z-index: 20; top: 100%; left: 0; min-width: 210px; max-width: 90vw; padding: .8rem; border: 1px solid #d8e1ee; border-radius: 12px; background: white; box-shadow: 0 12px 36px #18345b26; }
+.status-picker fieldset label { display: flex; flex-direction: row; align-items: center; gap: .6rem; min-height: 38px; }
+.status-picker input[type=checkbox] { width: 18px; height: 18px; margin: 0; }
+.status-picker fieldset p { font-size: .75rem; color: #596b82; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.dismiss-job { background: transparent; border: 1px solid #d8e1ee; color: #52657f; padding: .4rem .65rem; border-radius: 9px; font-size: .78rem; min-height: 36px; cursor: pointer; }
+.dismiss-job:hover { background: #eef3fa; box-shadow: 0 4px 12px #18345b18; }
+.dismiss-job:focus-visible,.status-picker summary:focus-visible { outline: 3px solid #4285bd; outline-offset: 3px; }
+.job-feedback { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; align-items: center; gap: 12px; background: #19314f; color: white; padding: 12px 16px; border-radius: 12px; box-shadow: 0 8px 30px #14263d44; max-width: calc(100vw - 24px); }
+.job-feedback[hidden] { display: none; }
+.job-feedback button { border: 1px solid #ffffff66; background: transparent; color: white; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+.job-card__actions { flex-wrap: wrap; }
+.job-card[hidden] { display: none; }
+@media (max-width: 700px) {
+  .status-picker fieldset { position: static; box-sizing: border-box; min-width: 0; width: 100%; margin: .5rem 0 0; }
+}

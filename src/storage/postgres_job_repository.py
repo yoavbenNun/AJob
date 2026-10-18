@@ -247,12 +247,13 @@ class PostgresJobRepository:
                 (is_relevant, job_id),
             )
 
-    def update_status(self, job_id: int, status: str) -> JobPosting | None:
+    def update_status(self, job_id: int, status: str, *, expected_status: str | None = None) -> JobPosting | None:
         _validate_status(status)
         with self._connect() as connection, connection.cursor() as cursor:
             cursor.execute(
-                "UPDATE job_postings SET status = %s WHERE id = %s RETURNING *",
-                (status, job_id),
+                "UPDATE job_postings SET status = %s WHERE id = %s"
+                + (" AND status = %s" if expected_status is not None else "") + " RETURNING *",
+                (status, job_id, expected_status) if expected_status is not None else (status, job_id),
             )
             row = cursor.fetchone()
         return _job_from_row(row) if row else None

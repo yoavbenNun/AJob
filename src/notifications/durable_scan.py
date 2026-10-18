@@ -53,13 +53,16 @@ def deliver_batch(store, slot, summary, settings, recommendations=None,
         return store.batch_state(slot)
     summary.new_jobs = store.prepare_batch(slot)
     frozen = store.execute('SELECT message FROM notification_batches WHERE slot_key=?', (slot,)).fetchone()['message']
-    if frozen is None:
+    replace_dismissed = frozen is not None and any(
+        url in json.loads(frozen)['body'] for url in store.dismissed_batch_urls(slot))
+    if frozen is None or replace_dismissed:
         ranked = (bounded_recommendations(recommendations, summary, recommendation_seconds)
                   if recommendations else None)
         message = compose_scan_summary(settings, summary, ranked)
         message.set_content(f'Delivery slot: {slot}\n' + message.get_content())
         frozen = store.freeze_message(slot, json.dumps({
-            'subject': str(message['Subject']), 'body': message.get_content()}))
+            'subject': str(message['Subject']), 'body': message.get_content()}),
+            previous_message=frozen if replace_dismissed else None)
     payload = json.loads(frozen)
     message = EmailMessage()
     message['From'], message['To'] = settings.sender, settings.recipient

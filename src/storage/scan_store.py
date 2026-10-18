@@ -187,10 +187,12 @@ class ScanStore:
                 for item in rows:
                     self.execute("UPDATE notification_outbox SET batch_slot=? WHERE job_id=? AND batch_slot IS NULL", (slot, item["job_id"]))
                 self.execute("UPDATE notification_batches SET prepared_at=? WHERE slot_key=?", (now(), slot))
-            rows = self.execute("SELECT snapshot FROM notification_outbox WHERE batch_slot=? ORDER BY job_id", (slot,)).fetchall()
+            rows = self.execute("SELECT o.snapshot,j.status AS current_status FROM notification_outbox o JOIN job_postings j ON j.id=o.job_id "
+                                "WHERE o.batch_slot=? AND j.status<>'ignored' ORDER BY o.job_id", (slot,)).fetchall()
         jobs = []
         for row in rows:
             payload = json.loads(row["snapshot"])
+            payload['status'] = row['current_status']
             payload["discovered_at"] = datetime.fromisoformat(payload["discovered_at"])
             jobs.append(JobPosting(**payload))
         return jobs
@@ -198,9 +200,19 @@ class ScanStore:
     def pending_batches(self):
         return [row["slot_key"] for row in self.execute("SELECT slot_key FROM notification_batches WHERE state IN ('pending','failed') ORDER BY updated_at").fetchall()]
 
-    def freeze_message(self, slot, message):
+    def dismissed_batch_urls(self, slot):
+        return [row['job_url'] for row in self.execute(
+            "SELECT j.job_url FROM notification_outbox o JOIN job_postings j ON j.id=o.job_id "
+            "WHERE o.batch_slot=? AND j.status='ignored'", (slot,)).fetchall()]
+
+    def freeze_message(self, slot, message, *, previous_message=None):
         with self.transaction():
-            self.execute("UPDATE notification_batches SET message=? WHERE slot_key=? AND message IS NULL AND state IN ('pending','failed')", (message, slot))
+            # Only definitely unsent batches may be recomposed after a dismissal.
+            # Membership, delivery state and sent/uncertain messages stay intact.
+            self.execute("UPDATE notification_batches SET message=? WHERE slot_key=? "
+                         + ("AND message=? " if previous_message is not None else "AND message IS NULL ")
+                         + "AND state IN ('pending','failed')",
+                         (message, slot, previous_message) if previous_message is not None else (message, slot))
         return self.execute("SELECT message FROM notification_batches WHERE slot_key=?", (slot,)).fetchone()["message"]
 
     def begin_send(self, slot):

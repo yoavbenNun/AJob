@@ -99,6 +99,52 @@ def job(number=1):
 SETTINGS = SmtpSettings('localhost', 25, '', '', 'from@example.test', 'to@example.test', False)
 
 
+def test_dismissal_survives_upsert_and_pending_mail_restart(repository, store):
+    posting = job()
+    store.save_discovery(posting, 'dismiss-slot')
+    saved = repository.get_by_url(posting.job_url)
+    assert repository.update_status(saved.id, 'ignored', expected_status='applied') is None
+    assert repository.update_status(saved.id, 'ignored', expected_status='new').status == 'ignored'
+    repository.save(job())
+    assert not store.save_discovery(job(), 'later-slot')
+    assert repository.get_by_id(saved.id).status == 'ignored'
+    assert store.prepare_batch('dismiss-slot') == []
+    recovered = ScanStore(repository)
+    messages = []
+    try:
+        assert deliver_batch(recovered, 'dismiss-slot', DurableSummary(), SETTINGS,
+                             sender=lambda _, message: messages.append(message)) == 'sent'
+        assert posting.job_url not in messages[0].get_content()
+        assert recovered.execute('SELECT COUNT(*) AS n FROM notification_outbox').fetchone()['n'] == 1
+        assert repository.update_status(saved.id, 'new', expected_status='ignored').status == 'new'
+        assert recovered.batch_state('dismiss-slot') == 'sent'
+    finally:
+        recovered.close()
+
+
+@pytest.mark.parametrize('delivery_state', ['failed', 'sent', 'uncertain', 'sending'])
+def test_dismissed_frozen_mail_respects_delivery_state(repository, store, delivery_state):
+    import json
+    posting = job()
+    store.save_discovery(posting, 'dismiss-frozen')
+    store.prepare_batch('dismiss-frozen')
+    frozen = json.dumps({'subject': 'original', 'body': posting.job_url})
+    store.freeze_message('dismiss-frozen', frozen)
+    store.execute('UPDATE notification_batches SET state=? WHERE slot_key=?',
+                  (delivery_state, 'dismiss-frozen'))
+    repository.update_status(repository.get_by_url(posting.job_url).id, 'ignored')
+    messages = []
+    result = deliver_batch(store, 'dismiss-frozen', DurableSummary(), SETTINGS,
+                           sender=lambda _, message: messages.append(message))
+    if delivery_state == 'failed':
+        assert result == 'sent' and len(messages) == 1
+        assert posting.job_url not in messages[0].get_content()
+    else:
+        assert result == delivery_state and not messages
+        assert store.execute('SELECT message FROM notification_batches WHERE slot_key=?',
+                             ('dismiss-frozen',)).fetchone()['message'] == frozen
+
+
 @pytest.mark.parametrize('lifecycle', ['new', 'reviewed', 'applied'])
 def test_workday_backfill_preserves_identity_tracking_outbox_and_restores(repository, store, lifecycle):
     from src.storage.workday_backfill import prepare_backfill, apply_backfill, restore_backfill, snapshot

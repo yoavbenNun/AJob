@@ -218,12 +218,14 @@ class JobRepository:
                 (int(is_relevant), job_id),
             )
 
-    def update_status(self, job_id: int, status: str) -> JobPosting | None:
+    def update_status(self, job_id: int, status: str, *, expected_status: str | None = None) -> JobPosting | None:
         """Set a posting's lifecycle status and return it, if it exists."""
         _validate_status(status)
         with self._connect() as connection:
             cursor = connection.execute(
-                "UPDATE job_postings SET status = ? WHERE id = ?", (status, job_id)
+                "UPDATE job_postings SET status = ? WHERE id = ?"
+                + (" AND status = ?" if expected_status is not None else ""),
+                (status, job_id, expected_status) if expected_status is not None else (status, job_id)
             )
             if cursor.rowcount == 0:
                 return None
