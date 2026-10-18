@@ -71,7 +71,7 @@ def test_extract_workday_jobs_normalizes_public_api_response() -> None:
     assert len(jobs) == 1
     assert jobs[0].title == "Software Student"
     assert jobs[0].location == "Israel, Haifa"
-    assert jobs[0].job_url.startswith("https://intel.wd1.myworkdayjobs.com/job/")
+    assert jobs[0].job_url.startswith("https://intel.wd1.myworkdayjobs.com/en-US/External/job/")
 
 
 def test_workday_scan_pages_deduplicates_and_keeps_partial_success(monkeypatch) -> None:

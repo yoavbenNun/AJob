@@ -110,6 +110,34 @@ def worker(company, timeout, pages, headed, pipe):
     pipe.close()
 
 
+def corrected_workday_worker(company, timeout, pages, headed, pipe):
+    import os
+    if os.name != 'nt':
+        os.setsid()
+    posting = JobPosting('Software Student', company.name, 'Israel',
+                          company.careers_url + '/job/Israel/Software_JR123',
+                          source=company.careers_url, description='Develop Python software.')
+    pipe.send(('job', True, posting))
+    pipe.send(('done',))
+    pipe.close()
+
+
+def test_corrected_workday_url_reuses_legacy_row_without_new_notification(store):
+    source = 'https://intel.wd1.myworkdayjobs.com/en-US/External'
+    original = JobPosting('Software Student', 'Intel', 'Israel',
+                          'https://intel.wd1.myworkdayjobs.com/job/Israel/Software_JR123',
+                          source=source, description='Page not found.', status='applied')
+    store.save_discovery(original, 'old-slot')
+    outbox = [dict(row) for row in store.execute('SELECT * FROM notification_outbox')]
+    run = store.start_run('test-workday-slot')
+    result = scan_with_budgets([Company('Intel', source)], store, run, 'test-workday-slot',
+                               source_seconds=10, scan_seconds=20, worker=corrected_workday_worker)
+    assert result.status == 'full' and result.new_jobs == []
+    rows = store.execute('SELECT * FROM job_postings').fetchall()
+    assert len(rows) == 1 and rows[0]['id'] == original.id and rows[0]['status'] == 'applied'
+    assert [dict(row) for row in store.execute('SELECT * FROM notification_outbox')] == outbox
+
+
 def test_slow_source_isolated_and_metrics(store):
     run = store.start_run('slot')
     companies = [Company('slow', 'https://example.test'), Company('fast', 'https://example.test')]

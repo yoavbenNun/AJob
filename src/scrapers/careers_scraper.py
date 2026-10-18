@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 from urllib.parse import urljoin, urlsplit
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 import json
 import re
 
@@ -16,6 +17,7 @@ from src.job_content import description_problem, clean_job_text, QUALIFICATION_H
 from src.urls import canonical_url
 from src.scrapers.greenhouse import fetch_greenhouse_jobs, is_greenhouse_board
 from src.scrapers.paused_sources import scan_public_feed, supported as supports_public_feed
+from src.scrapers.workday_details import workday_urls, legacy_workday_url, fetch_workday_detail
 
 WORKDAY_SEARCH_TERMS = (
     "student software",
@@ -239,13 +241,15 @@ def scan_companies(
                 summary.jobs_found += len(result.jobs)
                 relevant_for_company = 0
                 detail_failure_reported = False
+                detail_blocked = False
                 for job in result.jobs:
                     prefilter = prefilter_job(job)
                     if not prefilter.relevant:
                         repository.update_relevance_by_url(job.job_url, False)
                         print(f"  Skipped: {job.title} - {prefilter.reason}")
                         continue
-                    detail_error = _enrich_job(browser, job, timeout_ms)
+                    detail_error = 'WorkdayAccessDenied' if detail_blocked else _enrich_job(browser, job, timeout_ms)
+                    detail_blocked = detail_error == 'WorkdayAccessDenied'
                     invalid_detail = detail_error or description_problem(job.description, job.requirements)
                     if invalid_detail and not detail_failure_reported:
                         summary.failures += 1
@@ -259,6 +263,11 @@ def scan_companies(
                     summary.jobs_relevant += 1
                     relevant_for_company += 1
                     existing = repository.get_by_url(job.job_url)
+                    alias = legacy_workday_url(job.source, job.job_url)
+                    if existing is None and alias:
+                        existing = repository.get_by_url(alias)
+                        if existing is not None:
+                            job.job_url = existing.job_url
                     repository.save(job)
                     if existing is None:
                         summary.new_jobs.append(job)
@@ -309,7 +318,10 @@ def extract_workday_jobs(company: Company, payload: Mapping[str, Any]) -> list[J
         external_path = str(posting.get("externalPath", "")).strip()
         if not title or not external_path.startswith("/"):
             continue
-        url = canonical_url(urljoin(company.careers_url, external_path))
+        try:
+            url, _ = workday_urls(company.careers_url, external_path)
+        except ValueError:
+            continue
         if not url or (urlsplit(url).hostname or "").casefold() not in company.allowed_job_hosts:
             continue
         jobs.append(
@@ -373,6 +385,17 @@ def _listing_signature(page: Page) -> tuple[str, ...]:
 
 def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> str | None:
     """Populate full page text and a focused requirements excerpt, best effort."""
+    if '.myworkdayjobs.com/' in job.source:
+        try:
+            detail = fetch_workday_detail(job.source, job.job_url, job.title,
+                                         timeout=max(1, timeout_ms // 1000))
+            job.description = detail.description
+            job.requirements = extract_requirements(detail.description)
+            return None
+        except HTTPError as error:
+            return 'WorkdayAccessDenied' if error.code in {403, 429} else 'JobDetailUnavailable'
+        except Exception:
+            return 'JobDetailUnavailable'
     if (is_greenhouse_board(job.source) or supports_public_feed(
         Company(name=job.company, careers_url=job.source)
     )) and job.description:

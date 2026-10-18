@@ -99,6 +99,54 @@ def job(number=1):
 SETTINGS = SmtpSettings('localhost', 25, '', '', 'from@example.test', 'to@example.test', False)
 
 
+@pytest.mark.parametrize('lifecycle', ['new', 'reviewed', 'applied'])
+def test_workday_backfill_preserves_identity_tracking_outbox_and_restores(repository, store, lifecycle):
+    from src.storage.workday_backfill import prepare_backfill, apply_backfill, restore_backfill, snapshot
+    from src.scrapers.workday_details import WorkdayDetail, workday_urls
+    source = 'https://intel.wd1.myworkdayjobs.com/en-US/External'
+    original = JobPosting('Software Student', 'Intel', 'Israel',
+                          'https://intel.wd1.myworkdayjobs.com/job/Israel/Software_JR123',
+                          source=source, description='Page not found.', status=lifecycle)
+    store.save_discovery(original, 'original-slot')
+    before = snapshot(store.execute('SELECT * FROM job_postings').fetchone())
+    outbox = store.execute('SELECT * FROM notification_outbox').fetchall()
+    detail = WorkdayDetail(workday_urls(source, original.job_url)[0], original.title, 'JR123',
+                           'Software Student\nDevelop Python software.\nRequirements\nCurrently pursuing a degree.')
+    plan = prepare_backfill(store.connection, fetch=lambda *args: detail)
+    assert snapshot(store.execute('SELECT * FROM job_postings').fetchone()) == before  # Dry run.
+    assert apply_backfill(store.connection, plan) == [original.id]
+    after = snapshot(store.execute('SELECT * FROM job_postings').fetchone())
+    assert after == {**before, **plan['rows'][0]['after']}
+    assert store.execute('SELECT * FROM notification_outbox').fetchall() == outbox
+    assert store.execute('SELECT count(*) AS n FROM job_postings').fetchone()['n'] == 1
+    assert restore_backfill(store.connection, plan) == [original.id]
+    assert snapshot(store.execute('SELECT * FROM job_postings').fetchone()) == before
+
+
+def test_workday_backfill_concurrent_edit_and_identity_error_prevent_writes(repository, store):
+    from src.storage.workday_backfill import prepare_backfill, apply_backfill
+    from src.scrapers.workday_details import WorkdayDetail, WorkdayIdentityError, workday_urls
+    source = 'https://intel.wd1.myworkdayjobs.com/en-US/External'
+    for number in (1, 2):
+        store.save_discovery(JobPosting('Software Student', 'Intel', 'Israel',
+                             f'https://intel.wd1.myworkdayjobs.com/job/Israel/Software_JR{number}',
+                             source=source, description='Page not found.'), 'original-slot')
+    def fetch(source, url, title):
+        return WorkdayDetail(workday_urls(source, url)[0], title, url.rsplit('_', 1)[-1],
+                              'Software Student\nDevelop Python software.\nRequirements\nCurrently pursuing a degree.')
+    plan = prepare_backfill(store.connection, fetch=fetch)
+    store.execute("UPDATE job_postings SET status='reviewed' WHERE id=?", (plan['rows'][1]['before']['id'],))
+    with pytest.raises(RuntimeError, match='Row changed'):
+        apply_backfill(store.connection, plan)
+    # Even the earlier successful UPDATE must have rolled back.
+    assert all(row['description'] == 'Page not found.' for row in store.execute('SELECT description FROM job_postings'))
+    def mismatch(*args):
+        raise WorkdayIdentityError('mismatch')
+    plan = prepare_backfill(store.connection, fetch=mismatch)
+    with pytest.raises(WorkdayIdentityError):
+        apply_backfill(store.connection, plan)
+
+
 def test_atomic_commit_and_real_rollback(store):
     store.execute("CREATE FUNCTION fail_outbox() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected'; END $$")
     store.execute('CREATE TRIGGER fail_outbox BEFORE INSERT ON notification_outbox FOR EACH ROW EXECUTE FUNCTION fail_outbox()')

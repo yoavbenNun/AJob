@@ -14,6 +14,7 @@ from src.scrapers.careers_scraper import CareersScraper, _enrich_job
 from src.scrapers.greenhouse import is_greenhouse_board
 from src.scrapers.paused_sources import supported
 from src.job_content import description_problem
+from src.scrapers.workday_details import legacy_workday_url
 
 
 @dataclass
@@ -70,6 +71,7 @@ def source_worker(company, timeout_ms, max_pages, headless, pipe):
             return
         pipe.send(("found", len(result.jobs)))
         detail_failures = 0
+        detail_blocked = False
         for job in result.jobs:
             pipe.send(("phase", "processing"))
             started = time.monotonic()
@@ -80,7 +82,8 @@ def source_worker(company, timeout_ms, max_pages, headless, pipe):
                 if not ((is_greenhouse_board(job.source) or supported(company)) and job.description):
                     pipe.send(("phase", "http"))
                     started = time.monotonic()
-                    detail_error = _enrich_job(browser, job, timeout_ms)
+                    detail_error = 'WorkdayAccessDenied' if detail_blocked else _enrich_job(browser, job, timeout_ms)
+                    detail_blocked = detail_error == 'WorkdayAccessDenied'
                     pipe.send(("timing", "http_seconds", time.monotonic() - started))
                 pipe.send(("phase", "processing"))
                 started = time.monotonic()
@@ -167,6 +170,9 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
                         summary.jobs_found += event[1]
                     elif event[0] == "job":
                         _, accepted, job = event
+                        alias = legacy_workday_url(job.source, job.job_url)
+                        if job.job_url not in known and alias in known:
+                            job.job_url = alias
                         db_started = time.monotonic()
                         before = store.statements
                         if accepted:
