@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 import json
 import re
+import time
 
 from playwright.sync_api import Browser, Page, TimeoutError as PlaywrightTimeoutError
 
@@ -18,6 +19,7 @@ from src.urls import canonical_url
 from src.scrapers.greenhouse import fetch_greenhouse_jobs, is_greenhouse_board
 from src.scrapers.paused_sources import scan_public_feed, supported as supports_public_feed
 from src.scrapers.workday_details import workday_urls, legacy_workday_url, fetch_workday_detail
+from src.scrapers.workday_search import israel_facet, explicitly_israel, contradicts_israel_filter, search_payload
 
 WORKDAY_SEARCH_TERMS = (
     "student software",
@@ -42,6 +44,7 @@ class CompanyScanResult:
     company: Company
     jobs: list[JobPosting] = field(default_factory=list)
     error: str | None = None
+    collection_metrics: dict = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -172,38 +175,106 @@ class CareersScraper:
         jobs_by_url: dict[str, JobPosting] = {}
         successful_requests = 0
         request_errors: list[str] = []
-        # Several narrow searches provide better early-career recall than one
-        # generic query. Failures are isolated so one throttled query cannot
-        # discard useful postings returned by the others.
-        for search_text in WORKDAY_SEARCH_TERMS:
-            for page_number in range(self.max_pages):
-                try:
-                    request = Request(
-                        endpoint,
-                        data=json.dumps(
-                            {"appliedFacets": {}, "limit": 20, "offset": page_number * 20,
-                             "searchText": search_text}
-                        ).encode("utf-8"),
-                        headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"},
-                        method="POST",
-                    )
-                    with urlopen(request, timeout=max(1, self.timeout_ms // 1000)) as response:
-                        payload = json.load(response)
-                    page_jobs = extract_workday_jobs(company, payload)
-                    raw_postings = payload.get("jobPostings", [])
-                    successful_requests += 1
-                    for job in page_jobs:
-                        jobs_by_url.setdefault(job.job_url, job)
-                    if len(raw_postings) < 20:
-                        break
-                except Exception as error:
-                    request_errors.append(f"{search_text}: {error}")
+        metrics = dict(focused_discovered=0, global_discovered=0, unique_israel_jobs=0,
+                       duplicates_avoided=0, page_limit_reached=False,
+                       focused_page_limit_reached=False, global_page_limit_reached=False,
+                       location_filter_available=False, location_filter_status='unavailable', search_errors=0,
+                       focused_budget_exhausted=False, focused_unique=0, global_unique=0,
+                       focused_israel_unique=0, global_israel_unique=0,
+                       comparison_complete=False, focused_only_israel_unique=None)
+
+        def fetch(facets, text, offset, limit=20, timeout=None):
+            request = Request(endpoint, data=json.dumps(
+                {'appliedFacets': facets, 'limit': limit, 'offset': offset, 'searchText': text}
+            ).encode(), headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}, method='POST')
+            with urlopen(request, timeout=timeout if timeout is not None else max(1, self.timeout_ms // 1000)) as response:
+                return search_payload(json.load(response))
+
+        try:
+            # Metadata request is bounded and is not counted as a discovery scan.
+            facets = israel_facet(fetch({}, '', 0, limit=1, timeout=min(10, max(1, self.timeout_ms // 1000))))
+            metrics['location_filter_available'] = facets is not None
+            if facets:
+                metrics['location_filter_status'] = 'available'
+        except Exception as error:
+            facets = None
+            metrics['location_filter_status'] = 'metadata_failed'
+            metrics['metadata_error'] = type(error).__name__
+            if isinstance(error, HTTPError) and error.code in {403, 429}:
+                metrics['coverage_limited'] = True
+                return CompanyScanResult(company, error='Workday access denied', collection_metrics=metrics)
+
+        blocked = False
+        scope_urls = {'focused': set(), 'global': set()}
+        israel_urls = {'focused': set(), 'global': set()}
+        global_queries_completed = 0
+        for scope, applied in ([('focused', facets)] if facets else []) + [('global', {})]:
+            unreliable = False
+            focused_deadline = time.monotonic() + min(30, max(1, self.timeout_ms // 1000)) if scope == 'focused' else None
+            for search_text in WORKDAY_SEARCH_TERMS:
+                if blocked or unreliable:
                     break
+                if focused_deadline is not None and time.monotonic() >= focused_deadline:
+                    metrics['focused_budget_exhausted'] = True
+                    break
+                query_completed = True
+                for page_number in range(self.max_pages):
+                    try:
+                        remaining = focused_deadline - time.monotonic() if focused_deadline is not None else None
+                        if remaining is not None and remaining <= 0:
+                            metrics['focused_budget_exhausted'] = True
+                            break
+                        payload = fetch(applied, search_text, page_number * 20, timeout=remaining)
+                        page_jobs = extract_workday_jobs(company, payload)
+                        raw = payload['jobPostings']
+                        successful_requests += 1
+                        metrics[scope + '_discovered'] += len(page_jobs)
+                        for job in page_jobs:
+                            scope_urls[scope].add(job.job_url)
+                            if explicitly_israel(job):
+                                israel_urls[scope].add(job.job_url)
+                            metrics['duplicates_avoided'] += int(job.job_url in jobs_by_url)
+                            jobs_by_url.setdefault(job.job_url, job)
+                        if scope == 'focused' and contradicts_israel_filter(page_jobs):
+                            metrics['location_filter_status'] = 'unreliable'
+                            unreliable = True
+                            break  # Keep discoveries, and fall back to the unchanged global search.
+                        total = payload.get('total')
+                        valid_total = (isinstance(total, int) and not isinstance(total, bool)
+                                       and total >= page_number * 20 + len(raw))
+                        more = (page_number + 1) * 20 < total if valid_total else len(raw) >= 20
+                        if page_number + 1 == self.max_pages and more:
+                            metrics[scope + '_page_limit_reached'] = True
+                            metrics['page_limit_reached'] = True
+                        if not more or len(raw) < 20:
+                            break
+                    except Exception as error:
+                        query_completed = False
+                        request_errors.append(type(error).__name__)
+                        blocked = isinstance(error, HTTPError) and error.code in {403, 429}
+                        break
+                if scope == 'global' and query_completed:
+                    global_queries_completed += 1
+
+        metrics['unique_israel_jobs'] = sum(explicitly_israel(job) for job in jobs_by_url.values())
+        metrics['focused_unique'] = len(scope_urls['focused'])
+        metrics['global_unique'] = len(scope_urls['global'])
+        metrics['focused_israel_unique'] = len(israel_urls['focused'])
+        metrics['global_israel_unique'] = len(israel_urls['global'])
+        metrics['comparison_complete'] = global_queries_completed == len(WORKDAY_SEARCH_TERMS)
+        # Compare against ALL global URLs, including ambiguous location labels.
+        # A partial/failed global search cannot establish the counterfactual gap.
+        metrics['focused_only_israel_unique'] = (
+            len(israel_urls['focused'] - scope_urls['global']) if metrics['comparison_complete'] else None)
+        metrics['search_errors'] = len(request_errors)
+        metrics['coverage_limited'] = bool(request_errors or metrics['page_limit_reached']
+                                           or metrics['focused_budget_exhausted']
+                                           or metrics['location_filter_status'] != 'available')
 
         if successful_requests == 0:
             detail = "; ".join(request_errors[:2]) or "no query completed"
-            return CompanyScanResult(company=company, error=f"Workday API failed: {detail}")
-        return CompanyScanResult(company=company, jobs=list(jobs_by_url.values()))
+            return CompanyScanResult(company=company, error=f"Workday API failed: {detail}", collection_metrics=metrics)
+        return CompanyScanResult(company=company, jobs=list(jobs_by_url.values()), collection_metrics=metrics)
 
 
 def scan_companies(

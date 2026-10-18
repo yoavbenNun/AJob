@@ -64,6 +64,8 @@ def source_worker(company, timeout_ms, max_pages, headless, pipe):
         started = time.monotonic()
         result = CareersScraper(browser, timeout_ms, max_pages).scan_company(company)
         pipe.send(("timing", "http_seconds", time.monotonic() - started))
+        if getattr(result, 'collection_metrics', None):
+            pipe.send(('collection', result.collection_metrics))
         # Fetch time includes HTTP, browser rendering and feed decoding. CPU
         # filtering is measured separately; no claim of pure wire-level timing.
         if result.error:
@@ -144,7 +146,8 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
             source_started = time.monotonic()
             source_deadline = min(deadline, source_started + source_seconds)
             metrics = dict(company=company.name, http_seconds=0.0, processing_seconds=0.0,
-                           db_seconds=0.0, db_calls=0, no_op_updates_avoided=0, status="failed")
+                           db_seconds=0.0, db_calls=0, no_op_updates_avoided=0, status="failed",
+                           new_jobs_saved=0)
             parent, child = ctx.Pipe(duplex=False)
             process = ctx.Process(target=worker, args=(company, timeout_ms, max_pages, headless, child))
             phase = None
@@ -168,6 +171,9 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
                         phase = None
                     elif event[0] == "found":
                         summary.jobs_found += event[1]
+                        metrics['discovered_unique'] = event[1]
+                    elif event[0] == 'collection':
+                        metrics['collection'] = event[1]
                     elif event[0] == "job":
                         _, accepted, job = event
                         alias = legacy_workday_url(job.source, job.job_url)
@@ -180,6 +186,7 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
                             summary.jobs_relevant += 1
                             if store.save_discovery(job, slot):
                                 summary.new_jobs.append(job)
+                                metrics['new_jobs_saved'] += 1
                             known.add(job.job_url)
                             summary.jobs_saved += 1
                         elif job.job_url in known:

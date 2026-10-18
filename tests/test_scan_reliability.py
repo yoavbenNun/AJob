@@ -117,6 +117,7 @@ def corrected_workday_worker(company, timeout, pages, headed, pipe):
     posting = JobPosting('Software Student', company.name, 'Israel',
                           company.careers_url + '/job/Israel/Software_JR123',
                           source=company.careers_url, description='Develop Python software.')
+    pipe.send(('collection', {'focused_discovered': 1, 'global_discovered': 1, 'duplicates_avoided': 1}))
     pipe.send(('job', True, posting))
     pipe.send(('done',))
     pipe.close()
@@ -133,6 +134,8 @@ def test_corrected_workday_url_reuses_legacy_row_without_new_notification(store)
     result = scan_with_budgets([Company('Intel', source)], store, run, 'test-workday-slot',
                                source_seconds=10, scan_seconds=20, worker=corrected_workday_worker)
     assert result.status == 'full' and result.new_jobs == []
+    assert result.metrics[0]['collection']['duplicates_avoided'] == 1
+    assert result.metrics[0]['new_jobs_saved'] == 0
     rows = store.execute('SELECT * FROM job_postings').fetchall()
     assert len(rows) == 1 and rows[0]['id'] == original.id and rows[0]['status'] == 'applied'
     assert [dict(row) for row in store.execute('SELECT * FROM notification_outbox')] == outbox
@@ -159,6 +162,7 @@ def test_cancel_after_commit_retains_notification(store, settings):
     assert summary.status == 'partial'
     assert len(store.prepare_batch('slot')) == 1
     assert summary.metrics[0]['db_calls'] >= 2
+    assert summary.metrics[0]['new_jobs_saved'] == 1
 
 
 def test_partial_scan_can_complete_without_duplicate_summary(store, settings):

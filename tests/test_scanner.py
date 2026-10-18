@@ -123,7 +123,7 @@ def test_workday_scan_reports_error_when_every_query_fails(monkeypatch) -> None:
     result = CareersScraper(None)._scan_workday(company)
 
     assert result.jobs == []
-    assert result.error and "offline" in result.error
+    assert result.error and "TimeoutError" in result.error
 
 
 def test_extract_jobs_from_links_filters_and_deduplicates() -> None:
