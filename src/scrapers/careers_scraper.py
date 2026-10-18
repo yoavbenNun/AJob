@@ -330,7 +330,9 @@ def extract_workday_jobs(company: Company, payload: Mapping[str, Any]) -> list[J
                 company=company.name,
                 location=str(posting.get("locationsText", "")).strip() or "Not specified",
                 job_url=url,
-                description=str(posting.get("bulletFields", "")).strip(),
+                # Listing badges are not a verified description. Leave it empty
+                # so a blocked detail fetch cannot overwrite prior valid content.
+                description="",
                 source=company.careers_url,
             )
         )

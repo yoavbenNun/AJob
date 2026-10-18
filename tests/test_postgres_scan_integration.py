@@ -160,12 +160,13 @@ def test_atomic_commit_and_real_rollback(store):
 
 
 @pytest.mark.parametrize('durable', [False, True])
-def test_bad_detail_refresh_preserves_valid_posting(repository, store, durable):
+@pytest.mark.parametrize('invalid_text', ['Page not found.', ''])
+def test_bad_detail_refresh_preserves_valid_posting(repository, store, durable, invalid_text):
     from dataclasses import replace
     original = JobPosting('Software Student', 'Example', 'Israel', 'https://example.test/preserve-detail',
                           description='Develop Python services.', requirements='Python required.', status='applied')
     job_id = repository.save(original)
-    invalid = replace(original, description='Page not found.', requirements='', status='new')
+    invalid = replace(original, description=invalid_text, requirements='', status='new')
     if durable:
         assert not store.save_discovery(invalid, 'test-detail-slot')
     else:

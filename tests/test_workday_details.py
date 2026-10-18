@@ -126,3 +126,36 @@ def test_blocked_source_is_not_retried_for_every_posting(monkeypatch):
     assert len(calls) == 1
     assert len([event for event in events if event[0] == 'job']) == 3
     assert events[-1] == ('error', 'JobDetailUnavailable')
+
+
+@pytest.mark.parametrize('durable', [False, True])
+def test_workday_listing_badges_cannot_replace_previous_valid_description(tmp_path, monkeypatch, durable):
+    from urllib.error import HTTPError
+    from src.storage.job_repository import JobRepository
+    from src.storage.scan_store import ScanStore
+    repository = JobRepository(tmp_path / 'workday.db')
+    repository.initialize()
+    company = Company('Intel', SOURCE)
+    listing = extract_workday_jobs(company, {'jobPostings': [{
+        'title': 'Software Student', 'externalPath': '/job/Haifa/Software-Student_JR123-1',
+        'bulletFields': ['Student', 'Israel'], 'locationsText': 'Israel',
+    }]})[0]
+    assert listing.description == ''
+    original = JobPosting(listing.title, listing.company, listing.location, listing.job_url,
+                          source=SOURCE, description='Develop Python software for cloud systems.',
+                          requirements='Currently pursuing a degree.', status='applied')
+    saved_id = repository.save(original)
+    def denied(*args, **kwargs):
+        raise HTTPError(listing.job_url, 403, 'Denied', {}, None)
+    monkeypatch.setattr('src.scrapers.careers_scraper.fetch_workday_detail', denied)
+    assert _enrich_job(None, listing, 1000) == 'WorkdayAccessDenied'
+    if durable:
+        store = ScanStore(repository)
+        store.migrate()
+        assert not store.save_discovery(listing, 'existing-job-slot')
+        store.close()
+    else:
+        repository.save(listing)
+    saved = repository.get_by_id(saved_id)
+    assert (saved.description, saved.requirements, saved.status) == (
+        original.description, original.requirements, 'applied')
