@@ -1,0 +1,70 @@
+name: Database connection diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  connection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - name: Install database client
+        run: python -m pip install --disable-pip-version-check "psycopg[binary]==3.3.6"
+      - name: Read-only connection diagnostic
+        shell: bash
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set +x
+          python - <<'PY'
+          import json
+          import os
+          import sys
+
+          try:
+              import psycopg
+
+              with psycopg.connect(
+                  os.environ["DATABASE_URL"], connect_timeout=10, autocommit=True
+              ) as connection:
+                  host = connection.info.host.lower()
+                  port = connection.info.port
+                  endpoint = "unknown"
+                  if host.endswith(".pooler.supabase.com"):
+                      if port == 5432:
+                          endpoint = "supabase_session_pooler"
+                      elif port == 6543:
+                          endpoint = "supabase_transaction_pooler"
+                  elif host.startswith("db.") and host.endswith(".supabase.co"):
+                      if port == 5432:
+                          endpoint = "supabase_direct"
+                      elif port == 6543:
+                          endpoint = "supabase_dedicated_transaction_pooler"
+
+                  connection.execute("BEGIN READ ONLY")
+                  connection.execute("SET LOCAL statement_timeout = '10s'")
+                  role, version = connection.execute(
+                      "SELECT current_user, current_setting('server_version')"
+                  ).fetchone()
+                  connection.execute("COMMIT")
+                  tls = bool(connection.pgconn.ssl_in_use)
+                  result = {
+                      "current_user": role,
+                      "server_version": version,
+                      "tls": tls,
+                      "endpoint_classification": endpoint,
+                  }
+              print("DATABASE_DIAGNOSTIC " + json.dumps(result, ensure_ascii=True))
+              if not tls:
+                  print("Diagnostic failed: TLS is not active.")
+                  sys.exit(1)
+          except Exception:
+              print("Diagnostic failed: connection or read-only query could not complete; details withheld.")
+              sys.exit(1)
+          PY
