@@ -301,6 +301,10 @@ def _required_education_level(title: str, requirements: str) -> int:
     for clause in _education_requirement_clauses(requirements):
         if _negates_requirement(clause):
             continue
+        if re.search(r'\bor\s+(?:\w+\s+){0,3}equivalent\s+(?:experience|qualifications?)\b', clause):
+            # A degree alternative is assessed as uncertain eligibility rather
+            # than an unconditional completed-degree mismatch.
+            continue
         clause = clause.strip()
         if not clause:
             continue

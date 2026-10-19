@@ -13,11 +13,105 @@ DEGREE = r"\b(?:bsc|bs|bachelor'?s?|degree)\b"
 STUDY = r"\b(?:students?|undergraduate|pursuing|enrolled|studying|in progress|expected)\b"
 PREFERRED = r"\b(?:preferred|nice to have|advantage|bonus|not required|not strictly required)\b"
 STUDENT_EXCLUSION = r'\b(?:not open to|not suitable for|do not accept|cannot accommodate)\s+(?:current |university )?students?\b'
+MASTERS = r"\b(?:master'?s?|msc|ms)\b"
+BACHELORS = r"\b(?:bachelor'?s?|bsc|bs|undergraduate)\b"
+ENROLLED = r'\b(?:pursuing|enrolled|enrollment|studying|registered|student(?:s)?)\b'
+STUDY_COUNTRIES = {
+    'Israel': r'\bisrael(?:i)?\b',
+    'Czech Republic': r'\bczech(?:ia| republic)?\b',
+    'Germany': r'\bgerman(?:y)?\b',
+    'France': r'\bfrance\b|\bfrench\b',
+    'United Kingdom': r'\bunited kingdom\b|\buk\b|\bbritish\b',
+    'United States': r'\bunited states\b|\busa\b|\bamerican\b',
+    'Canada': r'\bcanad(?:a|ian)\b',
+    'Netherlands': r'\bnetherlands\b|\bdutch\b',
+    'India': r'\bindia(?:n)?\b',
+    'China': r'\bchina\b|\bchinese\b',
+    'Australia': r'\baustralia(?:n)?\b',
+    'Poland': r'\bpoland\b|\bpolish\b',
+}
 
 
 def _normalize(text: str) -> str:
     text = text.casefold().replace("’", "'").replace("–", "-")
-    return re.sub(r'\bb\.?\s*sc\.?|\bb\.s\.?', 'bsc', text)
+    text = re.sub(r'\bb\.?\s*sc\.?|\bb\.s\.?', 'bsc', text)
+    return re.sub(r'\bm\.?\s*sc\.?|\bm\.s\.?', 'msc', text)
+
+
+def _academic_restrictions(clause, resume, job, *, hard, optional):
+    """Use education evidence, never residence, to check study restrictions."""
+    if optional:
+        return [], []
+    conflicts, doubts = [], []
+    education = _normalize(resume.education)
+    enrollment = bool(re.search(
+        r'\b(?:currently\s+)?(?:pursuing|enrolled|studying|registered)\b', clause))
+    masters = bool(re.search(MASTERS, clause) and re.search(
+        r"\b(?:degree|students?|studies|program)\b|\b(?:msc|ms)\b|^master'?s\b", clause))
+    if re.search(r'\b(?:mentor|supervise|collaborate with|work with)\b', clause) and not enrollment:
+        masters = False
+    graduate_student = bool(re.search(r'\b(?:postgraduate|graduate)[ -]students?\b', clause))
+    # Mentioning graduate students in mentorship/responsibilities is not a
+    # candidate qualification, even inside a requirements excerpt.
+    graduate_requirement = graduate_student and bool(re.search(
+        r'^(?:must be (?:a |an )?|currently (?:a |an )?|(?:a |an )?)'
+        r'(?:postgraduate|graduate)[ -]student\b|'
+        r'\b(?:postgraduate|graduate)[ -]students?\s+(?:only|required)\b|'
+        r'\bmust be\s+(?:a |an )?(?:postgraduate|graduate)[ -]students?\b', clause) or enrollment)
+    lower_alternative = bool(re.search(BACHELORS, clause) and re.search(
+        r'\bor\b|/|\bboth\b', clause))
+    lower_alternative = lower_alternative or bool(re.search(
+        BACHELORS + r'.{0,25}\band\b.{0,10}' + MASTERS
+        + r'.{0,30}\b(?:students|accepted|welcome)\b', clause))
+    if (masters or graduate_requirement) and not lower_alternative:
+        candidate_context = enrollment or graduate_requirement or hard
+        if candidate_context:
+            alternative = bool(re.search(r'\bequivalent\s+(?:experience|qualification)', clause))
+            advanced = bool(re.search(MASTERS + r'|\b(?:phd|ph\.d|doctorate)\b', education))
+            undergraduate = bool(re.search(BACHELORS, education)) and not advanced
+            if not advanced:
+                reason = 'Master\'s/postgraduate study required; candidate documents only bachelor\'s-level studies.'
+                if undergraduate and (hard or enrollment) and not alternative:
+                    conflicts.append(reason)
+                else:
+                    doubts.append('Postgraduate requirement or equivalent experience needs confirmation.')
+            elif enrollment and not candidate_is_studying(resume):
+                doubts.append('Current postgraduate enrollment is required but is not documented.')
+        elif re.match(r"^(?:a |an )?master'?s?\s+degree\b", clause):
+            # A bare degree mention outside qualifications is not a hard rule.
+            doubts.append('Master\'s degree mentioned without a clear requirement; confirm accepted study levels.')
+
+    university = bool(re.search(r'\b(?:universit\w*|college|academic institution|school)\b', clause))
+    if university and re.search(ENROLLED, clause) and (hard or enrollment):
+        required = {country for country, pattern in STUDY_COUNTRIES.items()
+                    if re.search(pattern, clause)}
+        local_only = bool(re.search(r'\blocal\s+(?:universit\w*|college|academic institution)\b', clause))
+        if not required and local_only:
+            required = {country for country, pattern in STUDY_COUNTRIES.items()
+                        if re.search(pattern, _normalize(job.title + ' ' + job.location))}
+        documented = {country for country, pattern in STUDY_COUNTRIES.items()
+                      if re.search(pattern, education)}
+        if required and not (required & documented):
+            reason = 'University enrollment in ' + ' or '.join(sorted(required)) + ' required.'
+            if documented:
+                conflicts.append(reason + ' Documented education is in a different country.')
+            else:
+                doubts.append(reason + ' Candidate study country is not documented.')
+        elif local_only and not required:
+            doubts.append('Local university enrollment required; its country could not be verified.')
+        unknown_adjective = re.search(
+            r'(?:\b(?:at|in)\s+(?:an?\s+)?|^)([a-z]+)\s+(?:university|college)\b', clause)
+        regional = unknown_adjective and unknown_adjective[1] not in {
+            'a', 'an',
+            'accredited', 'recognized', 'recognised', 'reputable', 'international',
+            'public', 'private', 'technical', 'research', 'any', 'partner', 'local'}
+        if not required and (regional or (re.search(
+                r'\b(?:university|college|institution)\b.{0,30}\bin\b', clause) and not re.search(
+                r'\b(?:computer|software|electrical|engineering|science|mathematics)\b', clause))):
+            # Unrecognized countries/regions remain reviewable, not eligible by
+            # omission. This deliberately avoids an exhaustive geography parser.
+            doubts.append('Location-specific university enrollment needs confirmation.')
+    return conflicts, doubts
 
 
 def student_acceptance_evidence(text: str) -> bool:
@@ -117,6 +211,10 @@ def assess_student_eligibility(resume: ResumeProfile, job: JobPosting) -> tuple[
             optional = (bool(re.search(PREFERRED, clause)) or mode == 'preferred'
                         or bool(re.search(r'\bno\b[^.;\n]{0,70}\brequired\b', clause)))
             hard = not optional and (mode == 'required' or bool(re.search(r'\b(?:must|required|minimum|at least)\b', clause)))
+            academic_conflicts, academic_doubts = _academic_restrictions(
+                clause, resume, job, hard=hard, optional=optional)
+            conflicts.extend(academic_conflicts)
+            doubts.extend(academic_doubts)
             remaining = _remaining_studies(clause, resume, today) if hard else None
             if remaining:
                 rejected, reason = remaining
