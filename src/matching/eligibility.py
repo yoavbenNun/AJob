@@ -118,9 +118,12 @@ def student_acceptance_evidence(text: str) -> bool:
     """Candidate-context evidence, excluding generic company student outreach."""
     text = re.sub(STUDENT_EXCLUSION, '', _normalize(text))
     return bool(re.search(
-        r'\b(?:currently\s+)?(?:pursuing|enrolled in|studying towards)\b[^.;\n]{0,100}' + DEGREE
+        r'\b(?:currently\s+)?(?:pursuing|enrolled (?:in|as)|studying towards)\b[^.;\n]{0,100}' + DEGREE
         + r'|\b(?:open to|suitable for|welcomes?|accepts?|flexib\w* for)\s+(?:\w+\s+){0,3}students?\b'
-        + r'|\b(?:third|3rd|final)[ -]year\s+(?:\w+\s+){0,3}students?\b', text))
+        + r'|\b(?:third|3rd|final)[ -]year\s+(?:\w+\s+){0,3}students?\b'
+        + r'|(?:^|[.;\n]|\b(?:looking for|seeking|must be|requirements:)\s+)\s*'
+          r'(?:(?:a|an|motivated|advanced|current)\s+){0,3}'
+          + BACHELORS + r'\s+(?:degree\s+)?students?\b', text))
 
 
 def candidate_is_studying(resume: ResumeProfile) -> bool:
@@ -249,5 +252,8 @@ def assess_student_eligibility(resume: ResumeProfile, job: JobPosting) -> tuple[
     if doubts:
         return 'potentially_eligible', tuple(dict.fromkeys(doubts))
     if student_role and text.strip():
-        return 'student_eligible', ('Posting accepts students or internships; no demonstrated prerequisite conflict.',)
+        reasons = ['Posting accepts students or internships; no demonstrated prerequisite conflict.']
+        if not re.search(r'\bpart[ -]time\b|\bflexib\w*\s+(?:working\s+)?hours\b', text):
+            reasons.append('Student eligibility does not imply part-time work; confirm working hours and compatibility with studies.')
+        return 'student_eligible', tuple(reasons)
     return 'potentially_eligible', ('Student eligibility or availability is not explicit; confirm with the employer.',)
