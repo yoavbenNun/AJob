@@ -17,6 +17,7 @@ from src.models import Company, JobPosting
 from src.job_content import description_problem, clean_job_text, QUALIFICATION_HEADING
 from src.urls import canonical_url
 from src.scrapers.greenhouse import fetch_greenhouse_jobs, is_greenhouse_board
+from src.scrapers.official_sources import fetch_jobs as fetch_official_jobs, supported as supports_official_feed
 from src.scrapers.paused_sources import scan_public_feed, supported as supports_public_feed
 from src.scrapers.workday_details import workday_urls, legacy_workday_url, fetch_workday_detail
 from src.scrapers.workday_search import israel_facet, explicitly_israel, contradicts_israel_filter, search_payload
@@ -118,6 +119,14 @@ class CareersScraper:
         self.max_pages = max_pages
 
     def scan_company(self, company: Company) -> CompanyScanResult:
+        if supports_official_feed(company):
+            try:
+                jobs, metrics = fetch_official_jobs(company, self.timeout_ms)
+                for job in jobs:
+                    job.requirements = extract_requirements(job.description)
+                return CompanyScanResult(company=company, jobs=jobs, collection_metrics=metrics)
+            except Exception as error:
+                return CompanyScanResult(company=company, error=f"Official careers feed failed: {type(error).__name__}")
         if supports_public_feed(company):
             try:
                 jobs = scan_public_feed(company, max(1, self.timeout_ms // 1000), self.max_pages)
@@ -128,10 +137,11 @@ class CareersScraper:
                 return CompanyScanResult(company=company, error=f"Public careers feed failed: {error}")
         if is_greenhouse_board(company.careers_url):
             try:
-                jobs = fetch_greenhouse_jobs(company, self.timeout_ms)
+                metrics = {}
+                jobs = fetch_greenhouse_jobs(company, self.timeout_ms, metrics)
                 for job in jobs:
                     job.requirements = extract_requirements(job.description)
-                return CompanyScanResult(company=company, jobs=jobs)
+                return CompanyScanResult(company=company, jobs=jobs, collection_metrics=metrics)
             except Exception as error:
                 return CompanyScanResult(company=company, error=f"Greenhouse API failed: {error}")
         if (urlsplit(company.careers_url).hostname or "").endswith("myworkdayjobs.com"):
@@ -469,7 +479,9 @@ def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> str | Non
             return 'WorkdayAccessDenied' if error.code in {403, 429} else 'JobDetailUnavailable'
         except Exception:
             return 'JobDetailUnavailable'
-    if (is_greenhouse_board(job.source) or supports_public_feed(
+    if (is_greenhouse_board(job.source) or supports_official_feed(
+        Company(name=job.company, careers_url=job.source)
+    ) or supports_public_feed(
         Company(name=job.company, careers_url=job.source)
     )) and job.description:
         # The official feed already supplies full content and precise location.

@@ -470,10 +470,15 @@ def _match_payload(job, result, commute, overall_eligible) -> dict:
 def _cloud_recommendations(summary) -> tuple[EmailJobRecommendation, ...] | None:
     encoded = os.getenv("CANDIDATE_PROFILE_JSON", "").strip()
     if not encoded:
+        print(json.dumps(dict(event="recommendation_metrics", status="profile_unavailable")), flush=True)
         return None
     profile = load_safe_profile_json(encoded).to_resume_profile()
     provider = OpenStreetMapDrivingProvider()
     recommendations = []
+    metrics = dict(event="recommendation_metrics", status="complete", considered=0,
+                   candidate_ineligible=0, location_blocked=0, location_unknown=0,
+                   recommended=0, exclusion_counts_overlap=True,
+                   eligibility_by_status=dict(student_eligible=0, potentially_eligible=0, ineligible=0))
     for job in summary.new_jobs:
         result = match_resume_to_job(profile, job)
         destination = resolve_job_destination(job.location, job.description)
@@ -482,6 +487,12 @@ def _cloud_recommendations(summary) -> tuple[EmailJobRecommendation, ...] | None
         if commute.reason:
             reasons.append(commute.reason)
         overall_eligible = result.eligible and commute.eligible
+        metrics["considered"] += 1
+        states = metrics["eligibility_by_status"]
+        states[result.eligibility_status] = states.get(result.eligibility_status, 0) + 1
+        metrics["candidate_ineligible"] += int(not result.eligible)
+        metrics["location_blocked"] += int(not commute.eligible)
+        metrics["location_unknown"] += int(not commute.eligible and getattr(commute, "status", "unknown") == "unknown")
         if not overall_eligible:
             continue
         recommendations.append(
@@ -497,6 +508,8 @@ def _cloud_recommendations(summary) -> tuple[EmailJobRecommendation, ...] | None
                 eligibility_reason=' '.join(result.eligibility_reasons),
             )
         )
+    metrics["recommended"] = len(recommendations)
+    print(json.dumps(metrics), flush=True)
     return tuple(recommendations)
 
 

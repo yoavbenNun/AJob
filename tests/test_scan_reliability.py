@@ -123,6 +123,49 @@ def corrected_workday_worker(company, timeout, pages, headed, pipe):
     pipe.close()
 
 
+def filter_metrics_worker(company, timeout, pages, headed, pipe):
+    import os
+    if os.name != 'nt':
+        os.setsid()
+    pipe.send(('found', 3))
+    pipe.send(('collection', {'raw_listings': 4, 'duplicates_avoided': 1}))
+    pipe.send(('filter_decision', 'preliminary', False, 'role_type'))
+    rejected = job()
+    rejected.job_url += '/rejected'
+    pipe.send(('job', False, rejected))
+    for suffix in ('', '/new'):
+        posting = job()
+        posting.job_url += suffix
+        pipe.send(('filter_decision', 'preliminary', True, None))
+        pipe.send(('invalid_description',) if suffix else ('filter_decision', 'detail', True, None))
+        pipe.send(('job', True, posting))
+    pipe.send(('done',))
+    pipe.close()
+
+
+def test_filter_metrics_aggregate_without_affecting_storage_or_status(store):
+    store.save_discovery(job(), 'old-slot')
+    store.execute("UPDATE job_postings SET status='applied'")
+    run = store.start_run('metrics-slot')
+    summary = scan_with_budgets([Company('Example', 'https://example.test')], store, run,
+                               'metrics-slot', source_seconds=10, scan_seconds=20,
+                               worker=filter_metrics_worker)
+    metrics = summary.metrics[0]
+    assert summary.status == 'full'
+    assert metrics['new_jobs_saved'] == 1 and metrics['existing_jobs_seen'] == 1
+    filtering = metrics['filtering']
+    assert filtering['preliminary_passed'] == 2 and filtering['preliminary_rejected'] == 1
+    assert filtering['detail_passed'] == 1 and filtering['invalid_description_retained'] == 1
+    assert filtering['rejected_by_reason'] == dict(role_type=1, seniority_marker=0,
+                                                  missing_early_career_evidence=0, other_unknown=0)
+    assert filtering['location_rejected'] is None
+    assert filtering['experience_education_rejected'] is None
+    assert metrics['collection']['duplicates_avoided'] == 1
+    rows = store.execute('SELECT job_url,status FROM job_postings').fetchall()
+    assert len(rows) == 2
+    assert next(row for row in rows if row['job_url'] == job().job_url)['status'] == 'applied'
+
+
 def test_corrected_workday_url_reuses_legacy_row_without_new_notification(store):
     source = 'https://intel.wd1.myworkdayjobs.com/en-US/External'
     original = JobPosting('Software Student', 'Intel', 'Israel',

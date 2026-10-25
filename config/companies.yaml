@@ -164,13 +164,13 @@ companies:
     allowed_job_hosts:
       - jobs.smartrecruiters.com
   - name: Cisco
-    # Official careers listing; shared relevance and Israel filters narrow results.
-    careers_url: https://careers.cisco.com/global/en/search-results?keywords=Israel
+    # Current official Workday board; the old rendered listing yielded no links.
+    careers_url: https://cisco.wd5.myworkdayjobs.com/en-US/Cisco_Careers
     enabled: true
     job_url_patterns:
-      - /global/en/job/
+      - /job/
     allowed_job_hosts:
-      - careers.cisco.com
+      - cisco.wd5.myworkdayjobs.com
   - name: Palo Alto Networks / CyberArk (Idira)
     # CyberArk recruiting is consolidated here. Scan the combined Israel board
     # once; the old ?l=Israel search did not actually restrict results to Israel.
@@ -182,7 +182,7 @@ companies:
     allowed_job_hosts:
       - jobs.paloaltonetworks.com
   - name: Taboola
-    # Official careers page links to its public job detail pages.
+    # Official listing JSON is linked by the site's careers application.
     careers_url: https://www.taboola.com/careers
     enabled: true
     job_url_patterns:
@@ -289,12 +289,14 @@ companies:
     allowed_job_hosts:
       - job-boards.greenhouse.io
   - name: Lightricks
-    careers_url: https://job-boards.greenhouse.io/lightricks
+    # Official careers page now points to the LTX and Facetune Greenhouse boards.
+    careers_url: https://careers.lightricks.com/
     enabled: true
     job_url_patterns:
       - gh_jid=
     allowed_job_hosts:
-      - careers.lightricks.com
+      - ltx.io
+      - www.facetuneapp.com
   - name: Rubrik
     careers_url: https://job-boards.greenhouse.io/rubrik
     enabled: true

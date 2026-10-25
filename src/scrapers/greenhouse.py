@@ -47,19 +47,28 @@ def html_text(content: str) -> str:
     return "\n".join(line.strip() for line in "".join(parser.parts).splitlines() if line.strip())
 
 
-def extract_greenhouse_jobs(company: Company, payload: dict) -> list[JobPosting]:
+def extract_greenhouse_jobs(company: Company, payload: dict, metrics: dict | None = None) -> list[JobPosting]:
     postings = payload.get("jobs")
     if not isinstance(postings, list):
         raise ValueError("Greenhouse response has no jobs list")
+    if metrics is not None:
+        metrics.update(raw_listings=len(postings), invalid_listing=0, duplicates_avoided=0,
+                       page_limit_reached=False, location_filter_status="not_applied")
     jobs: dict[str, JobPosting] = {}
     for item in postings:
         if not isinstance(item, dict):
+            if metrics is not None:
+                metrics["invalid_listing"] += 1
             continue
         url = canonical_url(str(item.get("absolute_url") or ""))
         title = str(item.get("title") or "").strip()
         if (not title or not url or urlsplit(url).hostname not in company.allowed_job_hosts
                 or not any(pattern.lower() in url.lower() for pattern in company.job_url_patterns)):
+            if metrics is not None:
+                metrics["invalid_listing"] += 1
             continue
+        if metrics is not None:
+            metrics["duplicates_avoided"] += int(url in jobs)
         location = item.get("location") or {}
         description = html_text(str(item.get("content") or ""))
         jobs.setdefault(url, JobPosting(
@@ -70,7 +79,7 @@ def extract_greenhouse_jobs(company: Company, payload: dict) -> list[JobPosting]
     return list(jobs.values())
 
 
-def fetch_greenhouse_jobs(company: Company, timeout_ms: int) -> list[JobPosting]:
+def fetch_greenhouse_jobs(company: Company, timeout_ms: int, metrics: dict | None = None) -> list[JobPosting]:
     parts = urlsplit(company.careers_url)
     board = parts.path.strip("/")
     if not is_greenhouse_board(company.careers_url) or not re.fullmatch(r"[A-Za-z0-9_-]+", board):
@@ -82,4 +91,4 @@ def fetch_greenhouse_jobs(company: Company, timeout_ms: int) -> list[JobPosting]
         payload = json.load(response)
     if not isinstance(payload, dict):
         raise ValueError("Invalid Greenhouse response")
-    return extract_greenhouse_jobs(company, payload)
+    return extract_greenhouse_jobs(company, payload, metrics)

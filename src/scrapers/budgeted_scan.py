@@ -13,6 +13,7 @@ from src.filtering.job_filter import classify_job, prefilter_job
 from src.scrapers.careers_scraper import CareersScraper, _enrich_job
 from src.scrapers.greenhouse import is_greenhouse_board
 from src.scrapers.paused_sources import supported
+from src.scrapers.official_sources import supported as supports_official_feed
 from src.job_content import description_problem
 from src.scrapers.workday_details import legacy_workday_url
 
@@ -53,6 +54,18 @@ class LazyBrowser:
             self.playwright.stop()
 
 
+def rejection_category(reason):
+    """Map only decisions actually made by the existing role classifier."""
+    if reason in {"title describes a non-engineering role", "title describes a hardware or electrical role",
+                  "title is not software-oriented", "no software-development responsibilities were found"}:
+        return "role_type"
+    if reason == "title contains a senior-level marker":
+        return "seniority_marker"
+    if reason == "no early-career evidence was found":
+        return "missing_early_career_evidence"
+    return "other_unknown"
+
+
 def source_worker(company, timeout_ms, max_pages, headless, pipe):
     # Linux workers and Chromium descendants get a separate process group so a
     # source timeout cannot leave an orphan browser consuming the next budget.
@@ -78,10 +91,13 @@ def source_worker(company, timeout_ms, max_pages, headless, pipe):
             pipe.send(("phase", "processing"))
             started = time.monotonic()
             preliminary = prefilter_job(job)
+            pipe.send(("filter_decision", "preliminary", preliminary.relevant,
+                       None if preliminary.relevant else rejection_category(preliminary.reason)))
             pipe.send(("timing", "processing_seconds", time.monotonic() - started))
             if preliminary.relevant:
                 detail_error = None
-                if not ((is_greenhouse_board(job.source) or supported(company)) and job.description):
+                if not ((is_greenhouse_board(job.source) or supported(company)
+                         or supports_official_feed(company)) and job.description):
                     pipe.send(("phase", "http"))
                     started = time.monotonic()
                     detail_error = 'WorkdayAccessDenied' if detail_blocked else _enrich_job(browser, job, timeout_ms)
@@ -92,7 +108,15 @@ def source_worker(company, timeout_ms, max_pages, headless, pipe):
                 invalid_detail = detail_error or description_problem(job.description, job.requirements)
                 if invalid_detail:
                     detail_failures += 1
-                accepted = bool(invalid_detail) or classify_job(job).relevant
+                    # This is a retained discovery, not a rejected job.
+                    pipe.send(("invalid_description",))
+                if invalid_detail:
+                    accepted = True
+                else:
+                    decision = classify_job(job)
+                    accepted = decision.relevant
+                    pipe.send(("filter_decision", "detail", accepted,
+                               None if accepted else rejection_category(decision.reason)))
                 pipe.send(("timing", "processing_seconds", time.monotonic() - started))
             else:
                 accepted = False
@@ -147,7 +171,13 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
             source_deadline = min(deadline, source_started + source_seconds)
             metrics = dict(company=company.name, http_seconds=0.0, processing_seconds=0.0,
                            db_seconds=0.0, db_calls=0, no_op_updates_avoided=0, status="failed",
-                           new_jobs_saved=0)
+                           new_jobs_saved=0, existing_jobs_seen=0,
+                           filtering=dict(preliminary_passed=0, preliminary_rejected=0,
+                                          detail_passed=0, detail_rejected=0, invalid_description_retained=0,
+                                          rejected_by_reason=dict(role_type=0, seniority_marker=0,
+                                              missing_early_career_evidence=0, other_unknown=0),
+                                          location_rejected=None, experience_education_rejected=None,
+                                          not_evaluated=["location", "candidate_experience_education"]))
             parent, child = ctx.Pipe(duplex=False)
             process = ctx.Process(target=worker, args=(company, timeout_ms, max_pages, headless, child))
             phase = None
@@ -172,8 +202,17 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
                     elif event[0] == "found":
                         summary.jobs_found += event[1]
                         metrics['discovered_unique'] = event[1]
+                        metrics['empty_listing'] = event[1] == 0
                     elif event[0] == 'collection':
                         metrics['collection'] = event[1]
+                    elif event[0] == 'filter_decision':
+                        _, stage, accepted, category = event
+                        filtering = metrics['filtering']
+                        filtering[stage + ('_passed' if accepted else '_rejected')] += 1
+                        if not accepted:
+                            filtering['rejected_by_reason'][category] += 1
+                    elif event[0] == 'invalid_description':
+                        metrics['filtering']['invalid_description_retained'] += 1
                     elif event[0] == "job":
                         _, accepted, job = event
                         alias = legacy_workday_url(job.source, job.job_url)
@@ -187,6 +226,8 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
                             if store.save_discovery(job, slot):
                                 summary.new_jobs.append(job)
                                 metrics['new_jobs_saved'] += 1
+                            else:
+                                metrics['existing_jobs_seen'] += 1
                             known.add(job.job_url)
                             summary.jobs_saved += 1
                         elif job.job_url in known:

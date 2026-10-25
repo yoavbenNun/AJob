@@ -4,6 +4,10 @@ This file records durable lessons discovered while building AJob. Read it before
 making changes and update it when a new failure mode or
 reusable lesson appears.
 
+- A successful empty ATS feed does not prove career-site coverage. Verify the
+  employer's current listing links after recruiting migrations, and distinguish
+  observed rejection decisions from filtering stages that were not evaluated.
+
 ## Environment and verification
 
 - Do not assume `python` is globally available. Use the project `.venv` after
