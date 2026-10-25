@@ -70,7 +70,7 @@ def test_default_company_sources_use_safe_enabled_and_disabled_entries() -> None
     assert companies["Wix"].enabled is True
     assert companies["AppsFlyer"].enabled is True
     assert companies["SAP"].enabled is True
-    assert sum(company.enabled for company in loaded) == 48
+    assert sum(company.enabled for company in loaded) == 49
     for name in (
         "Similarweb", "Cisco", "Palo Alto Networks / CyberArk (Idira)", "Taboola", "Fiverr",
         "Rapyd", "Pagaya", "Gong", "Applied Materials",

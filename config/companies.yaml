@@ -1,4 +1,12 @@
 companies:
+  - name: FIL Robotics / Fives
+    # Verified public country/company filters; avoid the group's global board.
+    careers_url: https://jobs.fivesgroup.com/en/search?countries=Israel&q=FIL+Robotics
+    enabled: true
+    job_url_patterns:
+      - /en/offer/
+    allowed_job_hosts:
+      - jobs.fivesgroup.com
   - name: Microsoft
     careers_url: https://jobs.careers.microsoft.com/global/en/search?q=software%20intern
     enabled: true

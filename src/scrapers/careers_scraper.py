@@ -19,6 +19,7 @@ from src.urls import canonical_url
 from src.scrapers.greenhouse import fetch_greenhouse_jobs, is_greenhouse_board
 from src.scrapers.official_sources import fetch_jobs as fetch_official_jobs, supported as supports_official_feed
 from src.scrapers.paused_sources import scan_public_feed, supported as supports_public_feed
+from src.scrapers.fives import scan_jobs as scan_fives_jobs, supported as supports_fives
 from src.scrapers.workday_details import workday_urls, legacy_workday_url, fetch_workday_detail
 from src.scrapers.workday_search import israel_facet, explicitly_israel, contradicts_israel_filter, search_payload
 
@@ -119,6 +120,14 @@ class CareersScraper:
         self.max_pages = max_pages
 
     def scan_company(self, company: Company) -> CompanyScanResult:
+        if supports_fives(company):
+            try:
+                jobs = scan_fives_jobs(company, self.browser, self.timeout_ms)
+                for job in jobs:
+                    job.requirements = extract_requirements(job.description)
+                return CompanyScanResult(company=company, jobs=jobs)
+            except Exception as error:
+                return CompanyScanResult(company=company, error=f"FIL Robotics search failed: {type(error).__name__}")
         if supports_official_feed(company):
             try:
                 jobs, metrics = fetch_official_jobs(company, self.timeout_ms)
@@ -479,7 +488,7 @@ def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> str | Non
             return 'WorkdayAccessDenied' if error.code in {403, 429} else 'JobDetailUnavailable'
         except Exception:
             return 'JobDetailUnavailable'
-    if (is_greenhouse_board(job.source) or supports_official_feed(
+    if (supports_fives(Company(name=job.company, careers_url=job.source)) or is_greenhouse_board(job.source) or supports_official_feed(
         Company(name=job.company, careers_url=job.source)
     ) or supports_public_feed(
         Company(name=job.company, careers_url=job.source)

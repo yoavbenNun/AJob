@@ -102,7 +102,18 @@ def classify_job(job: JobPosting) -> FilterDecision:
             r"minimum qualifications|basic qualifications|requirements|preferred qualifications",
             job.description, maxsplit=1, flags=re.IGNORECASE,
         )[0])
-        if not any(_contains_phrase(responsibilities, term) for term in DETAIL_SOFTWARE_TERMS):
+        develops_automation = (
+            _contains_phrase(title, "automation")
+            and re.search(
+                r"(?<!not )(?<!never )\b(?:develop(?:ing)?|build(?:ing)?|implement(?:ing)?)\b"
+                r"[^.;!\n]{0,80}\b(?:test\s+)?automation\s+"
+                r"(?:frameworks?|infrastructure|tools?)\b",
+                responsibilities,
+            )
+        )
+        if not develops_automation and not any(
+            _contains_phrase(responsibilities, term) for term in DETAIL_SOFTWARE_TERMS
+        ):
             return FilterDecision(False, "no software-development responsibilities were found")
     if any(_contains_phrase(title, term) for term in EARLY_CAREER_TERMS):
         return FilterDecision(True, "title contains an early-career marker")

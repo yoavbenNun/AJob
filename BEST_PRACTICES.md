@@ -359,3 +359,6 @@ reusable lesson appears.
 - Test rollback semantics, not only additive schema access: old job storage can
   remain compatible while its sender ignores the durable outbox. Pause/drain mixed
   versions and preserve pending/uncertain state; do not replay mail after restore.
+
+- On client-rendered career sites, wait for the scoped search response rather than
+  a fixed delay. Keep collection relevance separate from user application status.
