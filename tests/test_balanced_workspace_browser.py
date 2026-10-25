@@ -116,3 +116,32 @@ def test_long_title_and_empty_description_do_not_overflow(browser_workspace):
     card = page.locator(f'.job-card[data-job-id="{ids[0]}"]')
     expect(card.locator('h2')).to_have_text(job.title)
     expect(card.locator('.text-link')).to_be_visible()
+
+
+def test_premium_focus_reduced_motion_and_eligibility_contrast(browser_workspace):
+    page, origin, _, _ = browser_workspace
+    page.emulate_media(reduced_motion='reduce')
+    page.goto(origin)
+    card = page.locator('.job-card').first
+    assert card.evaluate('(e)=>getComputedStyle(e).transitionDuration') == '0s'
+    assert card.evaluate('(e)=>getComputedStyle(e).animationName') == 'none'
+    button = page.get_by_role('button', name='Search', exact=True)
+    button.focus()
+    assert button.evaluate('(e)=>getComputedStyle(e).outlineWidth') == '3px'
+    assert button.evaluate('(e)=>getComputedStyle(e).outlineStyle') == 'solid'
+    button.evaluate('(e)=>e.disabled=true')
+    assert button.evaluate('(e)=>getComputedStyle(e).cursor') == 'not-allowed'
+    # Actual computed badge colors, not screenshots or a color-only meaning.
+    badge = card.locator('.eligibility-badge')
+    expect(badge).to_have_text('Student eligible')
+    contrast = badge.evaluate('''e => {
+      const c = getComputedStyle(e);
+      const luminance = color => {
+        const rgb = color.match(/[\\d.]+/g).slice(0,3).map(v => Number(v)/255)
+          .map(v => v <= .04045 ? v/12.92 : ((v+.055)/1.055)**2.4);
+        return rgb[0]*.2126 + rgb[1]*.7152 + rgb[2]*.0722;
+      };
+      const a = luminance(c.color), b = luminance(c.backgroundColor);
+      return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+    }''')
+    assert contrast >= 4.5

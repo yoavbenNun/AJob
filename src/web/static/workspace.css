@@ -1,5 +1,14 @@
 /* Balanced workspace: presentation only; shared by list and detail pages. */
-.dashboard-shell .hero { margin: 1rem 0; padding: 1.7rem 2rem; gap: 1.5rem; }
+:root {
+  --space-1: .25rem; --space-2: .5rem; --space-3: .75rem; --space-4: 1rem; --space-6: 1.5rem;
+  --radius-control: 9px; --radius-card: 16px; --radius-panel: 20px;
+  --ui-border: #dce4ec; --ui-accent: #225f70; --ui-focus: #286d7c;
+  --ui-shadow: 0 2px 5px #17344d05, 0 8px 22px #17344d08;
+  --ui-shadow-raised: 0 4px 10px #17344d0a, 0 18px 38px #17344d12;
+  --ui-duration: 140ms;
+}
+body { background: linear-gradient(180deg, #eaf0f6, #f3f6fa 420px); }
+.dashboard-shell .hero { margin: 1rem 0; padding: 1.5rem 2rem; gap: 1.5rem; }
 .dashboard-shell .hero h1 { font-size: clamp(1.8rem, 3vw, 2.5rem); }
 .dashboard-shell .hero-copy { max-width: 60ch; font-size: .9rem; }
 .dashboard-shell .stats-grid { gap: .85rem; margin-bottom: 1.25rem; }
@@ -30,7 +39,7 @@
 .filter-chips > span { max-width: 100%; overflow-wrap: anywhere; padding: .3rem .55rem; border: 1px solid #dbe4ec; border-radius: 7px; background: #f1f5f9; color: #435771; font-size: .75rem; }
 .filter-reset { display: inline-flex; align-items: center; min-height: 28px; font-size: .78rem; white-space: nowrap; }
 .dashboard-shell .job-grid { align-items: stretch; gap: 1rem; }
-.dashboard-shell .job-card { padding: 1.15rem; border-radius: 16px; }
+.dashboard-shell .job-card { padding: 1.15rem; border-radius: var(--radius-card); }
 .dashboard-shell .job-card h2 { min-height: 2.5em; margin: .85rem 0 .6rem; font-size: 1.08rem; line-height: 1.35; overflow-wrap: anywhere; }
 .dashboard-shell .company-label p { font-size: .82rem; }
 .dashboard-shell .location { margin-bottom: .85rem; font-size: .8rem; }
@@ -69,10 +78,72 @@
 .detail-shell .match-score-card strong { color: #fff; }
 .detail-shell .reading-panel p, .detail-shell .requirements-list li { max-width: 75ch; }
 .dashboard-shell button:disabled { opacity: .6; cursor: wait; transform: none; }
+
+/* One surface and interaction language, without changing layout or content. */
+.dashboard-shell .hero, .detail-shell .detail-hero { border-radius: var(--radius-panel); box-shadow: var(--ui-shadow-raised); }
+.dashboard-shell .hero::after { opacity: .45; }
+.dashboard-shell .hero h1, .detail-shell .detail-hero h1 { text-shadow: none; }
+.dashboard-shell .results-panel { border: 1px solid var(--ui-border); border-radius: var(--radius-panel); background: #fff; box-shadow: var(--ui-shadow-raised); }
+.dashboard-shell .stat-card { border: 1px solid var(--ui-border); background: #fff; box-shadow: var(--ui-shadow); }
+.dashboard-shell .stat-card--accent { border-color: #205467; background: linear-gradient(130deg, #173f59, #15575c); }
+.dashboard-shell .stat-card:hover { transform: none; box-shadow: var(--ui-shadow); }
+.dashboard-shell .stat-card strong, .fit-score strong, .detail-shell .match-score-card strong { font-variant-numeric: tabular-nums; letter-spacing: -.035em; }
+.dashboard-shell .job-card { border-color: var(--ui-border); background: #fff; box-shadow: var(--ui-shadow); }
+.dashboard-shell .job-card h2 { font-weight: 650; letter-spacing: -.025em; }
+.dashboard-shell .company-label { align-items: center; gap: var(--space-2); }
+.dashboard-shell .company-label p { color: #435770; font-weight: 650; line-height: 1.4; }
+.dashboard-shell .company-mark, .detail-shell .detail-company-mark { border-color: var(--ui-border); background: #f8fafc; box-shadow: none; }
+.dashboard-shell .company-mark { border-radius: var(--radius-control); }
+.dashboard-shell .fit-summary { border-top-color: var(--ui-border); }
+.dashboard-shell .fit-meter { background: #e9eff4; border-radius: 999px; }
+.dashboard-shell .fit-meter span { border-radius: inherit; background: #426b86; }
+.eligibility-badge { border-radius: var(--radius-control); letter-spacing: .005em; }
+.fit-evidence { gap: var(--space-2); }
+.fit-evidence strong { font-size: .78rem; color: #4c6076; }
+.dashboard-shell .text-link { color: var(--ui-accent); }
+.dashboard-shell .job-card__actions { border-top: 1px solid #edf1f5; padding-top: var(--space-3); }
+.dashboard-shell .filters { border-color: var(--ui-border); background: #f7f9fc; box-shadow: none; }
+.filter-chips > span { border-color: #dfe7ee; background: #f4f7fa; border-radius: var(--radius-control); }
+.filter-reset { color: #496378; text-decoration-color: #b1bfcb; text-underline-offset: 4px; }
+.filter-reset:hover { color: #173f59; text-decoration-color: currentColor; }
+:is(.dashboard-shell, .detail-shell) :is(button, .button, input, select, textarea),
+.dashboard-shell .status-picker summary { border-radius: var(--radius-control); }
+:is(.dashboard-shell, .detail-shell) :is(input, select, textarea) { border-color: #cbd6e0; box-shadow: inset 0 1px 2px #17344d04; }
+:is(.dashboard-shell, .detail-shell) :is(input, select, textarea):hover { border-color: #96aabb; }
+:is(.dashboard-shell, .detail-shell) :is(input, select, textarea):focus { border-color: var(--ui-focus); box-shadow: 0 0 0 3px #286d7c15; }
+:is(.dashboard-shell, .detail-shell) :is(button, .button) { box-shadow: 0 1px 3px #17344d14; }
+.dashboard-shell .note-trigger, .dashboard-shell .dismiss-job { box-shadow: none; }
+:is(.dashboard-shell, .detail-shell) :is(button, .button, input, select, textarea, summary),
+.dashboard-shell .job-card { transition: border-color var(--ui-duration) ease, background-color var(--ui-duration) ease, box-shadow var(--ui-duration) ease, transform var(--ui-duration) ease; }
+:is(.dashboard-shell, .detail-shell) :is(button, .button):active:not(:disabled) { transform: translateY(1px); }
+:is(.dashboard-shell, .detail-shell) button:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+:is(.dashboard-shell, .detail-shell) button[aria-busy="true"] { cursor: progress; }
+:is(.dashboard-shell, .detail-shell) :where(a, button, input, select, textarea, summary):focus-visible { outline: 3px solid var(--ui-focus); outline-offset: 3px; }
+.detail-shell .detail-toolbar, .detail-shell .content-section { border-color: var(--ui-border); background: #fff; box-shadow: var(--ui-shadow); border-radius: var(--radius-card); }
+.detail-shell .content-section:hover { border-color: #c3d2df; box-shadow: var(--ui-shadow); transform: none; }
+.detail-shell .collapsible-section > summary { background: #fbfcfe; padding: var(--space-4) 1.2rem; }
+.detail-shell .collapsible-section > summary::after { box-shadow: none; border-radius: var(--radius-control); }
+.detail-shell .collapsible-section > summary:hover { background: #f3f7fa; }
+.detail-shell .section-summary small { font-size: .75rem; }
+.detail-shell .reading-panel p, .detail-shell .requirements-list li { font-size: .9rem; line-height: 1.7; }
+.detail-shell .workspace-nav { border-color: var(--ui-border); box-shadow: var(--ui-shadow); }
+.detail-shell .back-link { border-radius: var(--radius-control); box-shadow: var(--ui-shadow); }
+.detail-shell .match-result { border-color: var(--ui-border); background: #f6f9fb; box-shadow: none; }
+.detail-shell .match-score-card { box-shadow: none; border-radius: var(--radius-control); background: linear-gradient(130deg, #173f59, #15575c); }
+.detail-shell :is(.match-form, .application-form, .outreach-form) { border-color: var(--ui-border); border-radius: var(--radius-control); background: #f7f9fc; box-shadow: none; }
+.dashboard-shell :is(.note-editor, .note-preview, .sources-popover, .resume-popover, .settings-popover, .status-picker fieldset) { border-color: #cfdae4; box-shadow: var(--ui-shadow-raised); }
+@media (hover: hover) and (pointer: fine) {
+  .dashboard-shell .job-card:hover { transform: translateY(-2px); border-color: #adc5d4; box-shadow: var(--ui-shadow-raised); }
+}
 @media (max-width: 1280px) and (min-width: 601px) {
   .dashboard-shell .filters { grid-template-columns: 1fr; }
   .search-bar { max-width: 540px; }
   .filter-controls { grid-template-columns: repeat(4, minmax(0, 1fr)) auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+  .dashboard-shell .job-card:hover, :is(.dashboard-shell, .detail-shell) :is(button, .button):active { transform: none !important; }
 }
 @media (max-width: 900px) {
   .dashboard-shell .hero { padding: 1.3rem; }
