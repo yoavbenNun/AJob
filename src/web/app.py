@@ -108,6 +108,26 @@ def create_app(
     dismissals.initialize()
     dismissal_lock = threading.Lock()
     csrf_token = secrets.token_urlsafe(32)
+    # Presentation cache only: no scores or candidate data are persisted.
+    # Both screens use the same resume revision and job evidence as the key.
+    match_cache = {}
+    match_cache_lock = threading.Lock()
+
+    def current_match(profile, resume, job):
+        revision = resume.stat()
+        key = (str(resume), revision.st_mtime_ns, revision.st_size, job.title,
+               job.company, job.location, job.job_url, job.description, job.requirements)
+        with match_cache_lock:
+            cached = match_cache.get(key)
+        if cached is not None:
+            return cached
+        result = match_resume_to_job(profile, job)
+        with match_cache_lock:
+            if len(match_cache) >= 256:
+                match_cache.pop(next(iter(match_cache)))
+            match_cache[key] = result
+        return result
+
     app_started_at = datetime.now(timezone.utc)
     allowed_resume_root = Path(resume_directory).resolve() if resume_directory else None
     tailored_resume_root = allowed_resume_root / "tailored" if allowed_resume_root else None
@@ -189,7 +209,7 @@ def create_app(
                     if job.id is None:
                         continue
                     try:
-                        job_matches[job.id] = match_resume_to_job(active_profile, job)
+                        job_matches[job.id] = current_match(active_profile, active_resume, job)
                     except Exception:
                         # A malformed posting should not disable matching for every job.
                         resume_match_failed_ids.add(job.id)
@@ -369,8 +389,16 @@ def create_app(
     @app.get("/jobs/{job_id}", response_class=HTMLResponse)
     def job_detail(request: Request, job_id: int, updated: int | None = None):
         job = _get_job_or_404(repository, job_id)
+        match_context = {}
+        resume = get_active_resume(allowed_resume_root)
+        if resume is not None:
+            try:
+                match_context['match_result'] = current_match(parse_resume(resume), resume, job)
+            except Exception:
+                match_context['match_error'] = 'The active resume could not be analyzed. Refresh or choose a valid resume.'
         return _detail_response(request, job, updated=updated, csrf_token=csrf_token,
                                 resume_matching_enabled=allowed_resume_root is not None,
+                                **match_context,
                                 **_application_context(application_repository, job,
                                                        tailored_resume_root),
                                 **_outreach_context(outreach_repository, job))

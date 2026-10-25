@@ -53,3 +53,25 @@ document.addEventListener("click", (event) => {
     if (menu !== clickedMenu && !(menu === sourcesMenu && clickedSourcesPopover)) menu.open = false;
   }
 });
+
+// Native details keeps every field usable without JavaScript. Collapsing only
+// changes presentation; hidden controls remain enabled and retain their values.
+const advancedFilters = document.querySelector('.advanced-filters');
+if (advancedFilters) {
+  const mobileFilters = window.matchMedia('(max-width: 900px)');
+  const setFilterLayout = () => { advancedFilters.open = !mobileFilters.matches; };
+  setFilterLayout();
+  mobileFilters.addEventListener('change', setFilterLayout);
+}
+document.querySelectorAll('.status-picker').forEach(picker => {
+  document.addEventListener('click', event => {
+    if (!picker.contains(event.target)) picker.open = false;
+  });
+  picker.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && picker.open) {
+      picker.open = false;
+      picker.querySelector('summary').focus();
+      event.preventDefault();
+    }
+  });
+});

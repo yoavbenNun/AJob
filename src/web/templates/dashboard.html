@@ -1,3 +1,4 @@
+{% from '_eligibility.html' import eligibility %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -7,6 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}?v=20261016-4">
   <link rel="stylesheet" href="{{ url_for('static', path='personal-notes.css') }}?v=1">
   <link rel="stylesheet" href="{{ url_for('static', path='job-actions.css') }}?v=1">
+  <link rel="stylesheet" href="{{ url_for('static', path='workspace.css') }}?v=20261025-1">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -66,7 +68,7 @@
     </section>
     <section class="stats-grid" aria-label="Job search overview">
       <div class="stat-card"><span>Relevant roles</span><strong>{{ dashboard_stats.relevant }}</strong><small>Israel and remote</small></div>
-      <div class="stat-card stat-card--accent"><span>Needs review</span><strong>{{ dashboard_stats.new }}</strong><small>Your current priority</small></div>
+      <div class="stat-card stat-card--accent"><span>Needs review</span><strong>{{ dashboard_stats.new }}</strong><a class="stat-action" href="/?status=new#opportunities">Review new <span aria-hidden="true">→</span></a></div>
       <div class="stat-card"><span>Reviewed</span><strong>{{ dashboard_stats.reviewed }}</strong><small>Decisions in progress</small></div>
       <div class="stat-card"><span>Applied</span><strong>{{ dashboard_stats.applied }}</strong><small>Applications tracked</small></div>
     </section>
@@ -76,15 +78,24 @@
     {% if email_updated %}<p class="notice" role="status">Daily email recipient updated. Future scan summaries will use the new address.</p>{% endif %}
     {% if email_error == 'invalid' %}<p class="error-panel" role="alert">Enter a valid recipient email address.</p>{% elif email_error %}<p class="error-panel" role="alert">The email recipient could not be updated. Your existing address is still active.</p>{% endif %}
     <section class="results-panel" id="opportunities" aria-labelledby="results-title">
-      <div class="results-heading"><div><p class="eyebrow">Opportunity inbox</p><h2 id="results-title">Discovered roles</h2></div><div class="results-meta"><span class="count">{{ jobs|length }} shown</span>{% if query or selected_status != 'all' or selected_company or relevance != 'relevant' or location_scope != 'israel' %}<a class="reset-link" href="/">Reset filters</a>{% endif %}</div></div>
+      <div class="results-heading"><div><p class="eyebrow">Opportunity inbox</p><h2 id="results-title">Discovered roles</h2></div><div class="results-meta"><span class="count">{{ jobs|length }} shown</span></div></div>
       <form class="filters" method="get" aria-label="Filter jobs">
-        <label class="search-field">Search roles<input name="query" value="{{ query }}" placeholder="Title, company, or location"></label>
+        <div class="search-bar"><label class="search-field">Search roles<input name="query" value="{{ query }}" placeholder="Title, company, or location"></label><button type="submit" class="search-submit">Search</button></div>
+        <details class="advanced-filters" open><summary>Filters <span class="filter-toggle-hint">Status, company &amp; more</span></summary><div class="filter-controls">
         <div class="status-filter"><span id="status-filter-label">Status</span><details class="status-picker"><summary aria-labelledby="status-filter-label status-selection"><span id="status-selection">{% if selected_statuses %}{% for item in selected_statuses %}{{ item|status_label }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}All active statuses{% endif %}</span></summary><fieldset><legend class="sr-only">Select job statuses</legend>{% for item in statuses %}<label><input type="checkbox" name="status" value="{{ item }}" {% if item in selected_statuses %}checked{% endif %}>{{ item|status_label }}</label>{% endfor %}<p>Choose any, then Apply filters.</p></fieldset></details></div>
         <label>Company<select name="company"><option value="">All companies</option>{% for item in companies %}<option value="{{ item }}" {% if item == selected_company %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
         <label>Jobs<select name="relevance"><option value="relevant" {% if relevance == 'relevant' %}selected{% endif %}>Student + possible matches, 30%+</option><option value="possible" {% if relevance == 'possible' %}selected{% endif %}>Possible Matches — review eligibility</option><option value="all" {% if relevance == 'all' %}selected{% endif %}>All discoveries</option></select></label>
         <label>Location<select name="location"><option value="israel" {% if location_scope == 'israel' %}selected{% endif %}>Israel + unrestricted remote</option><option value="all" {% if location_scope == 'all' %}selected{% endif %}>All locations</option></select></label>
         <button type="submit">Apply filters</button>
+        </div></details>
       </form>
+      <div class="filter-state" aria-label="Current filters"><div class="filter-chips">
+        {% if query %}<span>Search: {{ query }}</span>{% endif %}
+        {% for item in selected_statuses %}<span>{{ item|status_label }}</span>{% endfor %}
+        {% if selected_company %}<span>{{ selected_company }}</span>{% endif %}
+        <span>{% if relevance == 'all' %}All discoveries{% elif relevance == 'possible' %}Possible matches{% else %}Student + possible · 30%+{% endif %}</span>
+        <span>{% if location_scope == 'all' %}All locations{% else %}Israel + remote{% endif %}</span>
+      </div><a class="filter-reset" href="/">Reset filters</a></div>
       {% if jobs %}
       <div class="job-grid" aria-label="Job results">
         {% for job in jobs %}
@@ -96,18 +107,22 @@
           {% if match %}
           <div class="fit-summary{% if not match.eligible %} fit-summary--ineligible{% endif %}">
             <div class="fit-score"><strong>{{ match.score }}</strong><span>/100 match</span></div>
-            <p class="eligibility-warning"><strong>{{ match.eligibility_label }}{% if match.eligibility_status == 'potentially_eligible' %} · Possible Matches{% endif %}</strong><br>{{ match.eligibility_reasons|join(' ') }}{% if not match.eligible %}<br>Technical fit: {{ match.technical_score }}/100; prerequisites take priority.{% endif %}</p>
+            {{ eligibility(match, compact=true) }}
             <div class="fit-meter" role="progressbar" aria-label="Resume match" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ match.score }}"><span style="width: {{ match.score }}%"></span></div>
-            {% if not match.eligible %}<p class="eligibility-warning"><strong>Not eligible:</strong> {{ match.disqualifiers|join(' ') }}</p>{% elif match.tailoring_suggestions %}<ul class="fit-suggestions">{% for suggestion in match.tailoring_suggestions[:2] %}<li>{{ suggestion }}</li>{% endfor %}</ul>{% endif %}
+            {% if not match.eligible %}<p class="technical-fit">Technical fit: {{ match.technical_score }}/100; prerequisites take priority.</p>{% endif %}
+            {% if match.matched_skills or match.missing_skills %}<ul class="fit-evidence">
+              {% if match.matched_skills %}<li><strong>In your resume</strong><span>{{ match.matched_skills[:4]|join(', ') }}{% if match.matched_skills|length > 4 %} +{{ match.matched_skills|length - 4 }}{% endif %}</span></li>{% endif %}
+              {% if match.missing_skills %}<li><strong>Not in your resume</strong><span>{{ match.missing_skills[:4]|join(', ') }}{% if match.missing_skills|length > 4 %} +{{ match.missing_skills|length - 4 }}{% endif %}</span></li>{% endif %}
+            </ul>{% endif %}
           </div>
-          {% elif job.id in resume_match_failed_ids %}<p class="match-prompt error">Match score unavailable for this job.</p>{% elif resume_match_error %}<p class="match-prompt error">The active resume could not be analyzed. Upload a valid PDF or DOCX.</p>{% else %}<p class="match-prompt">Update your resume to see a match score.</p>{% endif %}
+          {% elif job.id in resume_match_failed_ids %}<p class="match-prompt eligibility--unknown">Match score unavailable for this job. Review its requirements manually.</p>{% elif resume_match_error %}<p class="match-prompt eligibility--unknown">The active resume could not be analyzed. Upload a valid PDF or DOCX.</p>{% else %}<p class="match-prompt eligibility--unknown">Update your resume to see a match score.</p>{% endif %}
           <div class="job-card__actions">
-            <a class="text-link" href="/jobs/{{ job.id }}">Review opportunity <span aria-hidden="true">→</span></a>
+            <a class="text-link" href="/jobs/{{ job.id }}" aria-label="Review opportunity: {{ job.title }}">Review <span aria-hidden="true">→</span></a>
             <button class="dismiss-job" title="Dismiss hides this job; Restore returns its previous status on this computer, otherwise Reviewed." type="button" data-action="{{ 'restore' if job.status == 'ignored' else 'dismiss' }}" data-token="{{ csrf_token }}" aria-label="{{ 'Restore' if job.status == 'ignored' else 'Dismiss' }} {{ job.title }}">{{ 'Restore' if job.status == 'ignored' else 'Dismiss' }}</button>
             {% set note = personal_notes.get(job.id, '') %}
             <div class="personal-note{% if note %} has-note{% endif %}">
               <button type="button" class="note-trigger" aria-label="Personal notes for {{ job.title }}" aria-expanded="false" aria-controls="note-editor-{{ job.id }}" aria-describedby="note-preview-{{ job.id }}">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v9Z"/><path d="M14 21v-7h7M7 8h10M7 11h6"/></svg>
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v9Z"/><path d="M14 21v-7h7M7 8h10M7 11h6"/></svg><span>Notes</span>
               </button>
               <span class="note-preview" role="tooltip" id="note-preview-{{ job.id }}">{{ note or 'Add a personal note' }}</span>
               <div class="note-editor" id="note-editor-{{ job.id }}" popover="manual" role="dialog" aria-labelledby="note-label-{{ job.id }}">

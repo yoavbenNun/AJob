@@ -1,3 +1,4 @@
+{% from '_eligibility.html' import eligibility %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -5,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ job.title }} · AJob</title>
   <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}?v=20261015-7">
+  <link rel="stylesheet" href="{{ url_for('static', path='workspace.css') }}?v=20261025-1">
 </head>
 <body>
   <a class="skip-link" href="#job-content">Skip to job details</a>
@@ -25,11 +27,12 @@
       {% if match_error %}<p class="error-panel" role="alert">{{ match_error }}</p>{% endif %}
       {% if match_result %}<div class="match-result">
         <div class="match-score-card"><strong>{{ match_result.score }}</strong><span>/100 match</span>{% if not match_result.eligible %}<em>Eligibility needs review</em>{% endif %}</div>
-        <p class="eligibility-warning"><strong>{{ match_result.eligibility_label }}</strong><br>{{ match_result.eligibility_reasons|join(' ') }}<br>Technical fit: {{ match_result.technical_score }}/100. Eligibility is assessed separately from skill overlap.</p>
+        {{ eligibility(match_result) }}
+        <p class="technical-fit">Technical fit: {{ match_result.technical_score }}/100. Eligibility is assessed separately from skill overlap.</p>
         <div class="match-facts"><div><h3>Strengths</h3><div class="skill-chips">{% for item in match_result.matched_skills %}<span>{{ item }}</span>{% else %}<span class="chip-muted">No direct matches yet</span>{% endfor %}</div></div><div><h3>Gaps</h3><div class="skill-chips skill-chips--gap">{% for item in match_result.missing_skills %}<span>{{ item }}</span>{% else %}<span class="chip-muted">No major gaps found</span>{% endfor %}</div></div></div>
         {% if match_result.tailoring_suggestions %}<div class="match-actions"><h3>Ways to improve</h3><ol>{% for item in match_result.tailoring_suggestions %}<li>{{ item }}</li>{% endfor %}</ol></div>{% endif %}
       </div>{% endif %}
-      {% if resume_matching_enabled %}<form class="match-form match-refresh" method="post" action="/jobs/{{ job.id }}/match"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><details class="advanced-option"><summary>Use a different resume</summary><label>File inside your configured resume folder<input name="resume_path" placeholder="Leave blank to keep using the active resume"></label></details><button type="submit">Refresh match</button></form>{% else %}<p class="empty-copy">Configure RESUME_DIRECTORY to calculate a match.</p>{% endif %}
+      {% if resume_matching_enabled %}<p class="match-refresh-hint">{% if match_result %}Calculated from your current resume and this posting. Refresh to recalculate or choose a different resume.{% else %}Choose an active resume to calculate a match, then refresh when its content changes.{% endif %}</p><form class="match-form match-refresh" method="post" action="/jobs/{{ job.id }}/match"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><details class="advanced-option"><summary>Use a different resume</summary><label>File inside your configured resume folder<input name="resume_path" placeholder="Leave blank to keep using the active resume"></label></details><button type="submit">Refresh match</button></form>{% else %}<p class="empty-copy">Configure RESUME_DIRECTORY to calculate a match.</p>{% endif %}
     </div></details>
     {% if tailoring_proposal %}
     <details class="content-section collapsible-section" open>

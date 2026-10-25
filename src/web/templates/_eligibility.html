@@ -1,0 +1,11 @@
+{% macro eligibility(match, compact=false) -%}
+<div class="eligibility eligibility--{{ match.eligibility_status }}">
+  <span class="eligibility-badge">{{ match.eligibility_label }}</span>
+  {% set explanation = match.eligibility_reasons|join(' ') %}
+  {% set hours = 'Student eligibility does not imply part-time work; confirm working hours and compatibility with studies.' %}
+  {% if compact and match.eligibility_status == 'student_eligible' and hours in explanation %}
+  <p class="eligibility-copy">{{ explanation|replace(hours, '')|trim }}</p>
+  <details class="eligibility-more"><summary>Working hours</summary><p>{{ hours }}</p></details>
+  {% else %}<p class="eligibility-copy">{{ explanation }}</p>{% endif %}
+</div>
+{%- endmacro %}

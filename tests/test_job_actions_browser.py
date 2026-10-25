@@ -96,6 +96,7 @@ def test_multiselect_dismiss_restore_and_mobile(tmp_path, monkeypatch):
                 expect(card).to_be_hidden()
                 page.goto(base)
                 expect(page.locator('.job-card')).to_have_count(3)
+                page.locator('.advanced-filters > summary').click()
                 page.locator('.status-picker summary').click()
                 page.locator('.status-picker').get_by_label('Reviewed', exact=True).check()
                 page.get_by_role('button', name='Apply filters', exact=True).click()

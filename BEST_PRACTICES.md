@@ -8,6 +8,13 @@ reusable lesson appears.
   employer's current listing links after recruiting migrations, and distinguish
   observed rejection decisions from filtering stages that were not evaluated.
 
+- List and detail match views must use the same active resume revision and job
+  evidence. Key presentation caches by both, never by job ID alone; test score
+  reuse and invalidation when either source changes.
+
+- Guard programmatic pytest runners with `if __name__ == '__main__'` on Windows;
+  spawned test workers must not recursively start another complete pytest run.
+
 ## Environment and verification
 
 - Do not assume `python` is globally available. Use the project `.venv` after

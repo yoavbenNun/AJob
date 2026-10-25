@@ -283,7 +283,7 @@ def test_dashboard_hides_jobs_ineligible_for_active_resume_by_default(tmp_path) 
     assert "Software Engineering Student" in all_jobs_page.text
     assert "Software Engineering PhD Intern" in all_jobs_page.text
     assert "Junior Software Developer Intern" in all_jobs_page.text
-    assert "Not eligible:" in all_jobs_page.text
+    assert 'eligibility--ineligible' in all_jobs_page.text
 
 
 def test_student_eligibility_dashboard_possible_filter_and_status_preservation(tmp_path):
@@ -521,7 +521,7 @@ def test_dashboard_uploads_resume_and_preserves_local_path_privacy(tmp_path) -> 
     assert "Resume updated" in response.text
     assert "Dana Resume" in response.text
     assert "/100 match" in response.text
-    assert "fit-suggestions" in response.text
+    assert "fit-evidence" in response.text
     assert 'role="progressbar"' in response.text
     assert str(tmp_path) not in response.text
     assert (tmp_path / ".active_resume").is_file()
