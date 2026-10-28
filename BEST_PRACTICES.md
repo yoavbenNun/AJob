@@ -17,6 +17,11 @@ reusable lesson appears.
 
 ## Environment and verification
 
+- In Windows PowerShell, pass `[NullString]::Value` rather than `$null` as the
+  backup filename to `File.Replace`; otherwise atomic runtime publication can
+  fail with an illegal-path error. Publish only after readiness, retain the old
+  runtime, and never update the shared Python environment during activation.
+
 - Do not assume `python` is globally available. Use the project `.venv` after
   setup, and locate the workspace runtime when bootstrapping it.
 - Installing the Playwright Python package does not install browser binaries. Run
