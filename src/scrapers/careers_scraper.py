@@ -21,6 +21,7 @@ from src.scrapers.official_sources import fetch_jobs as fetch_official_jobs, sup
 from src.scrapers.paused_sources import scan_public_feed, supported as supports_public_feed
 from src.scrapers.fives import scan_jobs as scan_fives_jobs, supported as supports_fives
 from src.scrapers.workday_details import workday_urls, legacy_workday_url, fetch_workday_detail, workday_location
+from src.scrapers.failure_diagnostics import source_failure
 from src.scrapers.workday_search import israel_facet, explicitly_israel, contradicts_israel_filter, search_payload
 
 WORKDAY_SEARCH_TERMS = (
@@ -48,6 +49,7 @@ class CompanyScanResult:
     error: str | None = None
     collection_metrics: dict = field(default_factory=dict)
     closure_snapshot: dict | None = None
+    failure_details: dict = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -128,7 +130,7 @@ class CareersScraper:
                     job.requirements = extract_requirements(job.description)
                 return CompanyScanResult(company=company, jobs=jobs)
             except Exception as error:
-                return CompanyScanResult(company=company, error=f"FIL Robotics search failed: {type(error).__name__}")
+                return CompanyScanResult(company=company, error=f"FIL Robotics search failed: {type(error).__name__}", failure_details=source_failure(error))
         if supports_official_feed(company):
             try:
                 jobs, metrics = fetch_official_jobs(company, self.timeout_ms)
@@ -138,7 +140,7 @@ class CareersScraper:
                                          closure_snapshot=metrics.pop('_closure_snapshot', None),
                                          collection_metrics=metrics)
             except Exception as error:
-                return CompanyScanResult(company=company, error=f"Official careers feed failed: {type(error).__name__}")
+                return CompanyScanResult(company=company, error=f"Official careers feed failed: {type(error).__name__}", failure_details=source_failure(error))
         if supports_public_feed(company):
             try:
                 jobs = scan_public_feed(company, max(1, self.timeout_ms // 1000), self.max_pages)
@@ -146,7 +148,7 @@ class CareersScraper:
                     job.requirements = extract_requirements(job.description)
                 return CompanyScanResult(company=company, jobs=jobs)
             except Exception as error:
-                return CompanyScanResult(company=company, error=f"Public careers feed failed: {error}")
+                return CompanyScanResult(company=company, error=f"Public careers feed failed: {type(error).__name__}", failure_details=source_failure(error))
         if is_greenhouse_board(company.careers_url):
             try:
                 metrics = {}
@@ -157,7 +159,7 @@ class CareersScraper:
                                          closure_snapshot=metrics.pop('_closure_snapshot', None),
                                          collection_metrics=metrics)
             except Exception as error:
-                return CompanyScanResult(company=company, error=f"Greenhouse API failed: {error}")
+                return CompanyScanResult(company=company, error=f"Greenhouse API failed: {type(error).__name__}", failure_details=source_failure(error))
         if (urlsplit(company.careers_url).hostname or "").endswith("myworkdayjobs.com"):
             return self._scan_workday(company)
         page = self.browser.new_page()
@@ -179,13 +181,13 @@ class CareersScraper:
                 company=company,
                 jobs=list(jobs_by_url.values()),
             )
-        except PlaywrightTimeoutError:
+        except PlaywrightTimeoutError as error:
             return CompanyScanResult(
                 company=company,
-                error=f"Timed out after {self.timeout_ms} ms",
+                error=f"Timed out after {self.timeout_ms} ms", failure_details=source_failure(error),
             )
         except Exception as error:  # A single broken site must not stop the scan.
-            return CompanyScanResult(company=company, error=str(error))
+            return CompanyScanResult(company=company, error=type(error).__name__, failure_details=source_failure(error))
         finally:
             page.close()
 
@@ -194,11 +196,12 @@ class CareersScraper:
         try:
             endpoint = _workday_endpoint(company.careers_url)
         except Exception as error:
-            return CompanyScanResult(company=company, error=f"Workday API failed: {error}")
+            return CompanyScanResult(company=company, error=f"Workday API failed: {type(error).__name__}", failure_details=source_failure(error, 'configuration'))
 
         jobs_by_url: dict[str, JobPosting] = {}
         successful_requests = 0
         request_errors: list[str] = []
+        last_failure = {}
         metrics = dict(focused_discovered=0, global_discovered=0, unique_israel_jobs=0,
                        duplicates_avoided=0, page_limit_reached=False,
                        focused_page_limit_reached=False, global_page_limit_reached=False,
@@ -226,7 +229,8 @@ class CareersScraper:
             metrics['metadata_error'] = type(error).__name__
             if isinstance(error, HTTPError) and error.code in {403, 429}:
                 metrics['coverage_limited'] = True
-                return CompanyScanResult(company, error='Workday access denied', collection_metrics=metrics)
+                return CompanyScanResult(company, error='Workday access denied', collection_metrics=metrics,
+                                         failure_details=source_failure(error, 'metadata'))
 
         blocked = False
         scope_urls = {'focused': set(), 'global': set()}
@@ -275,6 +279,7 @@ class CareersScraper:
                     except Exception as error:
                         query_completed = False
                         request_errors.append(type(error).__name__)
+                        last_failure = source_failure(error, 'search')
                         blocked = isinstance(error, HTTPError) and error.code in {403, 429}
                         break
                 if scope == 'global' and query_completed:
@@ -297,7 +302,8 @@ class CareersScraper:
 
         if successful_requests == 0:
             detail = "; ".join(request_errors[:2]) or "no query completed"
-            return CompanyScanResult(company=company, error=f"Workday API failed: {detail}", collection_metrics=metrics)
+            return CompanyScanResult(company=company, error=f"Workday API failed: {detail}", collection_metrics=metrics,
+                                     failure_details=last_failure)
         return CompanyScanResult(company=company, jobs=list(jobs_by_url.values()), collection_metrics=metrics)
 
 

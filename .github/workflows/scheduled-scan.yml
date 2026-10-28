@@ -78,4 +78,4 @@ jobs:
       - name: Publish business status independently of workflow result
         if: ${{ always() }}
         run: |
-          docker run --rm -e DATABASE_URL ai-job-search-agent python -m src.main scan-report >> "$GITHUB_STEP_SUMMARY"
+          docker run --rm -e DATABASE_URL ai-job-search-agent python -m src.main scan-report --check >> "$GITHUB_STEP_SUMMARY"

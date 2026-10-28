@@ -1,5 +1,43 @@
 # Round 2: durable windows, bounded wake-ups and separate delivery retries
 
+## Recovery outcome reporting (2026-10-28)
+
+Window reports separate `FULL` (scan full and mail sent),
+`PARTIAL_RECOVERABLE` (persisted retryable work), and `FINAL_FAILURE` (deadline,
+attempt exhaustion, expired ownership or uncertain SMTP). Healthy in-progress
+and future work remain `RUNNING`/`SCHEDULED`; absent historical data is `UNKNOWN`.
+Retries being planned does not prove an active independent final-failure monitor.
+
+**Exit policy remains conservative:** retryable partials still return 1, with an
+explicit GitHub warning. The dispatcher retries work, but does not independently
+alert on terminal failure; it can stop dispatching after attempts are exhausted
+and mail is sent. GitHub fallback is active, but its next invocation is not a
+guaranteed independent terminal check. Disabling either/both wake-up sources
+cannot be solved by turning partial scans green. No such relaxation is deployed.
+
+`scan-report --check` is SELECT-only and nonzero for recoverable, terminal or
+unknown outcomes, including persisted unresolved windows outside the usual date
+range and legacy failed/uncertain mail. The existing workflow's always-run status
+step uses it. This is useful when a scanner exits/crashes early, **not** a separate
+monitor that runs when all triggers stop. A future independently operated check
+must be approved, deployed and verified before softening partial exit codes.
+
+Source metrics now include one bounded `failure_details` object: stage,
+exception type, HTTP status where available, timeout/transient flags, planned
+recovery and unverified-monitor status. No exception text, URLs or response bodies
+are logged. Existing status/error keys remain compatible.
+
+Closure review still uses only successful source snapshots, defers on a partial
+scan, and cannot promote a scan result. Recovery snapshots cover only the sources
+actually retried; missing earlier evidence stays UNKNOWN. Report Only remains
+the default; no migration 003, flag, job status or user data is changed here.
+
+Production acceptance: confirm source diagnostics and outcomes in the next
+scheduled runs; a recovered full window must keep its original sent mail without
+replay. Warning runs can still trigger GitHub failure emails under the safe exit
+policy. If wake-ups stop altogether, persisted failures remain detectable by the
+read-only check, but no unattended notification is guaranteed.
+
 All changes in this round are local. No production scan, mail, migration, cron,
 secret, permission, push or deployment was performed.
 

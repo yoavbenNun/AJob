@@ -6,6 +6,7 @@ import signal
 from src.notifications.durable_scan import deliver_batch
 from src.scrapers.budgeted_scan import DurableSummary, scan_with_budgets
 from src.storage.window_store import LeaseLost, WindowStore, utcnow
+from src.scheduling.outcomes import report_exit_code
 
 
 def _summary(store, slot):
@@ -62,6 +63,7 @@ def scheduled_tick(companies, repository, settings, *, recommendations=None,
                 store.finish_window(run_id, result, [c.name for c in companies if c.enabled])
             except LeaseLost:
                 scan_error = True
+                print(json.dumps(dict(event='scan_ownership_lost', slot=slot, outcome='FINAL_FAILURE')))
             print(json.dumps(dict(event='scan_result', slot=slot, status=result.status,
                                   jobs_saved=result.jobs_saved, failures=result.failures)))
             scan_error = scan_error or result.status != 'full'
@@ -90,16 +92,20 @@ def scheduled_tick(companies, repository, settings, *, recommendations=None,
                 deliver_batch(store, slot, _summary(store, slot), mail_settings, **options)
             except (RuntimeError, OSError, ValueError, EOFError) as error:
                 store.finish_send(slot, 'failed', type(error).__name__)
-        rows = store.report(days=1)
+        rows = store.report(days=1, include_unresolved=True)
         print(json.dumps(dict(event='window_report', windows=rows)), flush=True)
-        # Technical success is never substituted for business success. Future
-        # slots and healthy in-progress leases are not failures of this wake-up.
-        unresolved = any(r['started'] or r['scan'] in {'partial','failed','full'} for r in rows)
+        recoverable = sum(r['outcome'] == 'PARTIAL_RECOVERABLE' for r in rows)
+        terminal = sum(r['outcome'] == 'FINAL_FAILURE' for r in rows)
+        if recoverable:
+            print('::warning::PARTIAL_RECOVERABLE: persisted retryable work; '
+                  'exit remains nonzero because no independent terminal-failure monitor is verified.')
+        if terminal:
+            print('::error::FINAL_FAILURE: inspect window_report for unresolved scan or delivery failures.')
+        # Legacy mail without a window still requires attention, including after
+        # midnight. Neither sent mail nor recovery planning clears a scan failure.
         unresolved_mail = store.execute("SELECT slot_key FROM notification_batches WHERE state IN ('failed','uncertain') LIMIT 1").fetchone() is not None
-        failures = unresolved_mail or any(r['scan'] in {'partial','failed'} or
-                       (r['scan'] == 'full' and r['notification'] in {'pending','failed','uncertain'})
-                       for r in rows)
-        return 1 if scan_error or unresolved_mail or (unresolved and failures) else 0
+        return 1 if scan_error or unresolved_mail or report_exit_code(rows) else 0
+
     finally:
         signal.signal(signal.SIGTERM, previous_handler)
         store.close()
