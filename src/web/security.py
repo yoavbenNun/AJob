@@ -26,7 +26,9 @@ class LocalSecurityMiddleware(BaseHTTPMiddleware):
             ),
             "X-Frame-Options": "DENY",
             "X-Content-Type-Options": "nosniff",
-            "Referrer-Policy": "no-referrer",
+            # Native forms under no-referrer send Origin: null. Keep local
+            # provenance without forwarding Referer to external job sites.
+            "Referrer-Policy": "same-origin",
             "Cache-Control": "no-store",
         })
         return response

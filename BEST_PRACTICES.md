@@ -381,3 +381,8 @@ reusable lesson appears.
 - Do not turn retryable partial scans green without an independently verified
   terminal-failure monitor. Retain unresolved historical windows in read-only
   health checks; dispatch acceptance and sent mail do not establish full recovery.
+
+- Referrer policy affects native form Origin headers: no-referrer can produce
+  Origin: null even for same-origin POSTs. Use same-origin to preserve local
+  provenance and external privacy; keep rejecting null/foreign origins and test
+  real browser forms, not only fetch/TestClient requests.
