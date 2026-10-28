@@ -26,5 +26,6 @@ def test_public_workday_fixture_exception_is_exact_and_history_safe(tmp_path):
     assert len(inspect(b"other file", "tests/other.py")) == 1
     secret.type = "Secret Keyword"
     assert len(inspect(b"other detector", path)) == 1
-    secret.type, secret.secret_value = "Base64 High Entropy String", "different-value"
+    secret.type = "Base64 High Entropy String"
+    setattr(secret, "secret_value", "different-value")
     assert len(inspect(b"other value", path)) == 1

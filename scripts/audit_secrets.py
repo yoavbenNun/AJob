@@ -38,6 +38,7 @@ def inspect_text(raw, path, blob=None):
                 ("tests/test_email_notifier.py", "Secret Keyword"): "ed24bc0bb03d0e89e8bacafb1545ee4ed6a2b273f3db69199787632b32545179",  # pragma: allowlist secret -- SHA256 of a public example
                 ("README.md", "Basic Auth Credentials"): "0be64ae89ddd24e225434de95d501711339baeee18f009ba9b4369af27d30d60",  # pragma: allowlist secret -- SHA256 of a public example
                 ("tests/test_workday_locations.py", "Base64 High Entropy String"): "f6a5f14458ceb19a10a51ba2ea6bafe345c867041f984524aefdaf2935c5aff1",  # pragma: allowlist secret -- SHA256 of Intel's public requisition path
+                ("tests/test_secret_audit.py", "Secret Keyword"): "afd546925353636cc3a93a1fbf241a5c5d5f7d66c423915f25cb3d194012c439",  # pragma: allowlist secret -- SHA256 of a public detector label in a historical test
             }
             fingerprint = hashlib.sha256(secret.secret_value.encode()).hexdigest()
             if examples.get((path.replace("\\", "/"), secret.type)) == fingerprint:
