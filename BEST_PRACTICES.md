@@ -193,7 +193,9 @@ reusable lesson appears.
 - The default "relevant" dashboard must combine role classification, active
   resume eligibility, and a meaningful resume-match score; keep an explicit
   all-discoveries view for lower-fit and education-ineligible jobs. When resume
-  matches are available, sort the displayed jobs by score descending. Isolate
+  matches are available, retain their scores while sorting by application status
+  (Applied, New, Reviewed, others), then insertion ID descending. `discovered_at`
+  is refreshed by upserts and must not determine discovery order. Isolate
   match failures per posting so one malformed job cannot disable the filter.
 - Keep commute eligibility separate from professional fit. Never recommend a job
   when its location or route cannot be verified; mark it for manual review.

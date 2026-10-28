@@ -307,7 +307,7 @@ def test_student_eligibility_dashboard_possible_filter_and_status_preservation(t
     all_jobs = client.get('/', params={'relevance': 'all'})
     assert default.status_code == possible.status_code == all_jobs.status_code == 200
     assert 'Graduate Bootcamp' not in default.text
-    assert default.text.index('Python Software Intern') < default.text.index('Junior Python Developer')
+    assert default.text.index('Junior Python Developer') < default.text.index('Python Software Intern')
     assert 'Junior Python Developer' in possible.text
     assert 'Python Software Intern' not in possible.text
     assert 'Graduate Bootcamp' not in possible.text
