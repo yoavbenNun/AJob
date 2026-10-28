@@ -54,10 +54,12 @@ def test_same_origin_forms_work_and_csrf_is_still_required(dashboard):
     client, updates = dashboard
     token = re.search(r'name="csrf_token" value="([^"]+)"', client.get("/").text)[1]
     headers = {"origin": "http://127.0.0.1", "referer": "http://127.0.0.1/", "sec-fetch-site": "same-origin"}
-    for csrf, expected in [("invalid", 403), (token, 303)]:
-        response = client.post("/settings/notification-email", headers=headers, data={
-            "csrf_token": csrf, "notification_email": "candidate@example.test",
-        }, follow_redirects=False)
+    for csrf, expected in [(None, 403), ("invalid", 403), (token, 303)]:
+        data = {"notification_email": "candidate@example.test"}
+        if csrf is not None:
+            data["csrf_token"] = csrf
+        response = client.post("/settings/notification-email", headers=headers, data=data,
+                               follow_redirects=False)
         assert response.status_code == expected
     assert updates == ["candidate@example.test"]
 
@@ -69,6 +71,25 @@ def test_browser_privacy_and_framing_headers(dashboard, path, status):
     assert response.headers["x-frame-options"] == "DENY"
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
     assert "form-action 'self'" in response.headers["content-security-policy"]
-    assert response.headers["referrer-policy"] == "no-referrer"
+    assert response.headers["referrer-policy"] == "same-origin"
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-content-type-options"] == "nosniff"
+
+
+@pytest.mark.parametrize("origin", ["http://localhost:8001", "http://127.0.0.1:8001", "http://127.0.0.1:43129"])
+def test_local_origin_includes_exact_hostname_and_port(dashboard, origin):
+    app_client, updates = dashboard
+    client = TestClient(app_client.app, base_url=origin)
+    token = re.search(r'name="csrf_token" value="([^"]+)"', client.get("/").text)[1]
+    headers = {"origin": origin, "referer": origin + "/", "sec-fetch-site": "same-origin"}
+    response = client.post("/settings/notification-email", headers=headers, data={
+        "csrf_token": token, "notification_email": "candidate@example.test",
+    }, follow_redirects=False)
+    assert response.status_code == 303 and updates == ["candidate@example.test"]
+    # Both loopback hosts are trusted, but they are distinct browser origins.
+    foreign = "http://localhost:8001" if "127.0.0.1" in origin else "http://127.0.0.1:8001"
+    headers["origin"] = foreign
+    response = client.post("/settings/notification-email", headers=headers, data={
+        "csrf_token": token, "notification_email": "candidate@example.test",
+    }, follow_redirects=False)
+    assert response.status_code == 403 and len(updates) == 1

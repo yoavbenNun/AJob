@@ -234,16 +234,9 @@ def create_app(
         if relevance == 'possible':
             jobs = [job for job in jobs if job.id in job_matches
                     and job_matches[job.id].eligibility_status == 'potentially_eligible']
-        if active_resume is not None and active_profile is not None:
-            jobs.sort(
-                key=lambda job: (
-                    job.id in job_matches and job_matches[job.id].eligibility_status == 'student_eligible',
-                    job_matches[job.id].score
-                    if job.id is not None and job.id in job_matches
-                    else 0,
-                ),
-                reverse=True,
-            )
+        # IDs are allocated on insertion; discovered_at is refreshed by scans.
+        status_priority = {"applied": 0, "new": 1, "reviewed": 2}
+        jobs.sort(key=lambda job: (status_priority.get(job.status, 3), -(job.id or 0)))
         domestic_jobs = [
             job for job in all_jobs if is_israel_or_remote_location(job.location)
         ]

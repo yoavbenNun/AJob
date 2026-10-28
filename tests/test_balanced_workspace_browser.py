@@ -145,3 +145,46 @@ def test_premium_focus_reduced_motion_and_eligibility_contrast(browser_workspace
       return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
     }''')
     assert contrast >= 4.5
+
+
+def test_native_status_form_preserves_real_origin(browser_workspace, monkeypatch):
+    from src.web.security import LocalSecurityMiddleware
+    page, origin, repo, ids = browser_workspace
+    observed = []
+    original = LocalSecurityMiddleware.dispatch
+    async def capture(self, request, call_next):
+        if request.method == "POST":
+            observed.append({name: request.headers.get(name)
+                             for name in ("origin", "referer", "sec-fetch-site")})
+        return await original(self, request, call_next)
+    monkeypatch.setattr(LocalSecurityMiddleware, "dispatch", capture)
+    response = page.goto(origin + f"/jobs/{ids[0]}")
+    assert response.headers["referrer-policy"] == "same-origin"
+    page.locator(".status-form select").select_option("reviewed")
+    page.get_by_role("button", name="Save status", exact=True).click()
+    assert len(observed) == 1
+    headers = observed[0]
+    assert headers["origin"] == origin
+    assert headers["referer"] == origin + f"/jobs/{ids[0]}"
+    assert headers["sec-fetch-site"] == "same-origin"
+    expect(page.locator(".detail-meta .status")).to_have_text("Reviewed")
+    assert repo.get_by_id(ids[0]).status == "reviewed"
+
+
+def test_referrer_policy_does_not_disclose_local_path_to_external_sites(browser_workspace):
+    page, origin, _, ids = browser_workspace
+    page.goto(origin + f"/jobs/{ids[0]}")
+    observed = []
+    def external(route):
+        observed.append(route.request.all_headers())
+        route.fulfill(status=200, content_type="text/html", body="Synthetic external page")
+    # Intercept entirely in the browser: no external network or user data.
+    page.context.route("https://example.test/privacy-check", external)
+    page.evaluate("""() => {
+        const link = document.createElement('a');
+        link.href = 'https://example.test/privacy-check';
+        link.textContent = 'Synthetic privacy check';
+        document.body.append(link);
+    }""")
+    page.get_by_role("link", name="Synthetic privacy check").click()
+    assert len(observed) == 1 and "referer" not in observed[0]

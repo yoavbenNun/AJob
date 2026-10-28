@@ -193,7 +193,9 @@ reusable lesson appears.
 - The default "relevant" dashboard must combine role classification, active
   resume eligibility, and a meaningful resume-match score; keep an explicit
   all-discoveries view for lower-fit and education-ineligible jobs. When resume
-  matches are available, sort the displayed jobs by score descending. Isolate
+  matches are available, retain their scores while sorting by application status
+  (Applied, New, Reviewed, others), then insertion ID descending. `discovered_at`
+  is refreshed by upserts and must not determine discovery order. Isolate
   match failures per posting so one malformed job cannot disable the filter.
 - Keep commute eligibility separate from professional fit. Never recommend a job
   when its location or route cannot be verified; mark it for manual review.
@@ -379,3 +381,12 @@ reusable lesson appears.
 - Do not turn retryable partial scans green without an independently verified
   terminal-failure monitor. Retain unresolved historical windows in read-only
   health checks; dispatch acceptance and sent mail do not establish full recovery.
+
+- Referrer policy affects native form Origin headers: no-referrer can produce
+  Origin: null even for same-origin POSTs. Use same-origin to preserve local
+  provenance and external privacy; keep rejecting null/foreign origins and test
+  real browser forms, not only fetch/TestClient requests.
+
+- Install Chromium explicitly in CI when browser regressions guard critical user
+  flows. A green suite with missing-browser skips does not validate native forms,
+  notes or dismissal behavior; keep local and CI browser coverage observable.
