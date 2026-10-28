@@ -66,12 +66,33 @@ def requisition_id(url):
     return urlsplit(url).path.rsplit('_', 1)[-1].casefold()
 
 
+def workday_location(primary, additional=None):
+    """Use explicit labels only; aggregate counts carry no geographic evidence."""
+    values = [primary] + (additional if isinstance(additional, list) else [])
+    locations, seen = [], set()
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        value = " ".join(value.split())
+        if not value or re.fullmatch(
+            r"(?:\d+|multiple|various)\s+locations?|locations?|not specified|unknown",
+            value, re.I,
+        ):
+            continue
+        if value.casefold() not in seen:
+            locations.append(value)
+            seen.add(value.casefold())
+    # Semicolons preserve separate alternatives for the existing commute policy.
+    return "; ".join(locations)
+
+
 @dataclass(frozen=True)
 class WorkdayDetail:
     url: str
     title: str
     requisition: str
     description: str
+    location: str = ""
 
 
 def fetch_workday_detail(source, posting_url, expected_title, timeout=20):
@@ -95,4 +116,5 @@ def fetch_workday_detail(source, posting_url, expected_title, timeout=20):
     description = clean_job_text(info.get('jobDescription', ''))
     if description_problem(description) or len(description) < 150:
         raise ValueError('Workday detail is missing or invalid')
-    return WorkdayDetail(public, title, req, title + '\n' + description)
+    return WorkdayDetail(public, title, req, title + '\n' + description,
+                         workday_location(info.get('location'), info.get('additionalLocations')))

@@ -20,7 +20,7 @@ from src.scrapers.greenhouse import fetch_greenhouse_jobs, is_greenhouse_board
 from src.scrapers.official_sources import fetch_jobs as fetch_official_jobs, supported as supports_official_feed
 from src.scrapers.paused_sources import scan_public_feed, supported as supports_public_feed
 from src.scrapers.fives import scan_jobs as scan_fives_jobs, supported as supports_fives
-from src.scrapers.workday_details import workday_urls, legacy_workday_url, fetch_workday_detail
+from src.scrapers.workday_details import workday_urls, legacy_workday_url, fetch_workday_detail, workday_location
 from src.scrapers.workday_search import israel_facet, explicitly_israel, contradicts_israel_filter, search_payload
 
 WORKDAY_SEARCH_TERMS = (
@@ -418,7 +418,7 @@ def extract_workday_jobs(company: Company, payload: Mapping[str, Any]) -> list[J
             JobPosting(
                 title=title,
                 company=company.name,
-                location=str(posting.get("locationsText", "")).strip() or "Not specified",
+                location=workday_location(posting.get("locationsText")) or "Not specified",
                 job_url=url,
                 # Listing badges are not a verified description. Leave it empty
                 # so a blocked detail fetch cannot overwrite prior valid content.
@@ -483,6 +483,8 @@ def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> str | Non
                                          timeout=max(1, timeout_ms // 1000))
             job.description = detail.description
             job.requirements = extract_requirements(detail.description)
+            if detail.location:
+                job.location = detail.location
             return None
         except HTTPError as error:
             return 'WorkdayAccessDenied' if error.code in {403, 429} else 'JobDetailUnavailable'

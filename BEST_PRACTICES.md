@@ -362,3 +362,7 @@ reusable lesson appears.
 
 - On client-rendered career sites, wait for the scoped search response rather than
   a fixed delay. Keep collection relevance separate from user application status.
+
+- Workday listing locationsText can be an aggregate count. Read explicit detail
+  location/additionalLocations and preserve semicolon-separated alternatives;
+  neither a location count nor a URL city slug establishes geography.

@@ -76,7 +76,7 @@ def test_israel_beyond_global_page_limit_and_remote_both_retained(monkeypatch):
     result = CareersScraper(None, max_pages=2)._scan_workday(COMPANY)
     assert any(job.job_url.endswith('_JR999') for job in result.jobs)
     assert any(job.location == 'Remote worldwide' for job in result.jobs)
-    assert any(job.location == '2 Locations' for job in result.jobs)
+    assert any(job.job_url.endswith('_JR777') and job.location == 'Not specified' for job in result.jobs)
     assert all(body['offset'] < 40 for body in calls)  # No raised global page cap.
     assert len(calls) == 13  # 1 metadata, 4 focused, 8 global; bounded.
     assert result.collection_metrics['global_page_limit_reached'] is True
