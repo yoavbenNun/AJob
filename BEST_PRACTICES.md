@@ -386,3 +386,7 @@ reusable lesson appears.
   Origin: null even for same-origin POSTs. Use same-origin to preserve local
   provenance and external privacy; keep rejecting null/foreign origins and test
   real browser forms, not only fetch/TestClient requests.
+
+- Install Chromium explicitly in CI when browser regressions guard critical user
+  flows. A green suite with missing-browser skips does not validate native forms,
+  notes or dismissal behavior; keep local and CI browser coverage observable.
