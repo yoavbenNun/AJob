@@ -47,6 +47,7 @@ class CompanyScanResult:
     jobs: list[JobPosting] = field(default_factory=list)
     error: str | None = None
     collection_metrics: dict = field(default_factory=dict)
+    closure_snapshot: dict | None = None
 
 
 @dataclass(slots=True)
@@ -133,7 +134,9 @@ class CareersScraper:
                 jobs, metrics = fetch_official_jobs(company, self.timeout_ms)
                 for job in jobs:
                     job.requirements = extract_requirements(job.description)
-                return CompanyScanResult(company=company, jobs=jobs, collection_metrics=metrics)
+                return CompanyScanResult(company=company, jobs=jobs,
+                                         closure_snapshot=metrics.pop('_closure_snapshot', None),
+                                         collection_metrics=metrics)
             except Exception as error:
                 return CompanyScanResult(company=company, error=f"Official careers feed failed: {type(error).__name__}")
         if supports_public_feed(company):
@@ -150,7 +153,9 @@ class CareersScraper:
                 jobs = fetch_greenhouse_jobs(company, self.timeout_ms, metrics)
                 for job in jobs:
                     job.requirements = extract_requirements(job.description)
-                return CompanyScanResult(company=company, jobs=jobs, collection_metrics=metrics)
+                return CompanyScanResult(company=company, jobs=jobs,
+                                         closure_snapshot=metrics.pop('_closure_snapshot', None),
+                                         collection_metrics=metrics)
             except Exception as error:
                 return CompanyScanResult(company=company, error=f"Greenhouse API failed: {error}")
         if (urlsplit(company.careers_url).hostname or "").endswith("myworkdayjobs.com"):

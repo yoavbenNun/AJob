@@ -28,6 +28,7 @@ class DurableSummary:
     failures: int = 0
     new_jobs: list = field(default_factory=list)
     metrics: list = field(default_factory=list)
+    closure_snapshots: dict = field(default_factory=dict)
 
     def counters(self):
         return {key: getattr(self, key) for key in (
@@ -84,6 +85,8 @@ def source_worker(company, timeout_ms, max_pages, headless, pipe):
         if result.error:
             pipe.send(("error", "SourceFetchError"))
             return
+        if getattr(result, 'closure_snapshot', None):
+            pipe.send(('closure_snapshot', result.closure_snapshot))
         pipe.send(("found", len(result.jobs)))
         detail_failures = 0
         detail_blocked = False
@@ -180,6 +183,7 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
                                           not_evaluated=["location", "candidate_experience_education"]))
             parent, child = ctx.Pipe(duplex=False)
             process = ctx.Process(target=worker, args=(company, timeout_ms, max_pages, headless, child))
+            closure_snapshot = None
             phase = None
             phase_started = time.monotonic()
             try:
@@ -203,6 +207,8 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
                         summary.jobs_found += event[1]
                         metrics['discovered_unique'] = event[1]
                         metrics['empty_listing'] = event[1] == 0
+                    elif event[0] == 'closure_snapshot':
+                        closure_snapshot = event[1]
                     elif event[0] == 'collection':
                         metrics['collection'] = event[1]
                     elif event[0] == 'filter_decision':
@@ -239,6 +245,8 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
                     elif event[0] == "done":
                         metrics["status"] = "full"
                         completed += 1
+                        if closure_snapshot:
+                            summary.closure_snapshots[company.name] = closure_snapshot
                         break
                     elif event[0] == "error":
                         metrics["error_type"] = event[1]
@@ -264,4 +272,8 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
         summary.failures += 1
     summary.status = ("full" if completed == len(enabled) else
                       "partial" if completed or summary.jobs_saved else "failed")
+    # Reuse only successful unfiltered snapshots. The maintenance budget is
+    # inside the existing scan deadline; no network and no additional workers.
+    from src.storage.closure_review import report_after_scan
+    report_after_scan(store, summary, seconds=max(0, deadline - time.monotonic()), cancelled=cancelled)
     return summary

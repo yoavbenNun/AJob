@@ -91,4 +91,8 @@ def fetch_greenhouse_jobs(company: Company, timeout_ms: int, metrics: dict | Non
         payload = json.load(response)
     if not isinstance(payload, dict):
         raise ValueError("Invalid Greenhouse response")
-    return extract_greenhouse_jobs(company, payload, metrics)
+    jobs = extract_greenhouse_jobs(company, payload, metrics)
+    if metrics is not None and not metrics.get('invalid_listing'):
+        from src.scrapers.closure_evidence import snapshot
+        metrics['_closure_snapshot'] = snapshot(company.careers_url, payload, 'greenhouse')
+    return jobs

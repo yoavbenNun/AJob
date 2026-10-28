@@ -371,3 +371,7 @@ reusable lesson appears.
   its paginated cards. Project only job fields; extended ATS metadata can contain
   unrelated staff details. Decode only verified city identifiers; unknown IDs
   remain unverified, and collection does not establish candidate eligibility.
+
+- Infer job closure only from validated complete official snapshots and stable ATS
+  identities, never failed or filtered searches. Keep report-only startup free of
+  writes; atomically audit optional dismissals and preserve later manual Restore.

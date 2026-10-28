@@ -566,3 +566,56 @@ def test_outdated_schema_fails_preflight_without_side_effects(store):
     assert store.execute('SELECT count(*) AS n FROM scan_runs').fetchone()['n'] == 0
     store.migrate()
     store.verify_schema()
+
+
+def test_closure_dismissal_concurrent_owners_restore_and_rls(repository):
+    from src.storage.closure_review import review_closures
+    from src.scrapers.closure_evidence import snapshot
+    source = 'https://boards.greenhouse.io/synthetic'
+    item = JobPosting('Student', 'Synthetic', 'Israel',
+                      source + '/jobs/100', source=source)
+    item.id = repository.save(item)
+    evidence = snapshot(source, {'meta': {'total': 1}, 'jobs': [dict(id=200, title='Student',
+                        absolute_url=source + '/jobs/200')]}, 'greenhouse')
+    summary = DurableSummary(status='full', closure_snapshots={'Synthetic': evidence})
+    barrier = Barrier(2)
+    def owner():
+        target = ScanStore(repository)
+        try:
+            barrier.wait(timeout=10)
+            return review_closures(target, summary, enabled=True)
+        finally:
+            target.close()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: owner(), range(2)))
+    assert sum(r['jobs_auto_dismissed'] for r in results) == 1
+    assert not any(r['checks_failed'] for r in results)
+    assert repository.get_by_id(item.id).status == 'ignored'
+    repository.update_status(item.id, 'reviewed')
+    target = ScanStore(repository)
+    try:
+        assert review_closures(target, summary, enabled=True)['jobs_auto_dismissed'] == 0
+        assert repository.get_by_id(item.id).status == 'reviewed'
+        assert target.execute('SELECT count(*) AS n FROM job_closure_dismissals').fetchone()['n'] == 1
+        assert target.execute("SELECT relrowsecurity FROM pg_class WHERE oid='job_closure_dismissals'::regclass").fetchone()['relrowsecurity']
+        target.execute('BEGIN READ ONLY')
+        assert review_closures(target, summary)['checks_failed'] == 0
+        target.execute('ROLLBACK')
+    finally:
+        target.close()
+
+
+def test_closure_update_failure_rolls_back_audit(store):
+    from src.storage.closure_review import review_closures
+    from src.scrapers.closure_evidence import snapshot
+    source = 'https://boards.greenhouse.io/synthetic'
+    item = JobPosting('Student', 'Synthetic', 'Israel', source + '/jobs/100', source=source)
+    item.id = store.repository.save(item)
+    evidence = snapshot(source, {'meta': {'total': 1}, 'jobs': [dict(id=200, title='Student', absolute_url=source + '/jobs/200')]}, 'greenhouse')
+    summary = DurableSummary(status='full', closure_snapshots={'Synthetic': evidence})
+    store.execute("CREATE FUNCTION fail_closure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected'; END $$")
+    store.execute('CREATE TRIGGER fail_closure BEFORE UPDATE ON job_postings FOR EACH ROW EXECUTE FUNCTION fail_closure()')
+    result = review_closures(store, summary, enabled=True)
+    assert result['checks_failed'] == 1
+    assert store.repository.get_by_id(item.id).status == 'new'
+    assert not store.execute('SELECT * FROM job_closure_dismissals').fetchall()

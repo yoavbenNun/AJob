@@ -92,6 +92,9 @@ def fetch_jobs(company, timeout_ms):
         # no 25-card browser pagination or per-posting detail requests.
         items = json.loads(_read("https://elbitsystemscareer.com/cron/jobs.json", timeout))
         jobs = extract_listings(company, elbit_listings(items), metrics)
+        if not metrics['invalid_listing']:
+            from src.scrapers.closure_evidence import snapshot
+            metrics['_closure_snapshot'] = snapshot(company.careers_url, items, 'elbit')
     elif host == "www.taboola.com":
         items = json.loads(_read("https://www.taboola.com/wp-content/uploads/careers/jobs.json", timeout))
         if not isinstance(items, list):
