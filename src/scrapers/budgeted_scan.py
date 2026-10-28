@@ -12,6 +12,7 @@ import time
 from src.filtering.job_filter import classify_job, prefilter_job
 from src.scrapers.careers_scraper import CareersScraper, _enrich_job
 from src.scrapers.greenhouse import is_greenhouse_board
+from src.scrapers.failure_diagnostics import source_failure
 from src.scrapers.paused_sources import supported
 from src.scrapers.official_sources import supported as supports_official_feed
 from src.job_content import description_problem
@@ -83,7 +84,7 @@ def source_worker(company, timeout_ms, max_pages, headless, pipe):
         # Fetch time includes HTTP, browser rendering and feed decoding. CPU
         # filtering is measured separately; no claim of pure wire-level timing.
         if result.error:
-            pipe.send(("error", "SourceFetchError"))
+            pipe.send(("error", "SourceFetchError", getattr(result, 'failure_details', {})))
             return
         if getattr(result, 'closure_snapshot', None):
             pipe.send(('closure_snapshot', result.closure_snapshot))
@@ -126,7 +127,7 @@ def source_worker(company, timeout_ms, max_pages, headless, pipe):
             pipe.send(("job", accepted, job))
         pipe.send(("error", "JobDetailUnavailable") if detail_failures else ("done",))
     except Exception as error:
-        pipe.send(("error", type(error).__name__))
+        pipe.send(("error", type(error).__name__, source_failure(error, 'source_worker')))
     finally:
         browser.close()
         pipe.close()
@@ -250,6 +251,8 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
                         break
                     elif event[0] == "error":
                         metrics["error_type"] = event[1]
+                        if len(event) > 2:
+                            metrics['failure_details'] = event[2]
                         break
                 else:
                     metrics["status"] = "partial"
@@ -265,6 +268,15 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
                 metrics["elapsed_seconds"] = time.monotonic() - source_started
                 if metrics["status"] != "full":
                     summary.failures += 1
+                    details = metrics.setdefault('failure_details', {})
+                    details.setdefault('stage', 'source_budget' if metrics.get('error_type') == 'BudgetExceeded' else 'detail_or_worker')
+                    details.setdefault('exception_type', metrics.get('error_type', 'WorkerInterrupted'))
+                    details.setdefault('http_status', None)
+                    details.setdefault('timeout', metrics.get('error_type') == 'BudgetExceeded')
+                    details.setdefault('transient', metrics.get('error_type') in {'BudgetExceeded', 'Cancelled'})
+                    details['recovery_planned'] = (store.source_recovery_planned()
+                                                  if hasattr(store, 'source_recovery_planned') else False)
+                    details['recovery_monitor_verified'] = False
                 summary.metrics.append(metrics)
                 store.record_metrics(run_id, company.name, metrics)
                 print(json.dumps({"event": "source_metrics", **metrics}), flush=True)

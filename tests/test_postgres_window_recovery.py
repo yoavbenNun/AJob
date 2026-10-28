@@ -26,6 +26,13 @@ from test_window_recovery import (
     test_old_uncertain_mail_remains_visible_after_midnight,
 )
 from src.storage.window_store import WindowStore
+from test_recovery_outcomes import (
+    test_partial_warning_retains_failure_without_independent_monitor,
+    test_recovery_full_only_checks_own_source_and_never_resends,
+    test_exhausted_recovery_is_terminal_even_when_mail_was_sent,
+    test_stopped_recovery_and_watchdog_cannot_hide_failure_after_midnight,
+    test_lease_expiry_is_visible_without_running_recovery,
+)
 
 
 @pytest.fixture

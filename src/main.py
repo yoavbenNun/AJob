@@ -70,6 +70,8 @@ def build_parser() -> argparse.ArgumentParser:
         command_parser = subparsers.add_parser(command)
         command_parser.add_argument('--database', type=Path, default=Path('data/jobs.db'))
         command_parser.add_argument('--config', type=Path, default=Path('config/companies.yaml'))
+        if command == 'scan-report':
+            command_parser.add_argument('--check', action='store_true', help='Read-only health check; nonzero for unresolved or final failures')
     resume_parser = subparsers.add_parser(
         "parse-resume", help="Parse a local resume without sending it anywhere"
     )
@@ -156,7 +158,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             store = WindowStore(repository)
             try:
                 store.verify_schema()
-                print(json.dumps(store.report(days=7)))
+                rows = store.report(days=7, include_unresolved=True)
+                print(json.dumps(rows))
+                if args.check:
+                    from src.scheduling.outcomes import report_exit_code
+                    unresolved_mail = store.execute("SELECT slot_key FROM notification_batches WHERE state IN ('failed','uncertain') LIMIT 1").fetchone()
+                    return 1 if unresolved_mail else report_exit_code(rows)
             finally:
                 store.close()
             return 0

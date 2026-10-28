@@ -377,3 +377,7 @@ reusable lesson appears.
 - Infer job closure only from validated complete official snapshots and stable ATS
   identities, never failed or filtered searches. Keep report-only startup free of
   writes; atomically audit optional dismissals and preserve later manual Restore.
+
+- Do not turn retryable partial scans green without an independently verified
+  terminal-failure monitor. Retain unresolved historical windows in read-only
+  health checks; dispatch acceptance and sent mail do not establish full recovery.

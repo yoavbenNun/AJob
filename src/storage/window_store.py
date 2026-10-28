@@ -192,9 +192,30 @@ class WindowStore(ScanStore):
             self.execute('UPDATE delivery_leases SET state=?,retry_at=?,error_type=? WHERE slot_key=? AND owner=?', (state, retry, error_type[:80], slot, owner))
             self.execute('UPDATE notification_batches SET state=?,updated_at=?,error_type=? WHERE slot_key=?', (state, stamp(self.clock()), error_type[:80], slot))
 
-    def report(self, days=7):
+    def source_recovery_planned(self):
+        if not self.scan_owner:
+            return False
+        slot, owner = self.scan_owner
+        row = self.execute('SELECT attempts,deadline_at FROM scan_windows WHERE slot_key=? AND run_id=?',
+                           (slot, owner)).fetchone()
+        return bool(row and row['attempts'] < 2 and
+                    datetime.fromisoformat(row['deadline_at']) > self.clock() + timedelta(minutes=16))
+
+    def report(self, days=7, *, include_unresolved=False):
+        from src.scheduling.outcomes import window_outcome
         rows = []
-        for slot, scheduled, deadline in expected_windows(self.clock(), days):
+        windows = list(expected_windows(self.clock(), days))
+        if include_unresolved:
+            known = {slot for slot, _, _ in windows}
+            # Persisted failures must not disappear at midnight or after seven
+            # days. SELECT only; does not seed work or replay historical mail.
+            for old in self.execute("SELECT w.slot_key,w.scheduled_at,w.deadline_at FROM scan_windows w "
+                                    "LEFT JOIN notification_batches b USING(slot_key) "
+                                    "WHERE w.scheduled_at<=? AND (w.status!='full' OR b.state IS NULL OR b.state!='sent') "
+                                    "ORDER BY w.scheduled_at", (stamp(self.clock()),)).fetchall():
+                if old['slot_key'] not in known:
+                    windows.append((old['slot_key'], old['scheduled_at'], old['deadline_at']))
+        for slot, scheduled, deadline in windows:
             row = self.execute('SELECT * FROM scan_windows WHERE slot_key=?', (slot,)).fetchone()
             batch = self.execute('SELECT state,error_type FROM notification_batches WHERE slot_key=?', (slot,)).fetchone()
             lease = self.execute('SELECT * FROM delivery_leases WHERE slot_key=?', (slot,)).fetchone()
@@ -213,11 +234,16 @@ class WindowStore(ScanStore):
             if row and row['started_at']:
                 end = datetime.fromisoformat(row['finished_at']) if row['finished_at'] else self.clock()
                 duration = max(0, (end - datetime.fromisoformat(row['started_at'])).total_seconds())
-            rows.append(dict(slot=slot, scheduled=scheduled, started=row['started_at'] if row else None,
+            rows.append(dict(slot=slot, scheduled=scheduled, deadline=deadline,
+                retry_at=row['retry_at'] if row else None, lease_expired=expired_scan or expired_delivery, started=row['started_at'] if row else None,
                 scan=state, jobs_discovered=jobs, notification=mail, duration_seconds=duration,
                 run_id=row['run_id'] if row else None,
                 scan_attempts=row['attempts'] if row else 0,
                 notification_attempts=lease['attempts'] if lease else 0,
                 retry_exhausted=bool((lease and lease['attempts'] >= 3 and lease['state'] == 'failed') or (row and row['attempts'] >= 2 and state in {'failed','partial'})),
                 failure_reason=('DeliveryLeaseExpired' if expired_delivery else 'ScanLeaseExpired' if expired_scan else row['error_type'] if row else 'NotObserved' if state == 'failed' else '') or (batch['error_type'] if batch else '')))
+        for row in rows:
+            row['outcome'] = window_outcome(row, self.clock())
+            row['recovery_planned'] = row['outcome'] == 'PARTIAL_RECOVERABLE'
+            row['recovery_monitor_verified'] = False
         return rows
