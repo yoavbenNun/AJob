@@ -366,3 +366,8 @@ reusable lesson appears.
 - Workday listing locationsText can be an aggregate count. Read explicit detail
   location/additionalLocations and preserve semicolon-separated alternatives;
   neither a location count nor a URL city slug establishes geography.
+
+- Prefer the complete public feed actually used by an employer career page over
+  its paginated cards. Project only job fields; extended ATS metadata can contain
+  unrelated staff details. Decode only verified city identifiers; unknown IDs
+  remain unverified, and collection does not establish candidate eligibility.

@@ -382,6 +382,13 @@ companies:
       - /careers/gid-
     allowed_job_hosts:
       - www.yotpo.com
+  - name: Elbit Systems
+    careers_url: https://elbitsystemscareer.com/jobs/
+    enabled: true
+    job_url_patterns:
+      - /job?jid=
+    allowed_job_hosts:
+      - elbitsystemscareer.com
   - name: Optimove
     careers_url: https://job-boards.greenhouse.io/optimove
     enabled: true

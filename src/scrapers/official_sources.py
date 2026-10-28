@@ -9,12 +9,13 @@ from urllib.request import Request, urlopen
 
 from src.models import Company, JobPosting
 from src.scrapers.greenhouse import extract_greenhouse_jobs, html_text
+from src.scrapers.elbit import listings as elbit_listings
 from src.urls import canonical_url
 
 
 def supported(company: Company) -> bool:
     host = urlsplit(company.careers_url).hostname
-    return host in {"www.taboola.com", "www.fiverr.com", "careers.lightricks.com"}
+    return host in {"www.taboola.com", "www.fiverr.com", "careers.lightricks.com", "elbitsystemscareer.com"}
 
 
 def _read(url, timeout):
@@ -86,7 +87,12 @@ def fetch_jobs(company, timeout_ms):
     metrics = dict(raw_listings=0, invalid_listing=0, duplicates_avoided=0,
                    page_limit_reached=False, location_filter_status="not_applied")
     host = urlsplit(company.careers_url).hostname
-    if host == "www.taboola.com":
+    if host == "elbitsystemscareer.com":
+        # One complete snapshot, advertised by the employer's own search page;
+        # no 25-card browser pagination or per-posting detail requests.
+        items = json.loads(_read("https://elbitsystemscareer.com/cron/jobs.json", timeout))
+        jobs = extract_listings(company, elbit_listings(items), metrics)
+    elif host == "www.taboola.com":
         items = json.loads(_read("https://www.taboola.com/wp-content/uploads/careers/jobs.json", timeout))
         if not isinstance(items, list):
             raise ValueError("Taboola careers listings are invalid")
