@@ -201,7 +201,7 @@ if (-not (Test-DashboardReady)) {
         # Launch Python directly: -NoExit shells from older launches stayed alive
         # even after their server failed. The child inherits credentials in memory.
         $serverArguments = '-m uvicorn src.web.app:app --app-dir "{0}" --host 127.0.0.1 --port 8001' -f $appRoot
-        Start-Process -FilePath $pythonPath -WindowStyle Hidden -ArgumentList $serverArguments `
+        $launchedServer = Start-Process -FilePath $pythonPath -WindowStyle Hidden -ArgumentList $serverArguments -PassThru `
             -WorkingDirectory $projectRoot `
             -RedirectStandardOutput (Join-Path $logRoot "dashboard.stdout.log") `
             -RedirectStandardError (Join-Path $logRoot "dashboard.stderr.log")
@@ -225,6 +225,18 @@ if (-not (Test-DashboardReady)) {
         }
     }
     if (-not $ready) {
+        # Reap only this attempt's verified venv process/child, even if it never
+        # bound the port. Failed candidates must not linger beside the rollback.
+        $attemptProcesses = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($launchedServer.Id)" -ErrorAction SilentlyContinue)
+        $attemptProcesses += @(Get-CimInstance Win32_Process -Filter "ProcessId=$($launchedServer.Id)" -ErrorAction SilentlyContinue)
+        foreach ($attempt in $attemptProcesses) {
+            $ownedAttempt = Get-AJobProcess ([int]$attempt.ProcessId)
+            if ($ownedAttempt -and $ownedAttempt.CreationDate -eq $attempt.CreationDate -and
+                $ownedAttempt.CreationDate -ge $launchedServer.StartTime.AddSeconds(-1) -and
+                $ownedAttempt.CommandLine.Contains('--app-dir "' + $appRoot + '"')) {
+                Stop-Process -Id $ownedAttempt.ProcessId -Force -ErrorAction SilentlyContinue
+            }
+        }
         Show-LauncherError "The AJob dashboard did not become ready. Startup details are in data/dashboard.stderr.log. No unrelated process was stopped."
         exit 1
     }

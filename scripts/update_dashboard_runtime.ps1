@@ -8,7 +8,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-function Invoke-RuntimeCommand([string]$File, [string[]]$Arguments, [int]$Seconds = 8) {
+function Invoke-RuntimeCommand([string]$File, [string[]]$Arguments, [int]$Seconds = 8, [switch]$IgnoreOutput) {
     $info = New-Object Diagnostics.ProcessStartInfo
     $info.FileName = $File
     $info.Arguments = ($Arguments | ForEach-Object { '"' + $_.Replace('"', '\"') + '"' }) -join ' '
@@ -28,6 +28,10 @@ function Invoke-RuntimeCommand([string]$File, [string[]]$Arguments, [int]$Second
             throw 'Runtime command timed out.'
         }
         if ($process.ExitCode -ne 0) { throw 'Runtime command failed.' }
+        # A detached server can inherit a pipe handle after its launcher exits.
+        # Startup is signalled by exit status/readiness, not stdout reaching EOF.
+        if ($IgnoreOutput) { return '' }
+        if (-not $output.Wait(2000)) { throw 'Runtime command output timed out.' }
         return $output.GetAwaiter().GetResult().Trim()
     }
     finally { $process.Dispose() }
@@ -97,7 +101,21 @@ function Start-Runtime([string]$Launcher, [string]$Root, [string]$Code, [switch]
                    '-DataRoot', $Root, '-RuntimeCodeRoot', $Code, '-NoBrowser', '-NonInteractive')
     if ($Reuse) { $arguments += '-ReuseRunning' }
     if ($ResumeDirectory) { $arguments += @('-ResumeDirectory', $ResumeDirectory) }
-    [void](Invoke-RuntimeCommand "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" $arguments 90)
+    [void](Invoke-RuntimeCommand "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" $arguments 90 -IgnoreOutput)
+    if (-not $Reuse) {
+        # A concurrent legacy launcher can release the child with exit 0 without
+        # starting our code. Never publish based on that exit status alone.
+        $listeners = @(Get-NetTCPConnection -LocalPort 8001 -State Listen -ErrorAction SilentlyContinue)
+        if ($listeners.Count -ne 1) { throw 'Selected runtime has no unique listener.' }
+        $owner = Get-CimInstance Win32_Process -Filter "ProcessId=$($listeners[0].OwningProcess)" -ErrorAction Stop
+        if ($owner.CommandLine -notmatch '(?:^|\s)--app-dir\s+(?:"([^"]+)"|(\S+))') { throw 'Runtime directory cannot be verified.' }
+        $runningCode = if ($Matches[1]) { $Matches[1] } else { $Matches[2] }
+        if ([IO.Path]::GetFullPath($runningCode).TrimEnd('\') -ine [IO.Path]::GetFullPath($Code).TrimEnd('\')) {
+            throw 'A different runtime is listening.'
+        }
+        $health = Invoke-RestMethod 'http://127.0.0.1:8001/health' -TimeoutSec 6
+        if ($health.name -ne 'AJob') { throw 'Selected runtime is unhealthy.' }
+    }
 }
 
 function Test-RuntimeImport([string]$Python, [string]$Candidate) {

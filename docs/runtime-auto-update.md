@@ -20,6 +20,9 @@ is reused. Concurrent shortcut launches coalesce under a nonblocking mutex.
 With no live server, start the candidate and check health, home and an existing job
 detail on port 8001. Only then atomically replace the version pointer, retaining
 the previous SHA/path. Startup or publication failure starts the previous version.
+The updater independently checks the listener's code directory and health before
+publication; a coalesced launcher exit alone is insufficient. A failed startup
+reaps only the verified processes created by that attempt before rollback.
 Never prune old releases automatically. If the launcher is interrupted before
 publication, the old pointer remains authoritative on the next launch.
 
@@ -32,3 +35,13 @@ Run focused offline regressions with Windows PowerShell:
 `powershell -NoProfile -File tests/test_runtime_updater.ps1`.
 Validate a real shortcut launch and concurrent launch separately; no scan/mail is
 needed. Bootstrap upgrades remain a deliberate local installation step.
+
+Verification completed on 2026-10-30: 34 offline assertions, including actual
+synthetic Git worktree preparation; real approved-main preparation/import; actual
+missing-candidate startup failure and fallback to the approved release. The live
+release remained at SHA `8bc112091868376e31d90a1483b88efc8861a6be` because main
+had no newer approved commit. This exercised release-directory activation without
+claiming a newer product version was available.
+Concurrent installed launches and the real desktop shortcut succeeded without
+restarting the active server. Home and job detail returned 200 from the selected
+release, and five existing local data/configuration files retained their hashes.
