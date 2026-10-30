@@ -386,6 +386,11 @@ reusable lesson appears.
   terminal-failure monitor. Retain unresolved historical windows in read-only
   health checks; dispatch acceptance and sent mail do not establish full recovery.
 
+- Separate operational alerts from finalized scan-only history: after seven days
+  past deadline, an expired scan with sent mail remains a visible FINAL_FAILURE
+  warning without failing unrelated runs. Never age out unfinished delivery,
+  unknown records, active/expired leases or recovery that is still actionable.
+
 - Referrer policy affects native form Origin headers: no-referrer can produce
   Origin: null even for same-origin POSTs. Use same-origin to preserve local
   provenance and external privacy; keep rejecting null/foreign origins and test

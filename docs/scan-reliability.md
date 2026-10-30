@@ -147,6 +147,22 @@ set `AJOB_TEST_SESSION_POOLER=1`, and select
 Pooler's DISCARD ALL session reset must remain enabled for lock cleanup. Test
 containers are stopped/removed after verification; cached Docker images may remain.
 
+## Historical scan alerts
+
+`window_report` and `scan-report` retain unresolved history without deleting or
+marking scans full. A finalized `partial`/`failed` scan with `WindowExpired` or
+`MissedWindow`, sent mail, no expired lease, and a deadline at least seven days ago
+is labeled `alert_scope=historical_scan_failure`. Scheduled runs emit a warning;
+the unchanged `FINAL_FAILURE` outcome remains visible in JSON and Actions summaries.
+Such history alone no longer fails `scheduled-tick` or `scan-report --check`.
+
+Fresh failures still fail for seven days after deadline. Pending/failed/uncertain
+delivery, unknown records, running/expired leases and unfinished recovery never
+qualify for this historical exception. This is an alert-retention policy, not
+acknowledgement, successful recovery or proof of inbox delivery. No migration or
+Production data change is needed. The watchdog and recovery claim rules remain
+unchanged: expired scan windows are not replayed and sent mail is not resent.
+
 ## Rollback boundary
 
 See [deployment-runbook.md](deployment-runbook.md). A legacy repository may still
