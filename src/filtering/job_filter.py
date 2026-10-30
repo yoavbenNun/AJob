@@ -98,10 +98,19 @@ def classify_job(job: JobPosting) -> FilterDecision:
         _contains_phrase(title, term) for term in HARDWARE_FOCUS_TERMS
     )
     if not software_title or hardware_focused_title:
-        responsibilities = _normalize(re.split(
-            r"minimum qualifications|basic qualifications|requirements|preferred qualifications",
-            job.description, maxsplit=1, flags=re.IGNORECASE,
-        )[0])
+        responsibility_text = re.split(
+            r"minimum qualifications|basic qualifications|preferred qualifications|"
+            r"^\s*:?\s*(?:(?:job|minimum|basic|preferred|required)\s+)?"
+            r"(?:requirements(?:\s+and\s+qualifications)?|qualifications(?:\s+and\s+requirements)?)"
+            r"\s*(?::|$)|\brequirements\s*:",
+            job.description, maxsplit=1, flags=re.IGNORECASE | re.MULTILINE,
+        )[0]
+        responsibilities = _normalize(responsibility_text)
+        develops_code = any(
+            re.search(r"\b(?:develop(?:ing)?|writ(?:e|ing))\s+(?:production\s+)?code\b", clause)
+            and not re.search(r"\b(?:not|never|no|without)\b|\b\w+n['’]t\b", clause)
+            for clause in (_normalize(part) for part in re.split(r"[.;!\n]", responsibility_text))
+        )
         develops_automation = (
             _contains_phrase(title, "automation")
             and re.search(
@@ -111,7 +120,7 @@ def classify_job(job: JobPosting) -> FilterDecision:
                 responsibilities,
             )
         )
-        if not develops_automation and not any(
+        if not develops_code and not develops_automation and not any(
             _contains_phrase(responsibilities, term) for term in DETAIL_SOFTWARE_TERMS
         ):
             return FilterDecision(False, "no software-development responsibilities were found")

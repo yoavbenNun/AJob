@@ -4,6 +4,10 @@ This file records durable lessons discovered while building AJob. Read it before
 making changes and update it when a new failure mode or
 reusable lesson appears.
 
+- Explicit code-development duties can establish software work for algorithm or
+  systems student titles. Keep this evidence in responsibilities, not preferred
+  qualifications or negated duties; preserve separate candidate eligibility.
+
 - A successful empty ATS feed does not prove career-site coverage. Verify the
   employer's current listing links after recruiting migrations, and distinguish
   observed rejection decisions from filtering stages that were not evaluated.
