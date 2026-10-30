@@ -104,7 +104,7 @@ def test_cisco_routes_to_existing_workday_adapter(monkeypatch):
 
 def test_other_sources_keep_existing_adapters():
     assert not feeds.supported(Company("Example", "https://job-boards.greenhouse.io/example"))
-    assert not feeds.supported(companies()["Qualcomm"])
+    assert not feeds.supported(companies()["Cisco"])
 
 
 def test_greenhouse_counts_listing_rejections_and_duplicates_separately():

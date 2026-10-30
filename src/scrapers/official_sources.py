@@ -15,7 +15,7 @@ from src.urls import canonical_url
 
 def supported(company: Company) -> bool:
     host = urlsplit(company.careers_url).hostname
-    return host in {"www.taboola.com", "www.fiverr.com", "careers.lightricks.com", "elbitsystemscareer.com"}
+    return host in {"www.taboola.com", "www.fiverr.com", "careers.lightricks.com", "elbitsystemscareer.com", "careers.qualcomm.com"}
 
 
 def _read(url, timeout):
@@ -83,6 +83,9 @@ def extract_fiverr_jobs(company, html, metrics):
 def fetch_jobs(company, timeout_ms):
     if not supported(company):
         raise ValueError("Unsupported official careers feed")
+    if urlsplit(company.careers_url).hostname == 'careers.qualcomm.com':
+        from src.scrapers.qualcomm import fetch_jobs as fetch_qualcomm_jobs
+        return fetch_qualcomm_jobs(company, timeout_ms)
     timeout = max(1, timeout_ms // 1000)
     metrics = dict(raw_listings=0, invalid_listing=0, duplicates_avoided=0,
                    page_limit_reached=False, location_filter_status="not_applied")

@@ -94,13 +94,13 @@ companies:
     allowed_job_hosts:
       - clarivate.wd3.myworkdayjobs.com
   - name: Qualcomm
-    # Official Workday source; broader bounded queries surface junior roles when open.
-    careers_url: https://qualcomm.wd12.myworkdayjobs.com/en-US/External
+    # Official public careers portal; the former Workday board is empty.
+    careers_url: https://careers.qualcomm.com/careers
     enabled: true
     job_url_patterns:
-      - /job/
+      - /careers/job/
     allowed_job_hosts:
-      - qualcomm.wd12.myworkdayjobs.com
+      - careers.qualcomm.com
   - name: Marvell
     # Official Workday board with current Israel student engineering postings;
     # shared filtering checks software responsibilities role by role.
