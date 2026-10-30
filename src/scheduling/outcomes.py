@@ -34,4 +34,23 @@ def window_outcome(row, reference):
 def report_exit_code(rows):
     # There is no separately verified final-failure monitor. Retain failure for
     # recoverable partials too; a successful email is never proof of a full scan.
-    return int(any(row['outcome'] in {'PARTIAL_RECOVERABLE', 'FINAL_FAILURE', 'UNKNOWN'} for row in rows))
+    return int(any(row.get('alert_scope') != 'historical_scan_failure'
+                   and row['outcome'] in {'PARTIAL_RECOVERABLE', 'FINAL_FAILURE', 'UNKNOWN'}
+                   for row in rows))
+
+
+def window_alert_scope(row, reference):
+    """Age only finalized scan-only incidents; never age unresolved delivery.
+
+    Keep seven days of failing checks after the deadline. An expired scan cannot
+    be replayed by the normal recovery path; its actual outcome remains failed.
+    Missing records, active/stale leases, and mail that is not sent stay actionable.
+    """
+    if (row['outcome'] == 'FINAL_FAILURE'
+            and row['scan'] in {'partial', 'failed'}
+            and row['notification'] == 'sent'
+            and not row.get('lease_expired')
+            and row.get('failure_reason') in {'WindowExpired', 'MissedWindow'}
+            and datetime.fromisoformat(row['deadline']) <= reference - timedelta(days=7)):
+        return 'historical_scan_failure'
+    return 'operational'

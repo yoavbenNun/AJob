@@ -202,7 +202,7 @@ class WindowStore(ScanStore):
                     datetime.fromisoformat(row['deadline_at']) > self.clock() + timedelta(minutes=16))
 
     def report(self, days=7, *, include_unresolved=False):
-        from src.scheduling.outcomes import window_outcome
+        from src.scheduling.outcomes import window_outcome, window_alert_scope
         rows = []
         windows = list(expected_windows(self.clock(), days))
         if include_unresolved:
@@ -244,6 +244,7 @@ class WindowStore(ScanStore):
                 failure_reason=('DeliveryLeaseExpired' if expired_delivery else 'ScanLeaseExpired' if expired_scan else row['error_type'] if row else 'NotObserved' if state == 'failed' else '') or (batch['error_type'] if batch else '')))
         for row in rows:
             row['outcome'] = window_outcome(row, self.clock())
+            row['alert_scope'] = window_alert_scope(row, self.clock())
             row['recovery_planned'] = row['outcome'] == 'PARTIAL_RECOVERABLE'
             row['recovery_monitor_verified'] = False
         return rows
