@@ -66,12 +66,15 @@ def build_parser() -> argparse.ArgumentParser:
     scan_parser.add_argument('--scan-budget-seconds', type=float, default=3600)
     migration_parser = subparsers.add_parser('prepare-scan-storage', help='Explicitly apply reliability schema; requires deployment approval for cloud')
     migration_parser.add_argument('--database', type=Path, default=Path('data/jobs.db'))
+    alert_migration = subparsers.add_parser('prepare-scan-alert-storage', help='Manual optional alert schema; requires separate production approval')
+    alert_migration.add_argument('--database', type=Path, default=Path('data/jobs.db'))
     for command in ('scheduled-tick', 'scan-report'):
         command_parser = subparsers.add_parser(command)
         command_parser.add_argument('--database', type=Path, default=Path('data/jobs.db'))
         command_parser.add_argument('--config', type=Path, default=Path('config/companies.yaml'))
         if command == 'scan-report':
             command_parser.add_argument('--check', action='store_true', help='Read-only health check; nonzero for unresolved or final failures')
+            command_parser.add_argument('--alert-check', action='store_true', help='With --check: opt-in incident reporting; may write alert receipts when activated')
     resume_parser = subparsers.add_parser(
         "parse-resume", help="Parse a local resume without sending it anywhere"
     )
@@ -157,10 +160,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                                       recommendations=_cloud_recommendations)
             store = WindowStore(repository)
             try:
+                if args.alert_check and not args.check:
+                    raise ValueError('--alert-check requires --check')
                 store.verify_schema()
                 rows = store.report(days=7, include_unresolved=True)
                 print(json.dumps(rows))
                 if args.check:
+                    if args.alert_check:
+                        from src.scheduling.alert_reporting import alert_exit_code
+                        return alert_exit_code(store, rows)
                     from src.scheduling.outcomes import report_exit_code
                     unresolved_mail = store.execute("SELECT slot_key FROM notification_batches WHERE state IN ('failed','uncertain') LIMIT 1").fetchone()
                     return 1 if unresolved_mail else report_exit_code(rows)
@@ -170,13 +178,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (PostgresError, RuntimeError, sqlite3.Error, ValueError) as error:
             print(f'Scheduled operation failed ({type(error).__name__}).', file=sys.stderr)
             return 1
-    if args.command == 'prepare-scan-storage':
+    if args.command in {'prepare-scan-storage', 'prepare-scan-alert-storage'}:
         from src.storage.scan_store import ScanStore
         repository = create_job_repository(args.database)
         store = ScanStore(repository)
         try:
             store.execute('SELECT id FROM job_postings LIMIT 0')
-            store.migrate()
+            if args.command == 'prepare-scan-alert-storage':
+                from src.scheduling.alert_reporting import prepare_alert_schema
+                store.verify_schema()
+                prepare_alert_schema(store)
+            else:
+                store.migrate()
         finally:
             store.close()
         return 0
