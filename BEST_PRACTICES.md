@@ -281,6 +281,12 @@ reusable lesson appears.
 
 ## Notifications and scheduled runs
 
+- A pending alert row written before exit is not proof of a GitHub failure.
+  Suppress duplicates only after verifying the exact prior workflow attempt and
+  business-step failure. Preserve the current pending observation even if receipt
+  verification fails, so cancelled/deleted attempts cannot pin alerts forever.
+  Keep window outcomes immutable and gate optional schema/activation separately.
+
 - Pass an explicit `ssl.create_default_context()` to SMTP STARTTLS before login;
   encryption without certificate and hostname validation does not authenticate
   the server. Keep plaintext SMTP restricted to loopback development servers.

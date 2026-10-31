@@ -25,6 +25,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: scheduled-job-scan
@@ -45,6 +46,9 @@ jobs:
       SMTP_TO: ${{ secrets.SMTP_TO }}
       SMTP_USE_TLS: ${{ secrets.SMTP_USE_TLS }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # Default off. Set only after manual alert-schema approval and verification.
+      AJOB_SCAN_ALERT_DEDUP: ${{ vars.AJOB_SCAN_ALERT_DEDUP }}
+      GITHUB_TOKEN: ${{ github.token }}
       CANDIDATE_PROFILE_JSON: ${{ secrets.CANDIDATE_PROFILE_JSON }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -73,9 +77,16 @@ jobs:
           -e SMTP_HOST -e SMTP_PORT -e SMTP_USERNAME -e SMTP_PASSWORD
           -e SMTP_FROM -e SMTP_TO -e SMTP_USE_TLS
           -e DATABASE_URL
+          -e AJOB_SCAN_ALERT_DEDUP -e GITHUB_TOKEN -e GITHUB_ACTIONS
+          -e GITHUB_REPOSITORY -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT
+          -e GITHUB_REF -e GITHUB_EVENT_NAME -e GITHUB_WORKFLOW_REF
           -e CANDIDATE_PROFILE_JSON
           ai-job-search-agent python -m src.main scheduled-tick
       - name: Publish business status independently of workflow result
         if: ${{ always() }}
-        run: |
-          docker run --rm -e DATABASE_URL ai-job-search-agent python -m src.main scan-report --check >> "$GITHUB_STEP_SUMMARY"
+        run: >-
+          docker run --rm -e DATABASE_URL
+          -e AJOB_SCAN_ALERT_DEDUP -e GITHUB_TOKEN -e GITHUB_ACTIONS
+          -e GITHUB_REPOSITORY -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT
+          -e GITHUB_REF -e GITHUB_EVENT_NAME -e GITHUB_WORKFLOW_REF
+          ai-job-search-agent python -m src.main scan-report --check --alert-check >> "$GITHUB_STEP_SUMMARY"
