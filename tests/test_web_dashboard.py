@@ -191,7 +191,7 @@ def test_dashboard_discloses_active_and_paused_scan_sources(tmp_path) -> None:
 
     response = client.get("/")
 
-    assert "Scanning 50 companies" in response.text
+    assert "Scanning 51 companies" in response.text
     assert "FIL Robotics / Fives" in response.text
     assert "Companies included in every scan" in response.text
     assert "Microsoft" in response.text
