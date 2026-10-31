@@ -1,5 +1,12 @@
 # Project Best Practices
 
+- Cloud dashboard sessions and login budgets must survive worker restarts in a
+  private persistent store. Authenticate before serving private routes; never
+  expose the loopback app as an internet entry point or trust identity headers.
+- Map private notes/undo migrations by canonical job URL, not coincidental local
+  IDs. Abort conflicts/orphans, retain backups, and commit cloud dismissal status
+  plus undo metadata in one locked transaction. Keep cloud migrations manual.
+
 This file records durable lessons discovered while building AJob. Read it before
 making changes and update it when a new failure mode or
 reusable lesson appears.

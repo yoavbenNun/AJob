@@ -17,6 +17,9 @@
     <header class="app-bar">
       <a class="brand" href="/" aria-label="AJob home"><span class="brand-mark" aria-hidden="true"><span class="brand-glyph">A</span><span class="brand-spark">✦</span></span><span class="brand-lockup"><span class="brand-name">A<span>Job</span></span><span class="brand-tagline">AI career agent</span></span></a>
       <div class="top-actions">
+        {% if cloud_mode %}
+        <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button secondary" type="submit">Sign out</button></form>
+        {% else %}
         <details class="email-menu settings-menu">
           <summary class="button secondary settings-button">Update email</summary>
           <div class="settings-popover">
@@ -45,6 +48,7 @@
             {% else %}<p class="error" role="alert">Resume updates are unavailable until RESUME_DIRECTORY is configured.</p>{% endif %}
           </div>
         </details>
+        {% endif %}
         <div class="system-state"><span class="system-dot" aria-hidden="true"></span>Private workspace</div>
       </div>
     </header>

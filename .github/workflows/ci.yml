@@ -58,3 +58,11 @@ jobs:
           persist-credentials: false
       - run: docker build --tag ai-job-search-agent .
       - run: docker run --rm --ipc=host ai-job-search-agent python -m src.main scan --dry-run
+      - name: Build isolated cloud dashboard image
+        run: docker build --file Dockerfile.dashboard --tag ajob-cloud-dashboard .
+      - name: Verify cloud image is opt-in and has no import-time local stores
+        run: >-
+          docker run --rm ajob-cloud-dashboard python -c
+          "from pathlib import Path; from src.web.cloud import create_cloud_app;
+          assert not Path('data').exists();
+          import os; assert os.environ.get('AJOB_CLOUD_ENABLED') != '1'"
