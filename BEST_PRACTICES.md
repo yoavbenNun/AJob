@@ -4,6 +4,13 @@ This file records durable lessons discovered while building AJob. Read it before
 making changes and update it when a new failure mode or
 reusable lesson appears.
 
+- Test mobile note editing against visualViewport changes as well as layout
+  resizes; virtual keyboards and pinch zoom can otherwise hide the editor.
+  Use synthetic data and distinguish WebKit engine tests from physical Safari.
+- DATABASE_URL only moves job storage. Before hosting, persist dashboard-only
+  SQLite notes/undo explicitly and add authenticated sessions; loopback Host and
+  CSRF protections do not establish a user's identity or make public access safe.
+
 - An empty retired Workday tenant does not establish employer coverage. Verify
   the current official portal and stable posting identity; keep academic
   prerequisites separate when repairing discovery, even for software internships.
