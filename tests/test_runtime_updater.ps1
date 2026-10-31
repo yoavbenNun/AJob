@@ -15,6 +15,31 @@ function Assert($Condition, $Message) {
     if (-not $Condition) { throw $Message }
     $script:assertions += 1
 }
+# Reproduce a desktop shell that has JSON/pipeline utilities but cannot
+# auto-discover Get-FileHash. Never alter the user's module path or settings.
+$moduleFixture = Join-Path ([IO.Path]::GetTempPath()) ('ajob-module-test-' + [guid]::NewGuid().ToString('N'))
+[void][IO.Directory]::CreateDirectory((Join-Path $moduleFixture 'old'))
+[void][IO.Directory]::CreateDirectory((Join-Path $moduleFixture 'new'))
+[IO.File]::WriteAllText((Join-Path $moduleFixture 'old\requirements.txt'), 'synthetic dependency')
+[IO.File]::WriteAllText((Join-Path $moduleFixture 'new\requirements.txt'), 'synthetic dependency')
+$moduleWrapper = @'
+param($Updater,$Fixture)
+$ErrorActionPreference='Stop'
+Import-Module (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1')
+Import-Module (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1') -Cmdlet Select-Object -Function NoMatchingFunction
+$PSModuleAutoLoadingPreference='None'
+if(Get-Command Get-FileHash -ErrorAction SilentlyContinue) { throw 'Fixture must start without Get-FileHash' }
+. $Updater -LibraryOnly
+if(-not (Get-Command Get-FileHash -ErrorAction SilentlyContinue)) { throw 'Updater must explicitly import Get-FileHash' }
+Assert-RuntimeDependencies (Join-Path $Fixture 'old') (Join-Path $Fixture 'new')
+Write-Output 'EXPLICIT_MODULE_HASH_OK'
+exit 0
+'@
+$moduleWrapperPath = Join-Path $moduleFixture 'run.ps1'
+[IO.File]::WriteAllText($moduleWrapperPath, $moduleWrapper)
+$updaterSource = (Resolve-Path (Join-Path $PSScriptRoot '..\scripts\update_dashboard_runtime.ps1')).Path
+$moduleOutput = & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File $moduleWrapperPath -Updater $updaterSource -Fixture $moduleFixture 2>&1
+Assert ($LASTEXITCODE -eq 0 -and ($moduleOutput -join "`n") -like '*EXPLICIT_MODULE_HASH_OK*') 'Dependency preparation must work without module auto-discovery'
 $sha = 'a' * 40
 $old = 'b' * 40
 function Queue-Run($Conclusion='success', $Event='push', $RunSha=$sha, $Status='completed') {
