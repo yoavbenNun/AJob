@@ -1,0 +1,11 @@
+FROM python:3.12-slim
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt && useradd --create-home dashboard
+COPY src ./src
+COPY config/companies.yaml ./config/companies.yaml
+USER dashboard
+# Factory fails closed without explicit cloud settings and pre-provisioned schema.
+# No access logging: query strings may include private searches. No proxy trust.
+CMD ["python", "-m", "src.web.cloud_server"]
