@@ -20,11 +20,19 @@ is reused. Concurrent shortcut launches coalesce under a nonblocking mutex.
 With no live server, start the candidate and check health, home and an existing job
 detail on port 8001. Only then atomically replace the version pointer, retaining
 the previous SHA/path. Startup or publication failure starts the previous version.
-The updater independently checks the listener's code directory and health before
-publication; a coalesced launcher exit alone is insufficient. A failed startup
+The updater independently checks the listener's interpreter, Uvicorn command,
+published code directory and health before publication or reuse; a coalesced
+launcher exit alone is insufficient. Windows raw TCP states 0 and 2 identify
+candidate owners only, never proof of a healthy AJob server. A failed startup
 reaps only the verified processes created by that attempt before rollback.
 Never prune old releases automatically. If the launcher is interrupted before
 publication, the old pointer remains authoritative on the next launch.
+If the active pointer itself cannot start, the recorded previous runtime is
+started and verified before restoring its pointer. If both versions fail, neither
+is marked healthy. Exited startup processes fail without waiting the full timeout.
+Updater error categories and source line numbers are recorded in
+`data/runtime-updater.log`; Python startup output remains in
+`data/dashboard.stderr.log`. Credentials and command arguments are not logged.
 
 Python, working directory, databases, resumes and DPAPI credentials stay in their
 original locations. No secrets enter Git arguments or release directories. Active
@@ -33,6 +41,9 @@ the next shortcut launch to adopt a newly approved release.
 
 Run focused offline regressions with Windows PowerShell:
 `powershell -NoProfile -File tests/test_runtime_updater.ps1`.
+Also run `powershell -NoProfile -File tests/test_published_launcher.ps1`.
+Both run in the Windows launcher CI job. Their process/network fixtures never
+contact the personal dashboard or require cloud credentials.
 Validate a real shortcut launch and concurrent launch separately; no scan/mail is
 needed. Bootstrap upgrades remain a deliberate local installation step.
 

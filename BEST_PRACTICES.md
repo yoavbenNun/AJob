@@ -36,6 +36,12 @@ reusable lesson appears.
 
 ## Environment and verification
 
+- Windows TCP enumeration can report a serving socket with raw state 0 rather
+  than Listen (2). Treat both as candidates, retain interpreter/code-directory
+  ownership and HTTP readiness checks, and test startup failure and fallback
+  without accessing the live port or private data. A launcher exit code alone
+  must never approve a release or a reused server.
+
 - In Windows PowerShell, pass `[NullString]::Value` rather than `$null` as the
   backup filename to `File.Replace`; otherwise atomic runtime publication can
   fail with an illegal-path error. Publish only after readiness, retain the old
