@@ -79,7 +79,9 @@ def extract_jobs_from_links(
         url = canonical_url(str(link.get("href", "")).strip())
         raw_text = str(link.get("text", "")).strip()
         context = str(link.get("context", "")).strip()
-        title = _first_nonempty_line(raw_text) or _title_from_url(url)
+        title = _first_nonempty_line(raw_text)
+        if not title or _is_generic_link_text(title):
+            title = _title_from_url(url)
         if (
             not url
             or url == careers_url
@@ -98,7 +100,7 @@ def extract_jobs_from_links(
                 source=company.careers_url,
             )
         existing = jobs_by_url.get(url)
-        has_descriptive_rendered_title = bool(raw_text) and not _is_generic_link_text(raw_text)
+        has_descriptive_rendered_title = bool(raw_text) and not _is_generic_link_text(_first_nonempty_line(raw_text))
         if (
             existing is None
             or _is_generic_link_text(existing.title)
@@ -595,10 +597,11 @@ def _first_nonempty_line(value: str) -> str:
 
 
 def _is_generic_link_text(value: str) -> bool:
-    return value.casefold().strip() in {
+    return " ".join(value.casefold().split()).strip(". …") in {
         "apply",
         "apply now",
         "learn more",
+        "read more",
         "view details",
         "view job",
     }

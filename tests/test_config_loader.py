@@ -63,9 +63,13 @@ def test_default_company_sources_use_safe_enabled_and_disabled_entries() -> None
     assert companies["Apple"].job_url_patterns == ("/en-il/details/",)
     assert companies["NVIDIA"].enabled is True
     assert companies["Intel"].enabled is True
-    for name in ("KLA", "F5", "Motorola Solutions", "Red Hat", "Clarivate", "Qualcomm", "Marvell"):
+    for name in ("KLA", "F5", "Motorola Solutions", "Red Hat", "Clarivate", "Marvell"):
         assert companies[name].enabled is True
         assert "myworkdayjobs.com" in companies[name].careers_url
+    assert companies["Qualcomm"].enabled is True
+    assert companies["Qualcomm"].careers_url == "https://careers.qualcomm.com/careers"
+    assert companies["Qualcomm"].job_url_patterns == ("/careers/job/",)
+    assert companies["Qualcomm"].allowed_job_hosts == ("careers.qualcomm.com",)
     assert companies["monday.com"].enabled is True
     assert companies["Wix"].enabled is True
     assert companies["AppsFlyer"].enabled is True

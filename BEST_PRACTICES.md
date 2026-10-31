@@ -4,6 +4,14 @@ This file records durable lessons discovered while building AJob. Read it before
 making changes and update it when a new failure mode or
 reusable lesson appears.
 
+- An empty retired Workday tenant does not establish employer coverage. Verify
+  the current official portal and stable posting identity; keep academic
+  prerequisites separate when repairing discovery, even for software internships.
+
+- Repeated job links can be labeled “...Read more”. Normalize exact navigation
+  labels before selecting a title; they must not overwrite a descriptive heading
+  or the stable URL-slug fallback and cause a false preliminary rejection.
+
 - Explicit code-development duties can establish software work for algorithm or
   systems student titles. Keep this evidence in responsibilities, not preferred
   qualifications or negated duties; preserve separate candidate eligibility.
