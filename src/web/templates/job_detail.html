@@ -4,9 +4,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% include '_app_metadata.html' %}
   <title>{{ job.title }} · AJob</title>
   <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}?v=20261015-7">
-  <link rel="stylesheet" href="{{ url_for('static', path='workspace.css') }}?v=20261025-2">
+  <link rel="stylesheet" href="{{ url_for('static', path='workspace.css') }}?v=20261031">
 </head>
 <body>
   <a class="skip-link" href="#job-content">Skip to job details</a>

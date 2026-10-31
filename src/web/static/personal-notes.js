@@ -5,8 +5,17 @@ function positionNote() {
   if (!activeNote) return;
   const { panel, trigger } = activeNote;
   const rect = trigger.getBoundingClientRect();
-  panel.style.setProperty('--note-left', `${Math.max(16, Math.min(rect.right - panel.offsetWidth, innerWidth - panel.offsetWidth - 16))}px`);
-  panel.style.setProperty('--note-top', `${Math.max(16, Math.min(rect.bottom + 8, innerHeight - panel.offsetHeight - 16))}px`);
+  // iOS keyboards and pinch zoom change the visible viewport independently of
+  // the layout viewport. Keep the editor scrollable inside the visible area.
+  const viewport = window.visualViewport;
+  const left = viewport?.offsetLeft || 0;
+  const top = viewport?.offsetTop || 0;
+  const width = viewport?.width || innerWidth;
+  const height = viewport?.height || innerHeight;
+  panel.style.setProperty('--note-max-width', `${Math.max(1, width - 32)}px`);
+  panel.style.setProperty('--note-max-height', `${Math.max(1, height - 32)}px`);
+  panel.style.setProperty('--note-left', `${Math.max(left + 16, Math.min(rect.right - panel.offsetWidth, left + width - panel.offsetWidth - 16))}px`);
+  panel.style.setProperty('--note-top', `${Math.max(top + 16, Math.min(rect.bottom + 8, top + height - panel.offsetHeight - 16))}px`);
 }
 
 function closeNote(discard = false, focus = true) {
@@ -91,3 +100,5 @@ document.addEventListener('keydown', (event) => {
 });
 window.addEventListener('resize', positionNote);
 window.addEventListener('scroll', positionNote, { passive: true });
+window.visualViewport?.addEventListener('resize', positionNote);
+window.visualViewport?.addEventListener('scroll', positionNote, { passive: true });

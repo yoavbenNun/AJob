@@ -1,4 +1,6 @@
 /* Balanced workspace: presentation only; shared by list and detail pages. */
+.stat-card-link { text-decoration: none; }
+.stat-card-link .stat-action { text-decoration: underline; text-underline-offset: 3px; }
 :root {
   --space-1: .25rem; --space-2: .5rem; --space-3: .75rem; --space-4: 1rem; --space-6: 1.5rem;
   --radius-control: 9px; --radius-card: 16px; --radius-panel: 20px;
@@ -177,7 +179,12 @@ body { background: linear-gradient(180deg, #eaf0f6, #f3f6fa 420px); }
   .dashboard-shell .results-heading h2 { font-size: 1.2rem; }
   .dashboard-shell .filters { grid-template-columns: 1fr; padding: .65rem; gap: .65rem; }
   .dashboard-shell .filters label { font-size: .8rem; }
-  .dashboard-shell .filters input, .dashboard-shell .filters select { font-size: .85rem; }
+  /* 16px prevents Safari's automatic input zoom; viewport scaling stays enabled. */
+  :is(.dashboard-shell, .detail-shell) :is(input, select, textarea),
+  .dashboard-shell .filters input, .dashboard-shell .filters select,
+  .dashboard-shell .note-form textarea { font-size: 16px; }
+  .detail-shell .workspace-nav a { display: inline-flex; align-items: center; min-height: 44px; }
+  .eligibility-more > summary, .source-copy > summary { min-height: 44px; padding-block: .65rem; }
   .search-bar { width: 100%; }
   .advanced-filters > summary { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-height: 44px; padding: .5rem .65rem; border: 1px solid #d2dde7; border-radius: 8px; background: #fff; font-size: .85rem; font-weight: 650; }
   .advanced-filters > summary::after { content: "+"; }

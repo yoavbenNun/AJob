@@ -4,11 +4,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% include '_app_metadata.html' %}
   <title>AJob · Opportunity dashboard</title>
   <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}?v=20261016-4">
-  <link rel="stylesheet" href="{{ url_for('static', path='personal-notes.css') }}?v=1">
+  <link rel="stylesheet" href="{{ url_for('static', path='personal-notes.css') }}?v=20261031">
   <link rel="stylesheet" href="{{ url_for('static', path='job-actions.css') }}?v=1">
-  <link rel="stylesheet" href="{{ url_for('static', path='workspace.css') }}?v=20261025-2">
+  <link rel="stylesheet" href="{{ url_for('static', path='workspace.css') }}?v=20261031">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -68,7 +69,7 @@
     </section>
     <section class="stats-grid" aria-label="Job search overview">
       <div class="stat-card"><span>Relevant roles</span><strong>{{ dashboard_stats.relevant }}</strong><small>Israel and remote</small></div>
-      <div class="stat-card stat-card--accent"><span>Needs review</span><strong>{{ dashboard_stats.new }}</strong><a class="stat-action" href="/?status=new#opportunities">Review new <span aria-hidden="true">→</span></a></div>
+      <a class="stat-card stat-card--accent stat-card-link" href="/?status=new#opportunities" aria-label="Review {{ dashboard_stats.new }} new opportunities"><span>Needs review</span><strong>{{ dashboard_stats.new }}</strong><span class="stat-action">Review new <span aria-hidden="true">→</span></span></a>
       <div class="stat-card"><span>Reviewed</span><strong>{{ dashboard_stats.reviewed }}</strong><small>Decisions in progress</small></div>
       <div class="stat-card"><span>Applied</span><strong>{{ dashboard_stats.applied }}</strong><small>Applications tracked</small></div>
     </section>
@@ -144,7 +145,7 @@
     </section>
   </main>
   <script src="{{ url_for('static', path='ui.js') }}?v=20261016-4" defer></script>
-  <script src="{{ url_for('static', path='personal-notes.js') }}?v=2" defer></script>
+  <script src="{{ url_for('static', path='personal-notes.js') }}?v=20261031" defer></script>
   <div class="job-feedback" role="status" aria-live="polite" hidden><span></span><button type="button" class="undo-dismiss" hidden>Undo</button><button type="button" class="close-feedback" aria-label="Close notification">&#215;</button></div>
   <script src="{{ url_for('static', path='job-actions.js') }}?v=1" defer></script>
 </body>
