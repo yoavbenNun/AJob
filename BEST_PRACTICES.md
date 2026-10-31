@@ -314,6 +314,11 @@ reusable lesson appears.
 
 ## Career platform adapters
 
+- JSON decoding errors alone cannot establish an ATS outage or blocking. Keep
+  bounded, allowlisted HTTP status/media-type/body-category diagnostics, never raw
+  responses or URLs. Diagnostic reads must preserve known 403/429 failures even
+  when the error body times out, and must not trigger bypasses or closure evidence.
+
 - Workday listing pages may expose no useful rendered anchors while their public
   careers JSON endpoint remains available. Keep that API handling in a dedicated
   adapter and validate the tenant, site, returned paths, and allowed host.
