@@ -94,6 +94,13 @@ reusable lesson appears.
 
 ## Career-site scraping
 
+- A SuccessFactors sitemap is discovery metadata, not a current-open/closure
+  snapshot or a posting-date source. Cross-check the active paginated search,
+  match numeric posting identity and scoped detail fields, and ignore nested CSS.
+  An advertised RSS link can still be disallowed by robots.txt; use allowed public
+  listings instead. Check cooperative deadlines during streamed bodies and before
+  returning success; the parent source worker owns the hard termination bound.
+
 - Career-site URL structures and rendered markup change. Keep job URL patterns in
   configuration and verify them against live rendered links before relying on them.
 - Allowlist job-link hosts per company, including explicit external ATS hosts.
