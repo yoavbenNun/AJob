@@ -35,3 +35,21 @@ renewable scan leases with write fencing, and separate fenced notification lease
 This avoids an expired session lock blocking later windows and separates SMTP
 retries from scans. No new cloud service/tier is introduced. See
 [rollout, limitations and seven-day acceptance](round2-reliability.md).
+
+## Workday failure diagnostics
+
+Decode Workday search responses through a bounded (4 MiB) JSON reader and attach
+only allowlisted response metadata to failures. Preserve HTTPError identity and
+403/429 stop behavior even when reading its optional diagnostic body fails.
+Metadata includes status, normalized media type, body category, byte count and
+final-URL redirect comparisons, not raw content, headers or URLs. urllib's normal
+response does not expose a full redirect chain; these booleans must not be
+represented as one. Source budgets, query terms and retry/mail policy are unchanged.
+
+The nine Workday failures on 2026-10-31 shared urllib POST + JSON decoding. The
+historical logs retained JSONDecodeError but not response metadata, so they cannot
+establish HTML blocking, empty responses or an upstream protocol change. Limited
+public metadata probes later returned HTTP 200/application/json without redirects
+for all nine tenants. Do not add speculative retries or claim historical recovery;
+use future scheduled diagnostics to identify any recurrence. No production scan
+or database access is needed for these probes or synthetic regression tests.

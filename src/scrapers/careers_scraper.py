@@ -22,6 +22,7 @@ from src.scrapers.paused_sources import scan_public_feed, supported as supports_
 from src.scrapers.fives import scan_jobs as scan_fives_jobs, supported as supports_fives
 from src.scrapers.workday_details import workday_urls, legacy_workday_url, fetch_workday_detail, workday_location
 from src.scrapers.failure_diagnostics import source_failure
+from src.scrapers.workday_http import read_json_response
 from src.scrapers.workday_search import israel_facet, explicitly_israel, contradicts_israel_filter, search_payload
 
 WORKDAY_SEARCH_TERMS = (
@@ -216,8 +217,15 @@ class CareersScraper:
             request = Request(endpoint, data=json.dumps(
                 {'appliedFacets': facets, 'limit': limit, 'offset': offset, 'searchText': text}
             ).encode(), headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}, method='POST')
-            with urlopen(request, timeout=timeout if timeout is not None else max(1, self.timeout_ms // 1000)) as response:
-                return search_payload(json.load(response))
+            try:
+                response = urlopen(request, timeout=timeout if timeout is not None else max(1, self.timeout_ms // 1000))
+            except HTTPError as error:
+                # Preserve status/exception identity, but collect only bounded,
+                # sanitized response metadata before closing the error stream.
+                with error:
+                    return read_json_response(error, endpoint, validate=search_payload)
+            with response:
+                return read_json_response(response, endpoint, validate=search_payload)
 
         try:
             # Metadata request is bounded and is not counted as a discovery scan.
@@ -229,6 +237,7 @@ class CareersScraper:
             facets = None
             metrics['location_filter_status'] = 'metadata_failed'
             metrics['metadata_error'] = type(error).__name__
+            metrics['metadata_failure'] = source_failure(error, 'metadata')
             if isinstance(error, HTTPError) and error.code in {403, 429}:
                 metrics['coverage_limited'] = True
                 return CompanyScanResult(company, error='Workday access denied', collection_metrics=metrics,
