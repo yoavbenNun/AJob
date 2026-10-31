@@ -19,7 +19,7 @@ phones. No dashboard endpoints, Host/Origin/CSRF protections or auth settings ch
 
 ## Measurements and coverage
 
-Chromium before/after with identical synthetic data:
+Chromium on Windows before/after with identical synthetic data and system fonts:
 
 | Width | First job before | First job after | Page overflow |
 | --- | ---: | ---: | --- |
@@ -29,6 +29,10 @@ Chromium before/after with identical synthetic data:
 | 430 | 687.1px | 687.1px | None |
 | 768 | 675.0px | 675.0px | None |
 | 1280 | 715.4px | 715.4px | None |
+
+Linux CI uses different system-font metrics (about 768px at 390px width and
+829px at 320px). Portable regressions require the first job to remain in the
+844px initial viewport; the exact Windows baseline is not a universal font metric.
 
 New browser tests run in Chromium and WebKit with touch-enabled iPhone-size
 contexts: ordering, 320/375/390/430 layouts, note draft/cancel/save/reload, failed
