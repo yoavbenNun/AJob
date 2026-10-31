@@ -14,7 +14,7 @@ from src.web.cloud_auth import (
 )
 
 ORIGIN = "https://dashboard.example.test"
-PASSWORD = "synthetic-owner-password-for-tests"
+PASSWORD = "synthetic-owner-password-for-tests"  # pragma: allowlist secret -- synthetic fixture, never a live credential
 
 
 class MemoryStore:

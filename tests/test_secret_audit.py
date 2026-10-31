@@ -29,3 +29,23 @@ def test_public_workday_fixture_exception_is_exact_and_history_safe(tmp_path):
     secret.type = "Base64 High Entropy String"
     setattr(secret, "secret_value", "different-value")
     assert len(inspect(b"other value", path)) == 1
+
+
+def test_synthetic_cloud_credential_exception_is_exact_and_history_safe(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    fixture = ast.parse((root / 'tests/test_cloud_auth.py').read_text(encoding='utf-8'))
+    value = next(ast.literal_eval(node.value) for node in fixture.body
+                 if isinstance(node, ast.Assign) and any(
+                     isinstance(target, ast.Name) and target.id == 'PASSWORD' for target in node.targets))
+    tree = ast.parse((root / 'scripts/audit_secrets.py').read_text(encoding='utf-8'))
+    inspector = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'inspect_text')
+    secret = SimpleNamespace(secret_value=value, type='Secret Keyword', line_number=17)
+    namespace = dict(Path=Path, TemporaryDirectory=lambda **kw: TemporaryDirectory(dir=tmp_path, **kw),
+                     hashlib=hashlib, scan_file=lambda _: [secret])
+    exec(compile(ast.Module(body=[inspector], type_ignores=[]), 'audit-policy', 'exec'), namespace)
+    inspect = namespace['inspect_text']
+    assert inspect(b'fixture', 'tests/test_cloud_auth.py') == []
+    assert inspect(b'fixture', 'tests/test_cloud_auth.py', blob='historical-blob') == []
+    assert len(inspect(b'fixture', 'src/web/cloud_auth.py')) == 1
+    secret.secret_value += '-different'
+    assert len(inspect(b'fixture', 'tests/test_cloud_auth.py')) == 1
