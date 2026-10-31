@@ -43,6 +43,11 @@ reusable lesson appears.
 
 ## Environment and verification
 
+- Test updater preparation in the actual desktop PowerShell context. Interactive
+  tooling can preload Get-FileHash while a shortcut cannot discover it; import
+  the shell's own Utility module explicitly before checking dependency hashes.
+  Cover unavailable module auto-loading in an isolated child-shell regression.
+
 - Windows TCP enumeration can report a serving socket with raw state 0 rather
   than Listen (2). Treat both as candidates, retain interpreter/code-directory
   ownership and HTTP readiness checks, and test startup failure and fallback

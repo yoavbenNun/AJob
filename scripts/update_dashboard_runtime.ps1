@@ -7,6 +7,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Desktop Windows PowerShell may not auto-discover Get-FileHash. Resolve its
+# module from this shell's PSHOME instead of relying on session discovery.
+Import-Module (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1')
 
 function Invoke-RuntimeCommand([string]$File, [string[]]$Arguments, [int]$Seconds = 8, [switch]$IgnoreOutput) {
     $info = New-Object Diagnostics.ProcessStartInfo
