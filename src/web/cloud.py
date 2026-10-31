@@ -84,6 +84,17 @@ def verify_dashboard_role(connection):
             OR has_table_privilege(current_user, 'public.job_postings', 'DELETE')
             OR has_table_privilege(current_user, 'public.job_postings', 'INSERT')
             OR has_table_privilege(current_user, 'public.job_postings', 'TRUNCATE')
+            OR EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                WHERE n.nspname='net' AND has_schema_privilege(current_user,n.oid,'USAGE')
+                AND CASE WHEN c.relkind='S' THEN
+                    has_sequence_privilege(current_user,c.oid,'USAGE,SELECT,UPDATE')
+                WHEN c.relkind IN ('r','p','v','m','f') THEN
+                    has_any_column_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')
+                    OR has_table_privilege(current_user,c.oid,'DELETE,TRUNCATE,TRIGGER')
+                ELSE false END)
+            OR EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+                WHERE n.nspname='net' AND has_schema_privilege(current_user,n.oid,'USAGE')
+                AND has_function_privilege(current_user,p.oid,'EXECUTE'))
             OR EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid='public.job_postings'::regclass
                 AND attnum>0 AND NOT attisdropped AND attname<>'status'
                 AND has_column_privilege(current_user, attrelid, attnum, 'UPDATE'))
