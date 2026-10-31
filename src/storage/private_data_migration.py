@@ -36,30 +36,34 @@ def restore_sqlite(backup, destination):
     backup_sqlite(backup, destination)
 
 
-def build_plan(jobs_path, notes_path, target_snapshot):
+def _identity_map(snapshot, label):
+    identities, urls = {}, set()
+    for row in snapshot:
+        url, job_id = canonical_url(row['job_url']), row['id']
+        if (not url or type(job_id) is not int or job_id <= 0
+                or job_id in identities or url in urls):
+            raise ValueError(f'Invalid or ambiguous {label} job identities')
+        identities[job_id] = url
+        urls.add(url)
+    return identities
+
+
+def build_plan(jobs_path, notes_path, target_snapshot, *, source_snapshot=None):
     """Map local IDs to reviewed target IDs by canonical URL, without writes.
 
     target_snapshot is a local JSON export containing [{"id": ..., "job_url": ...}].
     Conflicts/orphans abort the whole plan; no implicit merge or deletion occurs.
     """
-    targets = {}
-    target_ids = set()
-    for row in target_snapshot:
-        url = canonical_url(row['job_url'])
-        job_id = row['id']
-        if not url or type(job_id) is not int or job_id <= 0 or url in targets or job_id in target_ids:
-            raise ValueError('Invalid or ambiguous target job identities')
-        targets[url] = job_id
-        target_ids.add(job_id)
-    with read_only(jobs_path) as jobs:
-        identities = {}
-        seen = set()
-        for job_id, raw_url in jobs.execute('SELECT id, job_url FROM job_postings'):
-            url = canonical_url(raw_url)
-            if not url or url in seen:
-                raise ValueError('Invalid or ambiguous source job identities')
-            identities[job_id] = url
-            seen.add(url)
+    targets = {url: job_id for job_id, url in _identity_map(target_snapshot, 'target').items()}
+    if (jobs_path is None) == (source_snapshot is None):
+        raise ValueError('Choose exactly one authoritative source: SQLite jobs or job snapshot')
+    if source_snapshot is not None:
+        identities = _identity_map(source_snapshot, 'source')
+    else:
+        with read_only(jobs_path) as jobs:
+            identities = _identity_map(
+                ({'id': job_id, 'job_url': url}
+                 for job_id, url in jobs.execute('SELECT id, job_url FROM job_postings')), 'source')
     with read_only(notes_path) as private:
         tables = {row[0] for row in private.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         notes = list(private.execute('SELECT job_id,note FROM personal_notes')) if 'personal_notes' in tables else []
