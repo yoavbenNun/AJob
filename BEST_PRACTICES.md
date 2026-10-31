@@ -6,6 +6,9 @@
 - Map private notes/undo migrations by canonical job URL, not coincidental local
   IDs. Abort conflicts/orphans, retain backups, and commit cloud dismissal status
   plus undo metadata in one locked transaction. Keep cloud migrations manual.
+- Before migrating local notes, identify the dashboard's authoritative jobs
+  backend. A stale SQLite file can reuse PostgreSQL numeric IDs for unrelated
+  postings; use a reviewed snapshot from the actual backend and reject ambiguity.
 
 This file records durable lessons discovered while building AJob. Read it before
 making changes and update it when a new failure mode or

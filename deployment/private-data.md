@@ -41,7 +41,15 @@ be new paths; it refuses to overwrite existing files.
 python scripts/migrate_private_data.py backup PATH_TO_PRIVATE.db NEW_BACKUP.db
 python scripts/migrate_private_data.py restore NEW_BACKUP.db NEW_RESTORE.db
 python scripts/migrate_private_data.py dry-run --jobs LOCAL_JOBS.db --notes LOCAL_PRIVATE.db --target-snapshot TARGET_JOBS.json --output PRIVATE_PLAN.json
+python scripts/migrate_private_data.py dry-run --source-snapshot SOURCE_JOBS.json --notes LOCAL_PRIVATE.db --target-snapshot TARGET_JOBS.json --output PRIVATE_PLAN.json
 ```
+
+Choose the source that actually backs the desktop dashboard. When it uses
+PostgreSQL, use a reviewed `SOURCE_JOBS.json` export from that database, not a
+possibly stale `data/jobs.db`. The tool never connects to PostgreSQL. Source and
+target snapshots are local JSON lists of integer IDs and canonical posting URLs;
+obtain any real export only through an approved read-only path and keep it private.
+The CLI requires exactly one source and refuses conflicting identity maps.
 
 The target snapshot is a reviewed local JSON export with only target job IDs and
 URLs: `[{"id":42,"job_url":"https://example.test/job"}]`. Source and target IDs

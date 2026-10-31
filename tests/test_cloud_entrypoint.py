@@ -2,6 +2,7 @@
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
 import yaml
 
 from src.web import cloud_server
@@ -28,3 +29,31 @@ def test_example_is_explicitly_free_manual_and_contains_no_scanner_settings():
     docker=(root/'Dockerfile.dashboard').read_text()
     assert 'src.web.cloud_server' in docker
     assert 'playwright install' not in docker and 'src.main' not in docker
+
+
+@pytest.mark.parametrize('mode', ['scanner-credential-only', 'missing-password', 'http-origin', 'unverified-tls'])
+def test_cloud_configuration_fails_closed_without_reusing_local_settings(monkeypatch, mode):
+    from src.storage.postgres_job_repository import PostgresJobRepository
+    from src.web.cloud import create_cloud_app
+    from src.web.cloud_auth import hash_password
+    from test_cloud_auth import PASSWORD, ORIGIN
+    monkeypatch.setenv('AJOB_CLOUD_ENABLED', '1')
+    monkeypatch.setenv('AJOB_PUBLIC_ORIGIN', ORIGIN)
+    monkeypatch.setenv('AJOB_OWNER_PASSWORD_HASH', hash_password(PASSWORD))
+    monkeypatch.setenv('AJOB_DASHBOARD_DATABASE_URL',
+                       'postgresql://localhost/synthetic?sslmode=verify-full')
+    monkeypatch.setenv('DATABASE_URL', 'postgresql://localhost/unrelated-scanner')
+    if mode == 'scanner-credential-only':
+        monkeypatch.delenv('AJOB_DASHBOARD_DATABASE_URL')
+    elif mode == 'missing-password':
+        monkeypatch.delenv('AJOB_OWNER_PASSWORD_HASH')
+    elif mode == 'http-origin':
+        monkeypatch.setenv('AJOB_PUBLIC_ORIGIN', ORIGIN.replace('https:', 'http:'))
+    else:
+        monkeypatch.setenv('AJOB_DASHBOARD_DATABASE_URL',
+                           'postgresql://localhost/synthetic?sslmode=require')
+    connect = Mock(side_effect=AssertionError('Must fail before connecting'))
+    monkeypatch.setattr(PostgresJobRepository, '_connect', connect)
+    with pytest.raises(RuntimeError, match='Cloud startup validation failed'):
+        create_cloud_app()
+    connect.assert_not_called()

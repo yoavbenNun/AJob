@@ -1,7 +1,11 @@
 """Synthetic transaction/validation tests; SQLite is not PostgreSQL/RLS proof."""
 
 from contextlib import contextmanager
+import json
+from pathlib import Path
 import sqlite3
+import subprocess
+import sys
 
 import pytest
 
@@ -175,3 +179,45 @@ def test_missing_source_is_not_created(tmp_path):
         backup_sqlite(missing, tmp_path / 'backup.db')
     assert not missing.exists()
     assert not (tmp_path / 'backup.db').exists()
+
+
+def test_postgres_source_snapshot_avoids_unrelated_local_sqlite_ids(tmp_path):
+    jobs, private = source_files(tmp_path)
+    # The same numeric ID can identify a different posting in a stale local DB.
+    authoritative = [{'id': 1, 'job_url': 'https://example.test/actual-postgres-job'}]
+    target = [{'id': 7, 'job_url': 'https://example.test/job?a=1&b=2'},
+              {'id': 42, 'job_url': 'https://example.test/actual-postgres-job'}]
+    before_jobs, before_private = jobs.read_bytes(), private.read_bytes()
+    plan = build_plan(None, private, target, source_snapshot=authoritative)
+    assert plan['notes'][0]['job_id'] == 42
+    assert plan['dismissals'][0]['job_id'] == 42
+    assert jobs.read_bytes() == before_jobs and private.read_bytes() == before_private
+    with pytest.raises(ValueError, match='exactly one'):
+        build_plan(jobs, private, target, source_snapshot=authoritative)
+    with pytest.raises(ValueError, match='exactly one'):
+        build_plan(None, private, target)
+    for invalid in (authoritative * 2,
+                    [{'id': True, 'job_url': authoritative[0]['job_url']}],
+                    authoritative + [{'id': 1, 'job_url': 'https://example.test/different'}]):
+        with pytest.raises(ValueError):
+            build_plan(None, private, target, source_snapshot=invalid)
+
+
+def test_snapshot_cli_dry_run_prints_counts_only_and_never_changes_source(tmp_path):
+    _, private = source_files(tmp_path)
+    source = tmp_path / 'source.json'
+    target = tmp_path / 'target.json'
+    output = tmp_path / 'plan.json'
+    source.write_text(json.dumps([{'id': 1, 'job_url': 'https://example.test/job?a=1&b=2'}]))
+    target.write_text(json.dumps([{'id': 42, 'job_url': 'https://example.test/job?a=1&b=2'}]))
+    before = private.read_bytes()
+    script = Path(__file__).resolve().parents[1] / 'scripts/migrate_private_data.py'
+    result = subprocess.run([sys.executable, '-B', str(script), 'dry-run',
+        '--source-snapshot', str(source), '--notes', str(private),
+        '--target-snapshot', str(target), '--output', str(output)],
+        cwd=tmp_path, capture_output=True, text=True, timeout=15)
+    assert result.returncode == 0, result.stderr
+    assert '1 notes, 1 undo records' in result.stdout
+    assert 'synthetic private note' not in result.stdout + result.stderr
+    assert json.loads(output.read_text())['notes'][0]['job_id'] == 42
+    assert private.read_bytes() == before
