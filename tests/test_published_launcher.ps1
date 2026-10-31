@@ -124,3 +124,6 @@ $result = & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -No
 Assert ($LASTEXITCODE -eq 1) 'Exited startup must return failure'
 Assert (($result -join "`n") -like '*did not become ready*') 'Dead child must reach controlled startup failure without waiting or stopping unrelated processes'
 Write-Output "PASS: $script:assertions assertions; raw TCP states, listener deduplication, ownership, reuse, readiness and safe termination."
+# The expected failed child leaves LASTEXITCODE=1. Report this test script's
+# successful assertions explicitly to callers such as the Actions shell wrapper.
+exit 0
