@@ -8,6 +8,29 @@ def make_job(title: str) -> JobPosting:
     return JobPosting("" if title is None else title, "Example", "Remote", "https://example/jobs/1")
 
 
+@pytest.mark.parametrize("title", [
+    "Student Software Engineer", "Software Developer Intern", "Backend Student",
+    "Embedded Software Student", "C/C++ Student", "Python Developer Student",
+])
+def test_target_student_roles_keep_positive_development_evidence(title: str) -> None:
+    job = make_job(title)
+    job.location = "Rehovot, Israel"
+    job.description = "Develop software in C/C++ and Python for embedded and backend systems."
+    assert prefilter_job(job).relevant and classify_job(job).relevant
+
+
+@pytest.mark.parametrize("description", [
+    "No prior experience required, develop software for embedded systems.",
+    "You do not need prior experience to develop software.",
+    "No supervision is needed to develop software for embedded systems.",
+    "Not responsible for hardware design, develop software for embedded systems.",
+])
+def test_unrelated_negation_does_not_hide_positive_software_duty(description: str) -> None:
+    job = make_job("Engineering Student")
+    job.description = description
+    assert classify_job(job).relevant
+
+
 @pytest.mark.parametrize(
     ("title", "relevant"),
     [
@@ -153,4 +176,41 @@ def test_pursuing_company_goals_is_not_candidate_education() -> None:
 def test_industrial_automation_is_not_software_by_title_alone() -> None:
     job = make_job("Automation Engineer Intern")
     job.description = "Build PLC production fixtures and electrical panels."
+    assert classify_job(job).relevant is False
+
+
+@pytest.mark.parametrize("description", [
+    "This role does not involve software development. Perform manual QA and customer support.",
+    "You will not build software. Execute manual regression tests.",
+    "No firmware development is involved. Configure customer workstations.",
+    "The role doesn't involve developing software. Perform manual tests.",
+    "Work without writing software. Provide technical support.",
+    "Software development is not part of this role. Perform manual QA.",
+])
+def test_negated_software_duties_do_not_make_generic_student_role_relevant(description: str) -> None:
+    job = make_job("Engineering Student")
+    job.description = description
+    assert prefilter_job(job).relevant is True
+    assert classify_job(job).relevant is False
+
+
+@pytest.mark.parametrize("description", [
+    "Do not design hardware; develop software for embedded systems.",
+    "Do not design hardware. Develop software for embedded systems.",
+    "Do not design hardware but develop software for embedded systems.",
+    "You will not only develop software but also test embedded systems.",
+    "Develop software without direct supervision.",
+])
+def test_positive_software_duty_survives_negative_contrast(description: str) -> None:
+    job = make_job("Engineering Student")
+    job.description = description
+    assert classify_job(job).relevant is True
+
+
+def test_negated_duty_cannot_be_replaced_by_software_qualification() -> None:
+    job = make_job("Engineering Student")
+    job.description = (
+        "This role does not involve software development. Perform manual QA.\n"
+        "Requirements:\nSoftware development coursework."
+    )
     assert classify_job(job).relevant is False

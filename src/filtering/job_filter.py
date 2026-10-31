@@ -120,9 +120,18 @@ def classify_job(job: JobPosting) -> FilterDecision:
                 responsibilities,
             )
         )
-        if not develops_code and not develops_automation and not any(
-            _contains_phrase(responsibilities, term) for term in DETAIL_SOFTWARE_TERMS
-        ):
+        # A rejected duty is not evidence of development work. Check separate
+        # responsibility clauses so a negative contrast does not hide a later
+        # positive duty, and keep "not only" as affirmative wording.
+        software_clauses = (
+            _normalize(re.sub(r"\bnot only\b", "", part, flags=re.IGNORECASE))
+            for part in re.split(r"[.;!\n]|\bbut\b", responsibility_text, flags=re.IGNORECASE)
+        )
+        develops_software = any(
+            any(_positive_software_phrase(clause, term) for term in DETAIL_SOFTWARE_TERMS)
+            for clause in software_clauses
+        )
+        if not develops_code and not develops_automation and not develops_software:
             return FilterDecision(False, "no software-development responsibilities were found")
     if any(_contains_phrase(title, term) for term in EARLY_CAREER_TERMS):
         return FilterDecision(True, "title contains an early-career marker")
@@ -180,3 +189,20 @@ def _contains_phrase(text: str, phrase: str) -> bool:
         rf"(?<![\w]){re.escape(phrase)}(?![\w])",
         text,
     ) is not None
+
+
+def _positive_software_phrase(clause: str, phrase: str) -> bool:
+    for match in re.finditer(rf"(?<![\w]){re.escape(phrase)}(?![\w])", clause):
+        # Bind negation to the duty, not unrelated experience/supervision or
+        # hardware clauses before it. This is deliberately not general NLU.
+        if re.search(
+            r"\b(?:not|never|no|without|\w+n['’]t)\s+"
+            r"(?:(?:involve|involving|include|including|any|be|being|required|"
+            r"expected|responsible|related|for|to|doing|perform|performing|focus|on)\s+){0,5}$",
+            clause[:match.start()],
+        ):
+            continue
+        if re.match(r"\s+(?:(?:is|are|will be)\s+)?(?:not|never)\b", clause[match.end():]):
+            continue
+        return True
+    return False
