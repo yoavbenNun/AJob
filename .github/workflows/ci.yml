@@ -9,6 +9,17 @@ permissions:
   contents: read
 
 jobs:
+  launcher:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Windows launcher and updater regressions
+        shell: powershell
+        run: |
+          & ./tests/test_runtime_updater.ps1
+          & ./tests/test_published_launcher.ps1
   test:
     runs-on: ubuntu-latest
     services:

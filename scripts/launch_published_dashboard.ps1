@@ -38,8 +38,12 @@ function Show-LauncherError([string]$Message) {
 }
 
 function Get-DashboardListeners {
+    # Some Windows sockets report raw state 0 while serving HTTP. Include it
+    # only as a candidate; process ownership and HTTP readiness remain mandatory.
     # Include wildcard listeners: 0.0.0.0 can also prevent a loopback bind.
-    @(Get-NetTCPConnection -LocalPort 8001 -State Listen -ErrorAction SilentlyContinue)
+    @(Get-NetTCPConnection -LocalPort 8001 -ErrorAction SilentlyContinue |
+        Where-Object { $_.OwningProcess -gt 0 -and $_.CimInstanceProperties['State'].Value -in @(0, 2) } |
+        Group-Object OwningProcess | ForEach-Object { $_.Group[0] })
 }
 
 function Get-AJobProcess([int]$ProcessId) {
@@ -218,6 +222,7 @@ if (-not (Test-DashboardReady)) {
     $ready = $false
     $startupDeadline = [DateTime]::UtcNow.AddSeconds(60)
     while ([DateTime]::UtcNow -lt $startupDeadline) {
+        if ($launchedServer.HasExited) { break }
         Start-Sleep -Milliseconds 500
         if (Test-DashboardReady) {
             $ready = $true

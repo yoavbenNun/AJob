@@ -115,28 +115,90 @@ ${function:Invoke-RuntimeCommand} = $originalCommand
 # A launcher exit 0 must not publish a different/unhealthy server after a race.
 function Invoke-RuntimeCommand { param($File,$Arguments,$Seconds,[switch]$IgnoreOutput) return '' }
 $script:listenerCount = 1
-$script:servingCode = 'C:\synthetic-runtime\candidate'
+$script:servingCode = 'C:\synthetic-runtime\.local-runtime\releases\candidate'
 $script:healthName = 'AJob'
+$script:healthStatus = 'ok'
+$script:rawState = 0
+$script:executable = 'C:\synthetic-runtime\.venv\Scripts\python.exe'
+$script:parentExecutable = $script:executable
+$script:serverArguments = '-m uvicorn src.web.app:app'
 function Get-NetTCPConnection { param($LocalPort,$State,$ErrorAction)
-    if ($script:listenerCount) { [PSCustomObject]@{OwningProcess=123} }
+    if ($script:listenerCount) { [PSCustomObject]@{OwningProcess=123;CimInstanceProperties=@{State=@{Value=$script:rawState}}} }
 }
 function Get-CimInstance { param($ClassName,$Filter,$ErrorAction)
-    [PSCustomObject]@{CommandLine=('python -m uvicorn src.web.app:app --app-dir "' + $script:servingCode + '" --host 127.0.0.1 --port 8001')}
+    $executable = if ($Filter -eq 'ProcessId=456') { $script:parentExecutable } else { $script:executable }
+    [PSCustomObject]@{ProcessId=123;ParentProcessId=456;ExecutablePath=$executable;CreationDate=[datetime]'2026-01-01';CommandLine=('"' + $executable + '" ' + $script:serverArguments + ' --app-dir "' + $script:servingCode + '" --host 127.0.0.1 --port 8001')}
 }
-function Invoke-RestMethod { param($Uri,$TimeoutSec) [PSCustomObject]@{name=$script:healthName} }
-Start-Runtime 'launcher' 'C:\synthetic-runtime' 'C:\synthetic-runtime\candidate'
+function Invoke-RestMethod { param($Uri,$TimeoutSec) [PSCustomObject]@{name=$script:healthName;status=$script:healthStatus} }
+$selected = $script:servingCode
+Start-Runtime 'launcher' 'C:\synthetic-runtime' $selected
 Assert $true 'Selected runtime must be verified after launcher success'
-$script:servingCode = 'C:\synthetic-runtime\other'
+$script:servingCode = 'C:\synthetic-runtime\.local-runtime\releases\other'
 $refused = $false
-try { Start-Runtime 'launcher' 'C:\synthetic-runtime' 'C:\synthetic-runtime\candidate' } catch { $refused=$true }
+try { Start-Runtime 'launcher' 'C:\synthetic-runtime' $selected } catch { $refused=$true }
 Assert $refused 'Wrong serving path must be refused despite exit 0'
-$script:servingCode = 'C:\synthetic-runtime\candidate'
+$script:servingCode = $selected
 $script:healthName = 'Other app'
 $refused = $false
-try { Start-Runtime 'launcher' 'C:\synthetic-runtime' 'C:\synthetic-runtime\candidate' } catch { $refused=$true }
+try { Start-Runtime 'launcher' 'C:\synthetic-runtime' $selected } catch { $refused=$true }
 Assert $refused 'Wrong health identity must be refused'
 $script:listenerCount = 0
 $refused = $false
-try { Start-Runtime 'launcher' 'C:\synthetic-runtime' 'C:\synthetic-runtime\candidate' } catch { $refused=$true }
+try { Start-Runtime 'launcher' 'C:\synthetic-runtime' $selected } catch { $refused=$true }
 Assert $refused 'No listener must be refused despite exit 0'
+$script:listenerCount = 1
+$script:healthName = 'AJob'
+foreach ($state in 0,2) {
+    $script:rawState = $state
+    Start-Runtime 'launcher' 'C:\synthetic-runtime' $selected -Reuse
+    Assert $true "Reuse must independently verify a healthy state-$state server"
+}
+$script:rawState = 11
+Assert (@(Get-RuntimeListeners).Count -eq 0) 'TIME_WAIT is not a candidate listener'
+$script:rawState = 0
+foreach ($reuse in $false,$true) {
+    $script:executable = 'C:\foreign\python.exe'
+    $script:parentExecutable = 'C:\foreign\python.exe'
+    $refused = $false
+    try { Start-Runtime 'launcher' 'C:\synthetic-runtime' $selected -Reuse:$reuse } catch { $refused=$true }
+    Assert $refused 'Open port, copied arguments and forged AJob health cannot prove interpreter ownership'
+    $script:executable = 'C:\synthetic-runtime\.venv\Scripts\python.exe'
+    $script:serverArguments = '-m foreign.app'
+    $refused = $false
+    try { Start-Runtime 'launcher' 'C:\synthetic-runtime' $selected -Reuse:$reuse } catch { $refused=$true }
+    Assert $refused 'Foreign command must not pass even from the expected interpreter'
+    $script:serverArguments = '-m uvicorn src.web.app:app'
+    $script:servingCode = 'C:\foreign\code'
+    $refused = $false
+    try { Start-Runtime 'launcher' 'C:\synthetic-runtime' $selected -Reuse:$reuse } catch { $refused=$true }
+    Assert $refused 'Reuse must not accept a foreign code directory'
+    $script:servingCode = $selected
+    $script:healthStatus = 'failed'
+    $refused = $false
+    try { Start-Runtime 'launcher' 'C:\synthetic-runtime' $selected -Reuse:$reuse } catch { $refused=$true }
+    Assert $refused 'AJob name alone cannot establish health'
+    $script:healthStatus = 'ok'
+}
+$script:executable = 'C:\base\python.exe'
+$script:parentExecutable = 'C:\synthetic-runtime\.venv\Scripts\python.exe'
+Start-Runtime 'launcher' 'C:\synthetic-runtime' $selected
+Assert $true 'Windows venv parent delegation must retain ownership across interpreter paths'
+
+# Current-pointer failures use the recorded fallback; publish only after it starts.
+$script:starts = @()
+$script:savedVersion = $null
+function Start-Runtime { param($Launcher,$Root,$Code)
+    $script:starts += $Code
+    if ($Code -eq 'broken') { throw 'synthetic startup failure' }
+}
+function Save-RuntimeVersion { param($Path,$Version) $script:savedVersion=$Version }
+$broken = @{commit=$sha;code_root='broken';previous_commit=$old;previous_code_root='healthy';python='python'}
+Start-CurrentRuntime $broken 'launcher' 'root' 'pointer'
+Assert (($script:starts -join ',') -eq 'broken,healthy') 'Broken active runtime must start its previous runtime'
+Assert ($script:savedVersion.commit -eq $old) 'Fallback may publish only the verified previous version'
+function Start-Runtime { throw 'both runtimes unavailable' }
+$script:savedVersion = $null
+$refused = $false
+try { Start-CurrentRuntime $broken 'launcher' 'root' 'pointer' } catch { $refused=$true }
+Assert ($refused -and $null -eq $script:savedVersion) 'Failed fallback must never publish an unhealthy pointer'
 Write-Output "PASS: $script:assertions assertions; approval, offline, rollback, atomic publication, dependencies, real isolated Git preparation and selected-server verification."

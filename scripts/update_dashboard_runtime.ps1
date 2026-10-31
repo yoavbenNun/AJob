@@ -96,32 +96,74 @@ function Save-RuntimeVersion([string]$Path, $Version) {
     finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary } }
 }
 
+function Get-RuntimeListeners {
+    # Raw state 0 has been observed on a serving Windows socket. These are only
+    # candidates: ownership and HTTP identity must still be established.
+    @(Get-NetTCPConnection -LocalPort 8001 -ErrorAction SilentlyContinue |
+        Where-Object { $_.OwningProcess -gt 0 -and $_.CimInstanceProperties['State'].Value -in @(0, 2) } |
+        Group-Object OwningProcess | ForEach-Object { $_.Group[0] })
+}
+
 function Start-Runtime([string]$Launcher, [string]$Root, [string]$Code, [switch]$Reuse) {
     $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $Launcher,
                    '-DataRoot', $Root, '-RuntimeCodeRoot', $Code, '-NoBrowser', '-NonInteractive')
     if ($Reuse) { $arguments += '-ReuseRunning' }
     if ($ResumeDirectory) { $arguments += @('-ResumeDirectory', $ResumeDirectory) }
     [void](Invoke-RuntimeCommand "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" $arguments 90 -IgnoreOutput)
-    if (-not $Reuse) {
-        # A concurrent legacy launcher can release the child with exit 0 without
-        # starting our code. Never publish based on that exit status alone.
-        $listeners = @(Get-NetTCPConnection -LocalPort 8001 -State Listen -ErrorAction SilentlyContinue)
-        if ($listeners.Count -ne 1) { throw 'Selected runtime has no unique listener.' }
-        $owner = Get-CimInstance Win32_Process -Filter "ProcessId=$($listeners[0].OwningProcess)" -ErrorAction Stop
-        if ($owner.CommandLine -notmatch '(?:^|\s)--app-dir\s+(?:"([^"]+)"|(\S+))') { throw 'Runtime directory cannot be verified.' }
-        $runningCode = if ($Matches[1]) { $Matches[1] } else { $Matches[2] }
-        if ([IO.Path]::GetFullPath($runningCode).TrimEnd('\') -ine [IO.Path]::GetFullPath($Code).TrimEnd('\')) {
-            throw 'A different runtime is listening.'
-        }
-        $health = Invoke-RestMethod 'http://127.0.0.1:8001/health' -TimeoutSec 6
-        if ($health.name -ne 'AJob') { throw 'Selected runtime is unhealthy.' }
+    # Independently verify every launch, including reuse.
+    # A concurrent legacy launcher can release the child with exit 0 without
+    # starting our code. Never publish based on that exit status alone.
+    $listeners = @(Get-RuntimeListeners)
+    if ($listeners.Count -ne 1) { throw 'Selected runtime has no unique listener.' }
+    $owner = Get-CimInstance Win32_Process -Filter "ProcessId=$($listeners[0].OwningProcess)" -ErrorAction Stop
+    $signature = '(?i)(?:^|\s)-m\s+uvicorn\s+src\.web\.app:app(?:\s|$)'
+    if ($owner.CommandLine -notmatch $signature -or
+        $owner.CommandLine -notmatch '(?:^|\s)--host\s+127\.0\.0\.1(?:\s|$)' -or
+        $owner.CommandLine -notmatch '(?:^|\s)--port\s+8001(?:\s|$)') {
+        throw 'Selected listener is not an AJob server.'
     }
+    $python = Join-Path $Root '.venv\Scripts\python.exe'
+    if ($owner.ExecutablePath -ine $python) {
+        $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$($owner.ParentProcessId)" -ErrorAction Stop
+        if (-not $parent -or $parent.ExecutablePath -ine $python -or
+            ($parent.CommandLine -replace '^\s*(?:"[^"]+"|\S+)\s*', '') -ine
+                ($owner.CommandLine -replace '^\s*(?:"[^"]+"|\S+)\s*', '') -or
+            $parent.CreationDate -gt $owner.CreationDate) {
+            throw 'Selected listener interpreter cannot be verified.'
+        }
+    }
+    if ($owner.CommandLine -notmatch '(?:^|\s)--app-dir\s+(?:"([^"]+)"|(\S+))') { throw 'Runtime directory cannot be verified.' }
+    $runningCode = if ($Matches[1]) { $Matches[1] } else { $Matches[2] }
+    $runningCode = [IO.Path]::GetFullPath($runningCode).TrimEnd('\')
+    $runtimeRoot = Join-Path $Root '.local-runtime'
+    $releasePrefix = (Join-Path $runtimeRoot 'releases') + '\'
+    if ($runningCode -ine (Join-Path $runtimeRoot 'code') -and
+        -not $runningCode.StartsWith($releasePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Selected listener is outside the published runtime.'
+    }
+    if (-not $Reuse -and [IO.Path]::GetFullPath($runningCode).TrimEnd('\') -ine [IO.Path]::GetFullPath($Code).TrimEnd('\')) {
+        throw 'A different runtime is listening.'
+    }
+    $health = Invoke-RestMethod 'http://127.0.0.1:8001/health' -TimeoutSec 6
+    if ($health.name -ne 'AJob' -or $health.status -ne 'ok') { throw 'Selected runtime is unhealthy.' }
 }
 
 function Test-RuntimeImport([string]$Python, [string]$Candidate) {
     # No cloud configuration, user files or live database in the preparation probe.
     $probe = 'import os,sys,tempfile; os.environ.pop("DATABASE_URL",None); os.environ.pop("RESUME_DIRECTORY",None); temporary=tempfile.TemporaryDirectory(); os.chdir(temporary.name); sys.path.insert(0,sys.argv[1]); from src.web.app import app; from fastapi.testclient import TestClient; client=TestClient(app,base_url="http://127.0.0.1"); assert client.get("/health").status_code==200; assert client.get("/").status_code==200'
     [void](Invoke-RuntimeCommand $Python @('-I', '-c', $probe, $Candidate) 20)
+}
+
+function Start-CurrentRuntime($Version, [string]$Launcher, [string]$Root, [string]$VersionPath) {
+    try { Start-Runtime $Launcher $Root $Version.code_root }
+    catch {
+        if (-not $Version.previous_code_root -or $Version.previous_code_root -eq $Version.code_root) { throw }
+        Start-Runtime $Launcher $Root $Version.previous_code_root
+        $restored = [ordered]@{commit=$Version.previous_commit; code_root=$Version.previous_code_root;
+            previous_commit=$Version.commit; previous_code_root=$Version.code_root;
+            data_working_directory=$Root; python=$Version.python}
+        Save-RuntimeVersion $VersionPath $restored
+    }
 }
 
 function Activate-Runtime($Version, [string]$Candidate, [string]$Sha, [string]$Launcher, [string]$Root, [string]$VersionPath) {
@@ -134,7 +176,7 @@ function Activate-Runtime($Version, [string]$Candidate, [string]$Sha, [string]$L
     }
     catch {
         # The old pointer remains intact until candidate readiness AND atomic publish.
-        Start-Runtime $Launcher $Root $Version.code_root
+        Start-CurrentRuntime $Version $Launcher $Root $VersionPath
         return $false
     }
 }
@@ -152,7 +194,7 @@ try {
     catch [Threading.AbandonedMutexException] { $locked = $true }
     if (-not $locked) { exit 0 }
     $version = Get-Content -LiteralPath $versionPath -Raw | ConvertFrom-Json
-    if (@(Get-NetTCPConnection -LocalPort 8001 -State Listen -ErrorAction SilentlyContinue).Count) {
+    if (@(Get-RuntimeListeners).Count) {
         # Any live listener prevents updating. The launcher verifies ownership.
         Start-Runtime $launcher $root $version.code_root -Reuse
     }
@@ -173,21 +215,23 @@ try {
         catch { Write-Output 'Update unavailable; using the existing AJob runtime.' }
         if ($candidate) {
             # Recheck after network/preparation in case a server appeared meanwhile.
-            if (@(Get-NetTCPConnection -LocalPort 8001 -State Listen -ErrorAction SilentlyContinue).Count) {
+            if (@(Get-RuntimeListeners).Count) {
                 Start-Runtime $launcher $root $version.code_root -Reuse
             }
             else { [void](Activate-Runtime $version $candidate $sha $launcher $root $versionPath) }
         }
-        else { Start-Runtime $launcher $root $version.code_root }
+        else { Start-CurrentRuntime $version $launcher $root $versionPath }
     }
     if (-not $NoBrowser) { Start-Process 'http://127.0.0.1:8001/' }
     Start-Sleep -Milliseconds 1500
 }
 catch {
-    if ($NonInteractive) { Write-Output 'AJob could not start; see data/dashboard.stderr.log.' }
+    $failure = [ordered]@{time=[DateTime]::UtcNow.ToString('o'); category=$_.FullyQualifiedErrorId; line=$_.InvocationInfo.ScriptLineNumber}
+    $failure | ConvertTo-Json -Compress | Add-Content -LiteralPath (Join-Path $root 'data\runtime-updater.log') -Encoding UTF8
+    if ($NonInteractive) { Write-Output 'AJob could not start; see data/runtime-updater.log and data/dashboard.stderr.log.' }
     else {
         Add-Type -AssemblyName PresentationFramework
-        [Windows.MessageBox]::Show('AJob could not start. See data/dashboard.stderr.log.', 'AJob') | Out-Null
+        [Windows.MessageBox]::Show('AJob could not start. See data/runtime-updater.log and data/dashboard.stderr.log.', 'AJob') | Out-Null
     }
     exit 1
 }
