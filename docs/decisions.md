@@ -36,6 +36,14 @@ This avoids an expired session lock blocking later windows and separates SMTP
 retries from scans. No new cloud service/tier is introduced. See
 [rollout, limitations and seven-day acceptance](round2-reliability.md).
 
+## Scheduled incident alert receipts
+
+For operational alert deduplication, use an independent optional receipt ledger,
+not window status mutations. A receipt is confirmed only after GitHub validates
+the exact prior failed Scheduled Scan attempt/business step. Pending observations
+are not acknowledgements. The feature stays off until separate manual schema and
+activation approval. See [semantics and deployment gate](scan-alert-dedup.md).
+
 ## Workday failure diagnostics
 
 Decode Workday search responses through a bounded (4 MiB) JSON reader and attach
