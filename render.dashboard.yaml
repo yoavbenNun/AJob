@@ -1,0 +1,19 @@
+# Example only. Do not create/deploy until identity, grants, schema and transfer
+# approvals are complete. Existing scanner workflows are unaffected.
+services:
+  - type: web
+    name: ajob-private-dashboard
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.dashboard
+    autoDeployTrigger: "off"
+    healthCheckPath: /healthz
+    envVars:
+      - key: AJOB_CLOUD_ENABLED
+        value: "1"
+      - key: AJOB_PUBLIC_ORIGIN
+        sync: false
+      - key: AJOB_DASHBOARD_DATABASE_URL
+        sync: false
+      - key: AJOB_OWNER_PASSWORD_HASH
+        sync: false

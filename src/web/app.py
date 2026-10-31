@@ -83,31 +83,37 @@ def create_app(
     notification_recipient_updater: Callable[[str], None] | None = update_cloud_email_recipient,
     company_config_path: str | Path | None = None,
     personal_notes_database_path: str | Path | None = None,
+    *,
+    cloud_services=None,
 ) -> FastAPI:
     """Create a local dashboard backed by the configured job repository."""
-    repository = create_job_repository(database_path)
+    repository = cloud_services.jobs if cloud_services else create_job_repository(database_path)
     if isinstance(repository, PostgresJobRepository):
         repository.verify_schema()
     else:
         repository.initialize()
     outreach_path = Path(outreach_database_path) if outreach_database_path else Path("data/outreach.db")
-    outreach_repository = OutreachRepository(outreach_path)
-    outreach_repository.initialize()
+    outreach_repository = None if cloud_services else OutreachRepository(outreach_path)
+    if outreach_repository is not None:
+        outreach_repository.initialize()
     application_path = (
         Path(application_database_path)
         if application_database_path
         else Path("data/applications.db")
     )
-    application_repository = ApplicationRepository(application_path)
-    application_repository.initialize()
+    application_repository = None if cloud_services else ApplicationRepository(application_path)
+    if application_repository is not None:
+        application_repository.initialize()
     notes_path = (Path(personal_notes_database_path) if personal_notes_database_path
                   else Path(database_path).parent / 'personal_notes.db')
-    notes_repository = PersonalNotesRepository(notes_path)
+    notes_repository = cloud_services.notes if cloud_services else PersonalNotesRepository(notes_path)
     notes_repository.initialize()
-    dismissals = DismissalRepository(notes_path)
+    dismissals = cloud_services.dismissals if cloud_services else DismissalRepository(notes_path)
     dismissals.initialize()
     dismissal_lock = threading.Lock()
     csrf_token = secrets.token_urlsafe(32)
+    def request_csrf(request):
+        return request.state.csrf_token if cloud_services else csrf_token
     # Presentation cache only: no scores or candidate data are persisted.
     # Both screens use the same resume revision and job evidence as the key.
     match_cache = {}
@@ -145,8 +151,9 @@ def create_app(
     ] = {}
 
     app = FastAPI(title="AJob", docs_url=None, redoc_url=None)
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]"])
-    app.add_middleware(LocalSecurityMiddleware)
+    if not cloud_services:
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]"])
+        app.add_middleware(LocalSecurityMiddleware)
     app.mount("/static", StaticFiles(directory=str(WEB_ROOT / "static")), name="static")
 
     @app.get("/health", include_in_schema=False)
@@ -194,7 +201,7 @@ def create_app(
         paused_companies = [
             configured.name for configured in configured_companies if not configured.enabled
         ]
-        active_resume = get_active_resume(allowed_resume_root)
+        active_resume = None if cloud_services else get_active_resume(allowed_resume_root)
         job_matches = {}
         resume_match_failed_ids = set()
         resume_match_error = False
@@ -280,7 +287,8 @@ def create_app(
                 "location_scope": location_scope,
                 "updated": updated,
                 "dashboard_stats": dashboard_stats,
-                "csrf_token": csrf_token,
+                "csrf_token": request_csrf(request),
+                "cloud_mode": cloud_services is not None,
                 "resume_upload_enabled": allowed_resume_root is not None,
                 "active_resume_name": active_resume.name if active_resume else None,
                 "resume_updated": resume_updated,
@@ -298,11 +306,16 @@ def create_app(
     @app.post('/jobs/{job_id}/dismissal')
     async def change_dismissal(request: Request, job_id: int):
         form = await request.form()
-        if not secrets.compare_digest(str(form.get('csrf_token', '')), csrf_token):
+        if not secrets.compare_digest(str(form.get('csrf_token', '')), request_csrf(request)):
             raise HTTPException(status_code=403, detail='Invalid form token')
         action = form.get('action')
         if action not in {'dismiss', 'restore'}:
             raise HTTPException(status_code=400, detail='Unknown dismissal action')
+        if cloud_services:
+            result = dismissals.change_status(job_id, action)
+            if result is None:
+                raise HTTPException(status_code=404, detail='Job not found')
+            return result
         # Serialize local history + cloud status changes; conditional updates also
         # protect against status edits by another dashboard process.
         with dismissal_lock:
@@ -327,14 +340,14 @@ def create_app(
     @app.post('/jobs/{job_id}/personal-note')
     async def save_personal_note(request: Request, job_id: int):
         form = await request.form()
-        if not secrets.compare_digest(str(form.get('csrf_token', '')), csrf_token):
+        if not secrets.compare_digest(str(form.get('csrf_token', '')), request_csrf(request)):
             raise HTTPException(status_code=403, detail='Invalid form token')
         _get_job_or_404(repository, job_id)
         try:
             note = notes_repository.save(job_id, form.get('note', ''))
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from None
-        except (sqlite3.Error, OSError):
+        except Exception:
             raise HTTPException(status_code=503, detail='Could not save your note. Keep your text and try again.') from None
         return {'note': note}
 
@@ -383,18 +396,19 @@ def create_app(
     def job_detail(request: Request, job_id: int, updated: int | None = None):
         job = _get_job_or_404(repository, job_id)
         match_context = {}
-        resume = get_active_resume(allowed_resume_root)
+        resume = None if cloud_services else get_active_resume(allowed_resume_root)
         if resume is not None:
             try:
                 match_context['match_result'] = current_match(parse_resume(resume), resume, job)
             except Exception:
                 match_context['match_error'] = 'The active resume could not be analyzed. Refresh or choose a valid resume.'
-        return _detail_response(request, job, updated=updated, csrf_token=csrf_token,
+        return _detail_response(request, job, updated=updated, csrf_token=request_csrf(request),
+                                cloud_mode=cloud_services is not None,
                                 resume_matching_enabled=allowed_resume_root is not None,
                                 **match_context,
-                                **_application_context(application_repository, job,
-                                                       tailored_resume_root),
-                                **_outreach_context(outreach_repository, job))
+                                **(_application_context(application_repository, job,
+                                                       tailored_resume_root) if not cloud_services else {}),
+                                **(_outreach_context(outreach_repository, job) if not cloud_services else {}))
 
     @app.post("/jobs/{job_id}/application/preview", response_class=HTMLResponse)
     async def preview_application(request: Request, job_id: int):
@@ -651,7 +665,7 @@ def create_app(
     @app.post("/jobs/{job_id}/status")
     async def update_job_status(request: Request, job_id: int):
         form = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
-        _validate_csrf(form, csrf_token)
+        _validate_csrf(form, request_csrf(request))
         requested_status = form.get("status", [""])[0]
         if requested_status not in JOB_STATUSES:
             raise HTTPException(status_code=400, detail="Unknown job status")
@@ -1020,4 +1034,11 @@ def _filter_jobs(
     ]
 
 
-app = create_app(resume_directory=os.getenv("RESUME_DIRECTORY"))
+def __getattr__(name):
+    # Importing the factory from the cloud entry point must not create local
+    # databases or inspect resumes. Preserve the desktop Uvicorn app target.
+    if name == "app":
+        instance = create_app(resume_directory=os.getenv("RESUME_DIRECTORY"))
+        globals()[name] = instance
+        return instance
+    raise AttributeError(name)
