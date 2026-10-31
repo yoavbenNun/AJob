@@ -153,6 +153,11 @@ reusable lesson appears.
 
 ## Relevance filtering
 
+- A software-duty phrase in a generic student description is not positive evidence
+  when that duty is explicitly negated. Test negative duties together with genuine
+  positive contrasts and unrelated negation to avoid trading false positives for
+  false negatives; keep qualification-only evidence separate from responsibilities.
+
 - Separate cheap title-based prefiltering from final classification based on full
   job details. This avoids opening clearly irrelevant roles without assuming every
   unlevelled software title is junior.
