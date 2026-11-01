@@ -85,6 +85,28 @@ def test_israel_beyond_global_page_limit_and_remote_both_retained(monkeypatch):
     assert result.collection_metrics['comparison_complete'] is True
 
 
+@pytest.mark.parametrize('max_pages,unique,limited', [(2, 40, True), (3, 41, False)])
+def test_zero_total_on_later_pages_does_not_hide_rows_or_duplicate_jobs(monkeypatch, max_pages, unique, limited):
+    # Observed on NVIDIA/Intel public search: a full second page can have total=0.
+    # Keep the already-correct fallback bounded, rather than raising default caps.
+    def reply(body):
+        if body['limit'] == 1:
+            return {'jobPostings': [], 'facets': []}
+        offset = body['offset']
+        count = 1 if offset == 40 else 20
+        return {'jobPostings': [posting(offset + n) for n in range(count)],
+                'total': 791 if offset == 0 else 0}
+    calls = install_api(monkeypatch, reply)
+    result = CareersScraper(None, max_pages=max_pages)._scan_workday(COMPANY)
+    assert result.error is None
+    assert len(result.jobs) == result.collection_metrics['global_unique'] == unique
+    assert result.collection_metrics['global_page_limit_reached'] is limited
+    assert result.collection_metrics['global_discovered'] == 4 * unique
+    assert result.collection_metrics['duplicates_avoided'] == 3 * unique
+    assert len(calls) == 1 + 4 * max_pages
+    assert all(body['offset'] < max_pages * 20 for body in calls)
+
+
 @pytest.mark.parametrize('metadata', [[], [{'facetParameter': 'locationCountry', 'values': [
     {'descriptor': 'France', 'id': 'fr'}]}]])
 def test_no_israel_facet_falls_back_without_guessing_id(monkeypatch, metadata):
