@@ -113,4 +113,3 @@ def test_sql_and_client_expose_exactly_the_same_guarded_typed_rpc_set():
     assert "auth_user_id=auth.uid()" in source
     assert "->> 'role') = 'ajob_cloud_api'" in source
     assert "NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS" in source
-
