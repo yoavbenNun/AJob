@@ -480,3 +480,6 @@ reusable lesson appears.
   the whole exposed PostgREST surface, not only an application's chosen profile.
   Validate provider-issued identity before trusting claims; never put a project
   signing key, service_role or SQL password in the public dashboard.
+- Test manual role/function migrations as a non-superuser too. PostgreSQL 16+
+  role creation grants ADMIN without SET/INHERIT; restore temporary membership
+  options by grantor and keep FORCE-RLS identity seeding explicit and atomic.

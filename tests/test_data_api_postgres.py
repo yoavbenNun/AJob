@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import uuid
+from urllib.parse import quote, urlencode
 
 import psycopg
 from psycopg import sql
@@ -22,6 +23,28 @@ from src.storage.postgres_job_repository import PostgresJobRepository
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_database_uri(dsn, **overrides):
+    """Keep the repository's normal URI validation; don't bypass it for fixtures."""
+    settings = {**conninfo_to_dict(dsn), **overrides}
+    host = settings.pop('host')
+    if ':' in host:
+        host = '[' + host + ']'
+    user, password = settings.pop('user', ''), settings.pop('password', None)
+    authority = quote(user, safe='')
+    if password is not None:
+        authority += ':' + quote(password, safe='')
+    authority = (authority + '@' if authority else '') + host
+    if settings.get('port'):
+        authority += ':' + str(settings.pop('port'))
+    database = settings.pop('dbname')
+    return 'postgresql://' + authority + '/' + quote(database, safe='') + (
+        '?' + urlencode(settings) if settings else '')
+
+
+# Helper, not an independent pytest test.
+test_database_uri.__test__ = False
 
 
 @pytest.fixture(scope="module")
@@ -39,7 +62,7 @@ def data_api_database():
     names = ("ajob_cloud_api", "ajob_api_owner", "anon", "authenticated", "service_role",
              "authenticator", "supabase_auth_admin", "ajob_dashboard")
     roles = {name: "ajob_test_" + name + "_" + suffix for name in names}
-    target = make_conninfo(dsn, dbname=database)
+    target = test_database_uri(dsn, dbname=database)
     password = uuid.uuid4().hex
     owner_uuid, foreign_uuid = str(uuid.uuid4()), str(uuid.uuid4())
     with psycopg.connect(dsn, autocommit=True) as admin:
@@ -87,7 +110,7 @@ def data_api_database():
         job_id = jobs.save(JobPosting("Student engineer", "Synthetic", "Israel", "https://example.test/data-api"))
         yield {"target": target, "roles": roles, "owner_uuid": owner_uuid, "foreign_uuid": foreign_uuid,
                "job_id": job_id, "jobs": jobs, "migration": migration,
-               "authenticator_dsn": make_conninfo(target, user=roles["authenticator"], password=password)}
+               "authenticator_dsn": test_database_uri(target, user=roles["authenticator"], password=password)}
     finally:
         with psycopg.connect(dsn, autocommit=True) as admin:
             admin.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database)))
@@ -315,8 +338,8 @@ def test_real_pg17_non_superuser_standalone_migration_and_reapplication(data_api
     migration = (ROOT / "deployment/data-api.sql").read_text(encoding="utf-8")
     for original in sorted(new_roles, key=len, reverse=True):
         migration = migration.replace(original,new_roles[original])
-    target = make_conninfo(admin_dsn, dbname=database)
-    migration_dsn = make_conninfo(target,user=migrator,password=password)
+    target = test_database_uri(admin_dsn, dbname=database)
+    migration_dsn = test_database_uri(target,user=migrator,password=password)
     managed_roles = [data["roles"][name] for name in ("anon","authenticated","service_role","authenticator","supabase_auth_admin")]
     role_query = "SELECT rolname,rolsuper,rolcreaterole,rolcreatedb,rolcanlogin,rolinherit,rolbypassrls FROM pg_roles WHERE rolname=ANY(%s) ORDER BY rolname"
     membership_query = """SELECT roleid::regrole::text,member::regrole::text,grantor::regrole::text,

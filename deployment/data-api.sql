@@ -21,6 +21,10 @@ BEGIN
     FOREACH role_name IN ARRAY ARRAY['ajob_cloud_api','ajob_api_owner'] LOOP
         IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname=role_name) THEN
             EXECUTE format('CREATE ROLE %I NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS', role_name);
+            EXECUTE format('COMMENT ON ROLE %I IS ''AJob Data API v1''',role_name);
+        ELSIF (SELECT shobj_description(oid,'pg_authid') FROM pg_roles WHERE rolname=role_name)
+            IS DISTINCT FROM 'AJob Data API v1' THEN
+            RAISE EXCEPTION 'Existing unrelated Data API role requires review: %',role_name;
         END IF;
         IF EXISTS (SELECT FROM pg_roles WHERE rolname=role_name AND
             (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolbypassrls OR rolinherit))
