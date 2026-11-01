@@ -71,6 +71,8 @@ def test_cloud_surface_and_session_bound_forms(cloud_workspace, monkeypatch):
     positions = [response.text.index(f'data-job-id="{job_id}"') for job_id in [ids[2], ids[0], ids[1]]]
     assert positions == sorted(positions)
     assert 'Update email' not in response.text and 'Update resume' not in response.text
+    assert 'Saved in your private cloud workspace. Clear the text to delete.' in response.text
+    assert 'Saved only on this computer' not in response.text
     csrf = token(response)
     for path in ['/health','/openapi.json','/resume','/settings/notification-email',
                  f'/jobs/{ids[0]}/outreach/contacts',f'/jobs/{ids[0]}/application/preview']:

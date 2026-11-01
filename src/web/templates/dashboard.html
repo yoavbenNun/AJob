@@ -134,7 +134,7 @@
                 <form class="note-form" action="/jobs/{{ job.id }}/personal-note" method="post">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                   <label id="note-label-{{ job.id }}" for="note-text-{{ job.id }}">Personal note</label>
-                  <p class="note-hint" id="note-hint-{{ job.id }}">Saved only on this computer. Clear the text to delete.</p>
+                  <p class="note-hint" id="note-hint-{{ job.id }}">{{ 'Saved in your private cloud workspace.' if cloud_mode else 'Saved only on this computer.' }} Clear the text to delete.</p>
                   <textarea id="note-text-{{ job.id }}" name="note" rows="5" maxlength="2000" aria-describedby="note-hint-{{ job.id }}">{{ note }}</textarea>
                   <p class="note-error" role="alert" hidden></p>
                   <div class="note-editor__actions"><button type="button" class="note-cancel">Cancel</button><button type="submit">Save</button></div>
