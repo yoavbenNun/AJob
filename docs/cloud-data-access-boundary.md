@@ -35,7 +35,12 @@ Tests reproduce the PUBLIC grants with harmless fake objects in a disposable loc
 PostgreSQL database. Existing desktop/scanner code is unchanged. This is a guard,
 not a workaround that makes direct SQL safe on the reported project.
 
-## Recommended architecture — requires approval before implementation
+## Approved architecture — implemented separately, not activated
+
+The Data API implementation, identity flow, tests and remaining activation gates
+are documented in [cloud-data-api.md](cloud-data-api.md). The production access
+inventory and provider-issued-token checks remain mandatory; this decision does
+not authorize any production SQL, identity settings or deployment.
 
 Keep the existing Supabase project and Render Free, but remove SQL credentials
 from the public web service entirely:
@@ -119,7 +124,7 @@ scanner writes to implement it during this work.
    from the baseline, preserving other callers. Keep pg_net/PUBLIC/scanner roles
    unchanged; never fall back to the unsafe SQL login or replay mail/outbox state.
 
-Readiness: **NOT READY for the existing direct-SQL deployment**. The recommended
-Data API architecture is a proposal, not an implemented or tested production
-access path. Approve that architectural direction before building its adapter and
-identity integration; no further net ownership query is needed to justify it.
+Readiness: **NOT READY for the existing direct-SQL deployment**. The Data API
+adapter and isolated tests are implemented; no production access path has been
+activated or verified. Follow the linked activation gates before deployment;
+no further net ownership query is needed to justify the architectural direction.
