@@ -13,7 +13,17 @@ services:
         value: "1"
       - key: AJOB_PUBLIC_ORIGIN
         sync: false
-      - key: AJOB_DASHBOARD_DATABASE_URL
+      - key: AJOB_CLOUD_BACKEND
+        value: data_api
+      - key: AJOB_SUPABASE_URL
+        sync: false
+      - key: AJOB_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: AJOB_SUPABASE_AUTH_EMAIL
+        sync: false
+      - key: AJOB_SUPABASE_AUTH_PASSWORD
+        sync: false
+      - key: AJOB_SUPABASE_AUTH_SUBJECT
         sync: false
       - key: AJOB_OWNER_PASSWORD_HASH
         sync: false

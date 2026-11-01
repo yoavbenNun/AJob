@@ -122,14 +122,39 @@ def create_cloud_app():
     if os.getenv('AJOB_CLOUD_ENABLED') != '1':
         raise RuntimeError('Cloud dashboard is disabled')
     try:
-        database_url = os.environ['AJOB_DASHBOARD_DATABASE_URL']
-        parsed = urlsplit(database_url)
-        if parse_qs(parsed.query).get('sslmode') != ['verify-full']:
-            raise ValueError('Verified database TLS is required')
         config = CloudAuthConfig(
             public_origin=os.environ['AJOB_PUBLIC_ORIGIN'],
             password_hash=os.environ['AJOB_OWNER_PASSWORD_HASH'],
         )
+        backend = os.getenv('AJOB_CLOUD_BACKEND', 'data_api')
+        if backend == 'data_api':
+            # Configuration mistakes must not leave SQL credentials on the
+            # internet-facing process, even if this code would not use them.
+            if any(os.getenv(key) for key in (
+                    'DATABASE_URL', 'AJOB_DASHBOARD_DATABASE_URL',
+                    'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEY',
+                    'SUPABASE_JWT_SECRET', 'JWT_SECRET', 'PGPASSWORD')):
+                raise ValueError('Data API mode cannot hold privileged credentials')
+            from src.web.data_api_transport import DataApiClient
+            from src.storage.data_api_repository import (
+                DataApiJobRepository, DataApiPersonalNotesRepository,
+                DataApiDismissalRepository, DataApiAuthStore,
+            )
+            client = DataApiClient.from_env()
+            try:
+                client.preflight()
+                return build_cloud_app(config, CloudServices(
+                    DataApiJobRepository(client), DataApiPersonalNotesRepository(client),
+                    DataApiDismissalRepository(client)), DataApiAuthStore(client))
+            except Exception:
+                client.close()
+                raise
+        if backend != 'direct_sql':
+            raise ValueError('Unknown cloud backend')
+        database_url = os.environ['AJOB_DASHBOARD_DATABASE_URL']
+        parsed = urlsplit(database_url)
+        if parse_qs(parsed.query).get('sslmode') != ['verify-full']:
+            raise ValueError('Verified database TLS is required')
         jobs = PostgresJobRepository(database_url)
         bound_connection_time(jobs)
         with jobs._connect() as connection:

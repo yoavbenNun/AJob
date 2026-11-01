@@ -28,7 +28,7 @@ jobs:
         env:
           POSTGRES_HOST_AUTH_METHOD: trust
         ports:
-          - 5432:5432
+          - 127.0.0.1:5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 5s
@@ -37,6 +37,7 @@ jobs:
     env:
       # Disposable CI service only; never DATABASE_URL or repository secrets.
       AJOB_TEST_POSTGRES_DSN: postgresql://postgres@127.0.0.1:5432/postgres
+      AJOB_TEST_DATA_API_GATEWAY: "1"
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -47,6 +48,9 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade "pip>=26.2,<27"
       - run: pip install -r requirements.txt
+      - name: Pull pinned disposable PostgREST test gateway
+        timeout-minutes: 2
+        run: docker pull postgrest/postgrest:v13.0.7@sha256:0a46780309a604cdc8b56c776c6e5e15788ce58174d709e40459ab5a2d44d228
       - name: Install Chromium and WebKit for dashboard browser regressions
         run: python -m playwright install --with-deps chromium webkit
       - run: python -m pytest

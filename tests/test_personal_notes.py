@@ -40,6 +40,9 @@ def save(client, job_id, note):
 def test_create_edit_delete_preview_and_independent_jobs(workspace):
     build, jobs, ids, notes = workspace
     client = build()
+    html = client.get('/').text
+    assert 'Saved only on this computer. Clear the text to delete.' in html
+    assert 'Saved in your private cloud workspace.' not in html
     before = asdict(jobs.get_by_id(ids[0]))
     assert save(client, ids[0], 'Read the requirements. Ask about study flexibility.').status_code == 200
     assert save(client, ids[1], 'Different company questions').status_code == 200
