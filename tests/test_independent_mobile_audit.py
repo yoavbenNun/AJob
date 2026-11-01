@@ -375,9 +375,10 @@ def test_native_strict_cookie_cross_site_entry(mobile, request):
     assert not sent, 'SameSite=Strict session reached a cross-site initial navigation'
 
 
-@pytest.mark.xfail(strict=True, reason='M-01: cloud notes incorrectly claim computer-only storage')
 def test_cloud_note_storage_hint_is_cloud_accurate(cloud_workspace):
     app, _, _, config, _ = cloud_workspace
     client=TestClient(app, base_url=config.public_origin)
     auth_login(client)
-    assert 'Saved only on this computer' not in client.get('/').text
+    html = client.get('/').text
+    assert 'Saved in your private cloud workspace. Clear the text to delete.' in html
+    assert 'Saved only on this computer' not in html
