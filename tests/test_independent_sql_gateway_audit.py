@@ -85,3 +85,23 @@ def test_real_public_net_privileges_require_the_http_schema_barrier(gateway):
     assert response.status_code == 406 and response.json()['code'] == 'PGRST106'
     # This proves the configured synthetic gateway boundary only. It does not
     # inventory real public/GraphQL functions or assert all PUBLIC grants gone.
+
+
+def test_real_mapping_revocation_blocks_previously_valid_gateway_token(gateway):
+    data, client, headers = gateway['data'], gateway['client'], gateway['headers']
+    assert client.post('/rpc/ajob_jobs', json={}, headers=headers).status_code == 200
+    # Trusted administrator ONLY in this fresh disposable fixture database.
+    # No real identity/session is deleted and no schema is dropped or migrated.
+    with psycopg.connect(data['target'], autocommit=True) as admin:
+        original = admin.execute('SELECT singleton,auth_user_id FROM ajob_private.data_api_owner').fetchone()
+        assert original is not None
+        try:
+            admin.execute('DELETE FROM ajob_private.data_api_owner')
+            assert client.post('/rpc/ajob_jobs', json={}, headers=headers).status_code == 403
+            assert client.post('/rpc/ajob_note_save', json={
+                'p_job_id': data['job_id'], 'p_note': 'Revoked write'}, headers=headers).status_code == 403
+        finally:
+            admin.execute('INSERT INTO ajob_private.data_api_owner(singleton,auth_user_id) VALUES(%s,%s)', original)
+    assert client.post('/rpc/ajob_jobs', json={}, headers=headers).status_code == 200
+    notes = client.post('/rpc/ajob_notes', json={'p_job_ids': [data['job_id']]}, headers=headers)
+    assert notes.status_code == 200 and 'Revoked write' not in notes.text

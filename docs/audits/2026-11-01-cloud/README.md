@@ -137,10 +137,11 @@ role/subject זר, RLS, RPCs, Dismiss/Restore מקביל, rollback, Session pers
 הרשאות ובעלות פונקציות תחת מנהל שאינו Superuser. תצורת Auth issuance ו־`/user`
 בסביבת ה־gateway היא סינתטית — לא Supabase Auth אמיתי.
 
-נוספו גם חמש בדיקות אמיתיות עצמאיות ב־
+נוספו גם שש בדיקות אמיתיות עצמאיות ב־
 `tests/test_independent_sql_gateway_audit.py`: ID ידוע אינו מעניק Notes לזהות זרה,
 rollback של Dismiss באמצע טרנזקציה, Dismiss כפול במקביל, JWT חתום עם subject
-זר, וגבול HTTP בנוכחות הרשאות PUBLIC של net. מקומית הן דולגו במכוון: Docker
+זר, גבול HTTP בנוכחות הרשאות PUBLIC של net, וביטול מיפוי הרשאת owner תוך
+שימוש חוזר באותו JWT חתום שעדיין תקף קריפטוגרפית. מקומית הן דולגו במכוון: Docker
 engine אינו פעיל ולא נעשה שימוש ב־DSN קיים. הן משתמשות ב־fixtures הזמניים
 בלבד ורצות ב־CI הנדרש של ענף ה־Audit; תוצאתן נרשמת ב־check-run של ה־PR,
 בנפרד מתוצאות mocks. אין בדוח טענה שהן הורצו מול DB מקומי שלא היה זמין.
@@ -183,7 +184,12 @@ PUBLIC grants, פונקציות קיימות, quotas, TLS של השירות, Saf
 - rollback של נתונים אינו זהה ל־rollback קוד. מסמך ההפעלה דורש להשבית את Render,
   לבטל רק את הזהות/הרשאות ה־API החדשות, להחזיר hook/settings מה־baseline ולשמר
   Notes וסטטוסים. אין לחזור ל־SQL login המסוכן, למחוק טבלאות או לשחזר outbox.
-  זהו נוהל שנסקר, לא rollback Production שבוצע.
+  זהו נוהל שנסקר, לא rollback Production שבוצע. בדיקה עצמאית זמנית מסירה
+  ומחזירה מיפוי owner ומחייבת דחייה של JWT תקף בתקופת הביטול; אין בכך הרשאה
+  להריץ את הפעולה על הפרויקט האמיתי. [Supabase מתעד](https://supabase.com/docs/guides/auth/signout)
+  ש־access token עשוי להישאר תקף עד expiry אחרי sign-out. לכן השבתת חשבון או
+  logout לבדם אינם הוכחה לביטול מיידי; playbook מאושר חייב לבטל הרשאת API
+  ולבדוק שוב token ו־Session קיימים.
 
 ## 7. תנאים לפני מיזוג ולפני Deployment
 
