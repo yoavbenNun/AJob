@@ -3,6 +3,9 @@
 - Cloud dashboard sessions and login budgets must survive worker restarts in a
   private persistent store. Authenticate before serving private routes; never
   expose the loopback app as an internet entry point or trust identity headers.
+- A SQL login's job-table grants do not prove isolation on managed Supabase.
+  Inspect effective PUBLIC pg_net privileges too; block cloud startup on network
+  queue/function access. Never revoke managed extension grants as a diagnostic.
 - Map private notes/undo migrations by canonical job URL, not coincidental local
   IDs. Abort conflicts/orphans, retain backups, and commit cloud dismissal status
   plus undo metadata in one locked transaction. Keep cloud migrations manual.
