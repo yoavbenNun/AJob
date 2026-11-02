@@ -4,6 +4,17 @@ Opt-in, single-owner web service. Nothing here provisions a service, changes the
 scanner, migrates production or transfers private data. Desktop remains the
 default. Do not expose the desktop `src.web.app:app` entry point publicly.
 
+**Direct-SQL activation gate:** Supabase projects with effective PUBLIC pg_net
+access do not provide the required isolation for the public web service. Startup
+now rejects that access. See [the data-access boundary decision](cloud-data-access-boundary.md)
+for the boundary and [Data API implementation/activation guide](cloud-data-api.md).
+The Data API adapter is implemented but has not been activated. Do not proceed
+with an SQL login or revoke managed extension grants to bypass this gate.
+
+The Data API guide supersedes the direct-SQL activation/configuration steps below
+for this Supabase project. Legacy SQL documentation remains for isolated projects
+that pass the guard; it is not an instruction to provision production SQL access.
+
 ## Free-tier decision (official documentation checked 31 October 2026)
 
 Use **Render Free web + the existing Supabase PostgreSQL**, with application-owned

@@ -3,6 +3,9 @@
 - Cloud dashboard sessions and login budgets must survive worker restarts in a
   private persistent store. Authenticate before serving private routes; never
   expose the loopback app as an internet entry point or trust identity headers.
+- A SQL login's job-table grants do not prove isolation on managed Supabase.
+  Inspect effective PUBLIC pg_net privileges too; block cloud startup on network
+  queue/function access. Never revoke managed extension grants as a diagnostic.
 - Map private notes/undo migrations by canonical job URL, not coincidental local
   IDs. Abort conflicts/orphans, retain backups, and commit cloud dismissal status
   plus undo metadata in one locked transaction. Keep cloud migrations manual.
@@ -477,3 +480,13 @@ reusable lesson appears.
 - Install Chromium explicitly in CI when browser regressions guard critical user
   flows. A green suite with missing-browser skips does not validate native forms,
   notes or dismissal behavior; keep local and CI browser coverage observable.
+
+## Data-only cloud boundaries
+
+- A NOLOGIN API role still inherits PUBLIC database grants. Prove isolation at
+  the whole exposed PostgREST surface, not only an application's chosen profile.
+  Validate provider-issued identity before trusting claims; never put a project
+  signing key, service_role or SQL password in the public dashboard.
+- Test manual role/function migrations as a non-superuser too. PostgreSQL 16+
+  role creation grants ADMIN without SET/INHERIT; restore temporary membership
+  options by grantor and keep FORCE-RLS identity seeding explicit and atomic.

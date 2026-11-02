@@ -24,8 +24,12 @@ def test_example_is_explicitly_free_manual_and_contains_no_scanner_settings():
     assert spec['plan']=='free' and spec['autoDeployTrigger']=='off'
     assert spec['healthCheckPath']=='/healthz'
     assert {e['key'] for e in spec['envVars']} == {
-        'AJOB_CLOUD_ENABLED','AJOB_PUBLIC_ORIGIN','AJOB_DASHBOARD_DATABASE_URL','AJOB_OWNER_PASSWORD_HASH'}
-    assert all(e.get('sync') is False for e in spec['envVars'] if e['key']!='AJOB_CLOUD_ENABLED')
+        'AJOB_CLOUD_ENABLED','AJOB_PUBLIC_ORIGIN','AJOB_CLOUD_BACKEND',
+        'AJOB_SUPABASE_URL','AJOB_SUPABASE_PUBLISHABLE_KEY','AJOB_SUPABASE_AUTH_EMAIL',
+        'AJOB_SUPABASE_AUTH_PASSWORD','AJOB_SUPABASE_AUTH_SUBJECT','AJOB_OWNER_PASSWORD_HASH'}
+    assert all(e.get('sync') is False for e in spec['envVars']
+               if e['key'] not in {'AJOB_CLOUD_ENABLED', 'AJOB_CLOUD_BACKEND'})
+    assert next(e['value'] for e in spec['envVars'] if e['key']=='AJOB_CLOUD_BACKEND') == 'data_api'
     docker=(root/'Dockerfile.dashboard').read_text()
     assert 'src.web.cloud_server' in docker
     assert 'playwright install' not in docker and 'src.main' not in docker
@@ -38,6 +42,7 @@ def test_cloud_configuration_fails_closed_without_reusing_local_settings(monkeyp
     from src.web.cloud_auth import hash_password
     from test_cloud_auth import PASSWORD, ORIGIN
     monkeypatch.setenv('AJOB_CLOUD_ENABLED', '1')
+    monkeypatch.setenv('AJOB_CLOUD_BACKEND', 'direct_sql')
     monkeypatch.setenv('AJOB_PUBLIC_ORIGIN', ORIGIN)
     monkeypatch.setenv('AJOB_OWNER_PASSWORD_HASH', hash_password(PASSWORD))
     monkeypatch.setenv('AJOB_DASHBOARD_DATABASE_URL',
