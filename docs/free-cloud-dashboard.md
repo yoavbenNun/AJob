@@ -1,5 +1,9 @@
 # Personal cloud dashboard — implementation, not a live deployment
 
+**Frozen indefinitely, 2 November 2026.** The active dashboard is Local; Cloud
+is retained code, not an approved deployment. The instructions below are a future
+reference, not current authorization. See [maintenance mode](maintenance-mode.md).
+
 Opt-in, single-owner web service. Nothing here provisions a service, changes the
 scanner, migrates production or transfers private data. Desktop remains the
 default. Do not expose the desktop `src.web.app:app` entry point publicly.

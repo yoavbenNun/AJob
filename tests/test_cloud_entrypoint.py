@@ -23,6 +23,7 @@ def test_example_is_explicitly_free_manual_and_contains_no_scanner_settings():
     spec=yaml.safe_load((root/'render.dashboard.yaml').read_text())['services'][0]
     assert spec['plan']=='free' and spec['autoDeployTrigger']=='off'
     assert spec['healthCheckPath']=='/healthz'
+    assert next(e['value'] for e in spec['envVars'] if e['key']=='AJOB_CLOUD_ENABLED') == '0'
     assert {e['key'] for e in spec['envVars']} == {
         'AJOB_CLOUD_ENABLED','AJOB_PUBLIC_ORIGIN','AJOB_CLOUD_BACKEND',
         'AJOB_SUPABASE_URL','AJOB_SUPABASE_PUBLISHABLE_KEY','AJOB_SUPABASE_AUTH_EMAIL',

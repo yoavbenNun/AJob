@@ -1,5 +1,9 @@
 # Cloud Data API — implementation and activation gates
 
+**Frozen indefinitely, 2 November 2026.** Local Dashboard is the active product.
+This code is retained for possible future use, with no deployment approval.
+See [maintenance mode](maintenance-mode.md); the Render example is disabled.
+
 This is an inactive implementation, not a deployed service. It builds on PR #24's
 direct-SQL guard; neither PR is permission to activate production.
 

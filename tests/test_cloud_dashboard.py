@@ -50,8 +50,12 @@ def token(response):
     return re.search(r'name="csrf_token" value="([^"]+)"', response.text)[1]
 
 
-def test_cloud_factory_disabled_and_no_sqlite_fallback(monkeypatch):
-    monkeypatch.delenv('AJOB_CLOUD_ENABLED', raising=False)
+@pytest.mark.parametrize('enabled', [None, '0'])
+def test_cloud_factory_disabled_and_no_sqlite_fallback(monkeypatch, enabled):
+    if enabled is None:
+        monkeypatch.delenv('AJOB_CLOUD_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('AJOB_CLOUD_ENABLED', enabled)
     with pytest.raises(RuntimeError, match='disabled'):
         create_cloud_app()
 
