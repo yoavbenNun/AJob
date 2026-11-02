@@ -297,12 +297,13 @@ companies:
     allowed_job_hosts:
       - job-boards.greenhouse.io
   - name: Melio
-    careers_url: https://job-boards.greenhouse.io/melio
+    # Official careers app switched from Greenhouse to Ashby on 2026-10-28.
+    careers_url: https://careers.meliopayments.com/
     enabled: true
     job_url_patterns:
-      - /melio/jobs/
+      - /melio-payments/
     allowed_job_hosts:
-      - job-boards.greenhouse.io
+      - jobs.ashbyhq.com
   - name: Lightricks
     # Official careers page now points to the LTX and Facetune Greenhouse boards.
     careers_url: https://careers.lightricks.com/

@@ -97,7 +97,10 @@ def classify_job(job: JobPosting) -> FilterDecision:
     hardware_focused_title = any(
         _contains_phrase(title, term) for term in HARDWARE_FOCUS_TERMS
     )
-    if not software_title or hardware_focused_title:
+    # Process-compliance jobs can say "software" without any programming duties.
+    # Keep them eligible for enrichment, but require actual development evidence.
+    process_quality_title = _contains_phrase(title, "software quality")
+    if not software_title or hardware_focused_title or process_quality_title:
         responsibility_text = re.split(
             r"minimum qualifications|basic qualifications|preferred qualifications|"
             r"^\s*:?\s*(?:(?:job|minimum|basic|preferred|required)\s+)?"
@@ -111,26 +114,56 @@ def classify_job(job: JobPosting) -> FilterDecision:
             and not re.search(r"\b(?:not|never|no|without)\b|\b\w+n['’]t\b", clause)
             for clause in (_normalize(part) for part in re.split(r"[.;!\n]", responsibility_text))
         )
-        develops_automation = (
-            _contains_phrase(title, "automation")
-            and re.search(
-                r"(?<!not )(?<!never )\b(?:develop(?:ing)?|build(?:ing)?|implement(?:ing)?)\b"
-                r"[^.;!\n]{0,80}\b(?:test\s+)?automation\s+"
-                r"(?:frameworks?|infrastructure|tools?)\b",
-                responsibilities,
-            )
+        automation_pattern = (
+            r"(?<!not )(?<!never )\b(?:develop(?:ing)?|build(?:ing)?|implement(?:ing)?)\b"
+            r"[^.;!\n]{0,80}\b(?:test\s+)?automation\s+"
+            r"(?:frameworks?|infrastructure|tools?)\b"
         )
+        automation_match = re.search(automation_pattern, responsibilities)
+        develops_automation = (
+            (_contains_phrase(title, "automation") or process_quality_title)
+            and automation_match
+        )
+        detail_terms = DETAIL_SOFTWARE_TERMS
+        if process_quality_title:
+            # Nouns like "software development" in process/audit prose are not
+            # evidence that this role develops software. Retain direct duties.
+            detail_terms = tuple(term for term in DETAIL_SOFTWARE_TERMS
+                                 if term.startswith(('develop ', 'developing ', 'build ',
+                                                     'building ', 'write ', 'writing ', 'maintain ')))
         # A rejected duty is not evidence of development work. Check separate
         # responsibility clauses so a negative contrast does not hide a later
         # positive duty, and keep "not only" as affirmative wording.
-        software_clauses = (
+        software_clauses = tuple(
             _normalize(re.sub(r"\bnot only\b", "", part, flags=re.IGNORECASE))
             for part in re.split(r"[.;!\n]|\bbut\b", responsibility_text, flags=re.IGNORECASE)
         )
         develops_software = any(
-            any(_positive_software_phrase(clause, term) for term in DETAIL_SOFTWARE_TERMS)
+            any(_positive_software_phrase(clause, term) for term in detail_terms)
             for clause in software_clauses
         )
+        if process_quality_title:
+            # Preserve genuine coded-test work when the quality title alone no
+            # longer suffices. Scope negation to the duty, not supervision or
+            # experience wording elsewhere in its clause.
+            develops_code = develops_code or any(
+                _positive_software_phrase(clause, match.group())
+                for clause in software_clauses
+                for match in re.finditer(r"\b(?:develop(?:ing)?|writ(?:e|ing))\s+(?:production\s+)?code\b", clause)
+            )
+            develops_automation = any(
+                _positive_software_phrase(clause, match.group())
+                for clause in software_clauses
+                for match in re.finditer(automation_pattern, clause)
+            ) or any(
+                _positive_software_phrase(clause, match.group())
+                and any(_contains_phrase(clause, language) for language in
+                        ('python', 'c++', 'c#', 'java', 'javascript', 'typescript'))
+                for clause in software_clauses
+                for match in re.finditer(
+                    r"\b(?:develop(?:ing)?|writ(?:e|ing)|implement(?:ing)?|build(?:ing)?)\b"
+                    r"[^.;!\n]{0,60}\b(?:automated tests?|test automation)\b", clause)
+            )
         if not develops_code and not develops_automation and not develops_software:
             return FilterDecision(False, "no software-development responsibilities were found")
     if any(_contains_phrase(title, term) for term in EARLY_CAREER_TERMS):
@@ -197,7 +230,7 @@ def _positive_software_phrase(clause: str, phrase: str) -> bool:
         # hardware clauses before it. This is deliberately not general NLU.
         if re.search(
             r"\b(?:not|never|no|without|\w+n['’]t)\s+"
-            r"(?:(?:involve|involving|include|including|any|be|being|required|"
+            r"(?:(?:involve|involving|include|including|any|be|being|require|requires|requiring|required|"
             r"expected|responsible|related|for|to|doing|perform|performing|focus|on)\s+){0,5}$",
             clause[:match.start()],
         ):

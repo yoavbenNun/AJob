@@ -352,6 +352,13 @@ reusable lesson appears.
 
 ## Career platform adapters
 
+- A healthy empty retired ATS can hide an employer's recruiting migration.
+  Follow the employer's current official careers links to verify the replacement;
+  preserve old rows/statuses and do not infer closure or cross-ATS identity matches.
+- Workday can return full later pages with total=0. Fall back to page length,
+  retain explicit pagination caps, and distinguish raw cross-query counts from
+  unique postings. Cached search hits do not establish currently open vacancies.
+
 - JSON decoding errors alone cannot establish an ATS outage or blocking. Keep
   bounded, allowlisted HTTP status/media-type/body-category diagnostics, never raw
   responses or URLs. Diagnostic reads must preserve known 403/429 failures even
