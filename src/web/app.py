@@ -406,9 +406,16 @@ def create_app(
                                 cloud_mode=cloud_services is not None,
                                 resume_matching_enabled=allowed_resume_root is not None,
                                 **match_context,
-                                **(_application_context(application_repository, job,
-                                                       tailored_resume_root) if not cloud_services else {}),
                                 **(_outreach_context(outreach_repository, job) if not cloud_services else {}))
+
+    @app.get("/jobs/{job_id}/application", response_class=HTMLResponse)
+    def application_packages(request: Request, job_id: int):
+        if application_repository is None:
+            raise HTTPException(status_code=404)
+        return _application_response(
+            request, _get_job_or_404(repository, job_id), application_repository,
+            csrf_token, tailored_resume_root,
+        )
 
     @app.post("/jobs/{job_id}/application/preview", response_class=HTMLResponse)
     async def preview_application(request: Request, job_id: int):
@@ -417,7 +424,7 @@ def create_app(
         _validate_csrf(form, csrf_token)
         if tailored_resume_root is None:
             return _application_response(
-                request, job, application_repository, outreach_repository, csrf_token,
+                request, job, application_repository, csrf_token,
                 None, "Set RESUME_DIRECTORY to prepare an application package."
             )
         profile = CandidateApplicationProfile(
@@ -446,14 +453,14 @@ def create_app(
             )
         except (OSError, ValueError) as error:
             return _application_response(
-                request, job, application_repository, outreach_repository, csrf_token,
+                request, job, application_repository, csrf_token,
                 tailored_resume_root, str(error), application_profile=profile,
             )
         token = secrets.token_urlsafe(32)
         application_sessions[token] = (time.monotonic(), job_id, preview)
         _expire_application_sessions(application_sessions)
         return _application_response(
-            request, job, application_repository, outreach_repository, csrf_token,
+            request, job, application_repository, csrf_token,
             tailored_resume_root, application_preview=preview, application_token=token,
             application_profile=profile,
         )
@@ -468,7 +475,7 @@ def create_app(
         session = application_sessions.get(token)
         if session is None or session[1] != job_id:
             return _application_response(
-                request, job, application_repository, outreach_repository, csrf_token,
+                request, job, application_repository, csrf_token,
                 tailored_resume_root,
                 "The application preview expired. Create a new preview.",
             )
@@ -477,14 +484,14 @@ def create_app(
         except (OSError, ValueError) as error:
             application_sessions.pop(token, None)
             return _application_response(
-                request, job, application_repository, outreach_repository, csrf_token,
+                request, job, application_repository, csrf_token,
                 tailored_resume_root, str(error),
             )
         application_repository.save_profile(verified.profile)
         application_repository.save_approved_package(verified)
         application_sessions.pop(token, None)
         return RedirectResponse(
-            url=f"/jobs/{job_id}#application", status_code=status.HTTP_303_SEE_OTHER
+            url=f"/jobs/{job_id}/application", status_code=status.HTTP_303_SEE_OTHER
         )
 
     @app.post("/jobs/{job_id}/application/packages/{package_id}/submitted")
@@ -494,7 +501,7 @@ def create_app(
         _validate_csrf(form, csrf_token)
         if form.get("confirm_submission", [""])[0] != "yes":
             return _application_response(
-                request, job, application_repository, outreach_repository, csrf_token,
+                request, job, application_repository, csrf_token,
                 tailored_resume_root,
                 "Confirm that you submitted this application manually.",
             )
@@ -504,14 +511,14 @@ def create_app(
             )
         except ValueError as error:
             return _application_response(
-                request, job, application_repository, outreach_repository, csrf_token,
+                request, job, application_repository, csrf_token,
                 tailored_resume_root, str(error),
             )
         if not marked:
             raise HTTPException(status_code=404, detail="Prepared application not found")
         repository.update_status(job_id, "applied")
         return RedirectResponse(
-            url=f"/jobs/{job_id}#application", status_code=status.HTTP_303_SEE_OTHER
+            url=f"/jobs/{job_id}/application", status_code=status.HTTP_303_SEE_OTHER
         )
 
     @app.post("/jobs/{job_id}/outreach/contacts", response_class=HTMLResponse)
@@ -798,24 +805,21 @@ def _application_response(
     request: Request,
     job: JobPosting,
     application_repository: ApplicationRepository,
-    outreach_repository: OutreachRepository,
     csrf_token: str,
     tailored_resume_root: Path | None,
     application_error: str | None = None,
     **context: object,
 ):
-    response_context = _application_context(
-        application_repository, job, tailored_resume_root
-    )
-    response_context.update(_outreach_context(outreach_repository, job))
-    response_context.update(context)
-    return _detail_response(
+    return templates.TemplateResponse(
         request,
-        job,
-        csrf_token=csrf_token,
-        resume_matching_enabled=tailored_resume_root is not None,
-        application_error=application_error,
-        **response_context,
+        "application_packages.html",
+        {
+            "job": job,
+            "csrf_token": csrf_token,
+            "application_error": application_error,
+            **_application_context(application_repository, job, tailored_resume_root),
+            **context,
+        },
     )
 
 
@@ -827,11 +831,7 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
             "job": job,
             "statuses": JOB_STATUSES,
             "company_logos": COMPANY_LOGOS,
-            "description_lines": _summarize_captured_lines(
-                job.description, job,
-                keywords=("develop", "build", "design", "team", "responsib", "work with", "technology"),
-                limit=5,
-            ),
+            "role_summary": _summarize_role(job),
             "requirement_lines": _summarize_captured_lines(
                 job.requirements, job,
                 keywords=(
@@ -841,7 +841,6 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
                 ),
                 limit=7,
             ),
-            "full_description_lines": _clean_captured_lines(job.description, job),
             "full_requirement_lines": _clean_captured_lines(job.requirements, job),
             **context,
         },
@@ -871,6 +870,33 @@ def _clean_captured_lines(text: str, job: JobPosting) -> list[str]:
             continue
         cleaned.append(line)
     return cleaned
+
+
+# Prefer explicit duties over keyword mentions in qualifications or marketing copy.
+_ROLE_DUTY = re.compile(
+    r"^(?:(?:you(?:'ll|’ll| will)|the (?:intern|student|engineer) will)\s+)?"
+    r"(?:build|design|develop|implement|maintain|write|test|debug|automate|"
+    r"integrate|deploy|operate|monitor|support|analyze|collaborate|work on)\b"
+    r"|^(?:you(?:'ll|’ll| will) be|the role is) responsible for\b",
+    re.IGNORECASE,
+)
+
+
+def _summarize_role(job: JobPosting) -> str:
+    """Extract up to three short duties without paraphrasing the posting."""
+    duties: list[str] = []
+    for line in _clean_captured_lines(job.description, job):
+        for part in re.split(r"(?<!\b[A-Za-z][.!?])(?<=[.!?])\s+(?=[A-Z])", line):
+            sentence = " ".join(part.split())
+            if len(sentence) > 180 or not _ROLE_DUTY.match(sentence):
+                continue
+            if sentence[-1] not in ".!?":
+                sentence += "."
+            if sentence not in duties:
+                duties.append(sentence)
+            if len(duties) == 3:
+                return " ".join(duties)
+    return " ".join(duties) if len(duties) >= 2 else ""
 
 
 def _summarize_captured_lines(

@@ -2,6 +2,7 @@
 
 WebKit is Safari-engine coverage, not proof of behavior on physical iOS hardware.
 """
+from dataclasses import replace
 import socket
 import threading
 import time
@@ -77,6 +78,19 @@ def test_mobile_layout_order_focus_fonts_and_touch_targets(mobile_workspace, wid
     external = page.get_by_role('link', name='Open original posting')
     assert external.get_attribute('target') == '_blank'
     assert {'noopener','noreferrer'} <= set(external.get_attribute('rel').split())
+
+
+def test_role_summary_fits_small_viewport(mobile_workspace):
+    page, origin, repo, ids = mobile_workspace
+    job = repo.get_by_id(ids[0])
+    description = "Build and maintain Python services for deployment. Debug failures in the test pipeline."
+    repo.save(replace(job, description=description))
+    page.set_viewport_size({'width': 320, 'height': 760})
+    page.goto(origin + f'/jobs/{job.id}')
+    summary = page.locator('#overview p')
+    expect(summary).to_have_text(description)
+    assert summary.is_visible()
+    assert page.evaluate('document.documentElement.scrollWidth') <= 320
 
 
 def test_touch_notes_status_dismiss_undo_restore_and_drafts(mobile_workspace):
