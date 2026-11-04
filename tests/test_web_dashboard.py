@@ -8,6 +8,7 @@ from src.models import JobPosting
 from src.applications.service import discover_resume_pairs
 from src.resume.resume_manager import save_active_resume
 from src.storage.job_repository import JobRepository
+from src.storage.outreach_repository import OutreachRepository
 from src.storage.postgres_job_repository import PostgresJobRepository
 from src.web.app import _clean_captured_lines, _summarize_captured_lines, create_app
 
@@ -63,49 +64,48 @@ def test_outreach_requires_preview_and_approval_before_storing_draft(tmp_path) -
         "relationship": "hiring_team", "location": "Remote",
     })
     assert added.status_code == 200
-    assert "Ari" in added.text
-    assert "90/100" in added.text
+    assert "No verified LinkedIn contacts" in added.text
     assert "Approved messages" not in added.text
 
-    contact_id = re.search(r'name="contact_id" value="(\d+)"', added.text).group(1)
+    contact_id = str(OutreachRepository(tmp_path / "outreach.db").list_contacts_for_job(job_id)[0].id)
     preview = client.post(f"/jobs/{job_id}/outreach/preview", data={
         "csrf_token": _csrf_token(client, job_id), "contact_id": contact_id,
     })
-    assert "Edit full message" in preview.text
-    token = re.search(r'name="outreach_token" value="([^"]+)"', preview.text).group(1)
+    assert preview.context["outreach_preview"]["kind"] == "full_message"
+    token = preview.context["outreach_preview"]["token"]
     approved = client.post(f"/jobs/{job_id}/outreach/approve", data={
         "csrf_token": _csrf_token(client, job_id), "outreach_token": token,
         "kind": "full_message", "body": "Edited and explicitly approved message.",
     })
-    assert "Final approval" in approved.text
-    confirmation = re.search(r'name="confirmation_token" value="([^"]+)"', approved.text).group(1)
+    assert approved.context["outreach_confirmation"]["body"] == "Edited and explicitly approved message."
+    confirmation = approved.context["outreach_confirmation"]["token"]
     approved = client.post(f"/jobs/{job_id}/outreach/confirm", data={
         "csrf_token": _csrf_token(client, job_id), "confirmation_token": confirmation,
     })
     assert approved.status_code == 200
-    assert "Approved messages" in approved.text
-    assert "Edited and explicitly approved message." in approved.text
-    assert "I sent this manually" in approved.text
+    drafts = OutreachRepository(tmp_path / "outreach.db").list_approved_drafts(job_id)
+    assert drafts[0]["body"] == "Edited and explicitly approved message."
+    assert drafts[0]["sent_at"] is None
+    assert drafts[0]["body"] not in approved.text
 
 
-def test_outreach_search_shortcuts_and_connection_note(tmp_path) -> None:
+def test_outreach_connection_note_legacy_endpoint(tmp_path) -> None:
     client, job_id = _client_with_jobs(tmp_path)
     page = client.get(f"/jobs/{job_id}")
-    assert "Find Recruiters" in page.text
-    assert "site%3Alinkedin.com" in page.text
+    assert "Find Recruiters" not in page.text
+    assert "site%3Alinkedin.com" not in page.text
     client.post(f"/jobs/{job_id}/outreach/contacts", data={
         "csrf_token": _csrf_token(client, job_id), "display_name": "Ari",
         "role_title": "Engineer", "company": "Example",
         "profile_url": "https://linkedin.com/in/ari", "relationship": "employee",
     })
-    page = client.get(f"/jobs/{job_id}")
-    contact_id = re.search(r'name="contact_id" value="(\d+)"', page.text).group(1)
+    contact_id = str(OutreachRepository(tmp_path / "outreach.db").list_contacts_for_job(job_id)[0].id)
     preview = client.post(f"/jobs/{job_id}/outreach/preview", data={
         "csrf_token": _csrf_token(client, job_id), "contact_id": contact_id,
         "kind": "connection_note",
     })
-    assert 'name="kind" value="connection_note"' in preview.text
-    body = re.search(r'<textarea name="body"[^>]*>(.*?)</textarea>', preview.text, re.S).group(1)
+    assert preview.context["outreach_preview"]["kind"] == "connection_note"
+    body = preview.context["outreach_preview"]["body"]
     assert len(body) <= 300
 
 
@@ -116,28 +116,29 @@ def test_outreach_tracks_manual_activity_without_sending(tmp_path) -> None:
         "role_title": "Engineer", "company": "Example",
         "profile_url": "https://linkedin.com/in/ari", "relationship": "employee",
     })
-    page = client.get(f"/jobs/{job_id}")
-    contact_id = re.search(r'name="contact_id" value="(\d+)"', page.text).group(1)
+    contact_id = str(OutreachRepository(tmp_path / "outreach.db").list_contacts_for_job(job_id)[0].id)
     preview = client.post(f"/jobs/{job_id}/outreach/preview", data={
         "csrf_token": _csrf_token(client, job_id), "contact_id": contact_id,
         "kind": "full_message",
     })
-    token = re.search(r'name="outreach_token" value="([^"]+)"', preview.text).group(1)
+    token = preview.context["outreach_preview"]["token"]
     approved = client.post(f"/jobs/{job_id}/outreach/approve", data={
         "csrf_token": _csrf_token(client, job_id), "outreach_token": token,
         "kind": "full_message", "body": "Approved body",
     })
-    confirmation = re.search(r'name="confirmation_token" value="([^"]+)"', approved.text).group(1)
+    confirmation = approved.context["outreach_confirmation"]["token"]
     approved = client.post(f"/jobs/{job_id}/outreach/confirm", data={
         "csrf_token": _csrf_token(client, job_id), "confirmation_token": confirmation,
     })
-    draft_id = re.search(r'/outreach/drafts/(\d+)/activity', approved.text).group(1)
+    draft_id = OutreachRepository(tmp_path / "outreach.db").list_approved_drafts(job_id)[0]["id"]
     sent = client.post(f"/jobs/{job_id}/outreach/drafts/{draft_id}/activity", data={
         "csrf_token": _csrf_token(client, job_id), "action": "sent",
         "follow_up_at": "2030-01-02",
     })
-    assert "Sent manually" in sent.text
-    assert 'value="2030-01-02"' in sent.text
+    assert sent.status_code == 200
+    draft = OutreachRepository(tmp_path / "outreach.db").list_approved_drafts(job_id)[0]
+    assert draft["sent_at"] is not None
+    assert draft["follow_up_at"] == "2030-01-02"
 
 
 def test_outreach_rejects_invalid_profile_url(tmp_path) -> None:
@@ -146,7 +147,7 @@ def test_outreach_rejects_invalid_profile_url(tmp_path) -> None:
         "csrf_token": _csrf_token(client, job_id), "display_name": "Ari",
         "role_title": "Engineer", "company": "Example", "profile_url": "javascript:bad",
     })
-    assert "public HTTP(S) URL" in response.text
+    assert "public HTTP(S) URL" in response.context["outreach_error"]
     assert "Tailored resume" in response.text
     assert "Set RESUME_DIRECTORY and create a tailored" not in response.text
 

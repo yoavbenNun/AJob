@@ -5,6 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% include '_app_metadata.html' %}
+  <link rel="stylesheet" href="{{ url_for('static', path='contact-cards.css') }}?v=1">
   <title>{{ job.title }} · AJob</title>
   <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}?v=20261015-7">
   <link rel="stylesheet" href="{{ url_for('static', path='workspace.css') }}?v=20261031">
@@ -95,45 +96,9 @@
       {% if application_packages %}<h3>Prepared packages</h3>{% for package in application_packages %}<div class="change-review"><strong>{{ package.approved_at }} · {{ package.submission_status|replace('_', ' ') }}</strong><p>PDF: {{ package.resume_pdf_path }}<br>DOCX: {{ package.resume_docx_path }}</p>{% if package.cover_note %}<p class="preserve-lines"><strong>Cover note:</strong> {{ package.cover_note }}</p>{% endif %}<div class="action-row"><a class="button secondary" href="{{ package.job_url }}" target="_blank" rel="noopener noreferrer">Open employer page manually</a>{% if package.submission_status == 'prepared' %}<form method="post" action="/jobs/{{ job.id }}/application/packages/{{ package.id }}/submitted"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label><input type="checkbox" name="confirm_submission" value="yes" required> I already submitted this manually</label><button type="submit">Record manual submission</button></form>{% else %}<span class="notice">Manual submission recorded {{ package.submitted_at }}</span>{% endif %}</div></div>{% endfor %}{% endif %}
       </div>
     </details>
-    <details class="content-section collapsible-section" id="outreach" {% if outreach_error or outreach_preview or outreach_confirmation %}open{% endif %}>
-      <summary><span class="section-summary"><h2>Contact people</h2><small>{{ outreach_contacts|length }} saved · {{ outreach_drafts|length }} approved</small></span></summary>
-      <div class="collapsible-section__body">
-      <p class="safety-note"><strong>Public search, private workspace.</strong> AJob never scrapes LinkedIn or sends messages.</p>
-      <div class="step-heading"><span>1</span><div><h3>Find contacts</h3><p>Open a public search, then choose who is relevant.</p></div></div>
-      <div class="search-shortcuts">{% for search in contact_searches %}<a class="button secondary contact-search-link" href="{{ search.url }}" target="_blank" rel="noopener noreferrer"><span>Find {{ search.label }}</span><span aria-hidden="true">↗</span></a>{% endfor %}</div>
-      {% if outreach_error %}<p class="error-panel" role="alert">{{ outreach_error }}</p>{% endif %}
-      <details class="nested-disclosure" open><summary><span><strong>Add a contact</strong><small>Save a public profile locally</small></span></summary><div class="nested-disclosure__body">
-      <form class="outreach-form" method="post" action="/jobs/{{ job.id }}/outreach/contacts">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <label>Name<input name="display_name" required></label>
-        <label>Current role<input name="role_title" required></label>
-        <label>Company<input name="company" value="{{ job.company }}" required></label>
-        <label>Public profile URL<input name="profile_url" type="url" required placeholder="https://www.linkedin.com/in/..."></label>
-        <label>Relationship<select name="relationship"><option value="hiring_team">Hiring team</option><option value="recruiter">Recruiter</option><option value="employee" selected>Employee</option><option value="alumni">Alumni</option><option value="other">Other</option></select></label>
-        <label>Location<input name="location" placeholder="Optional"></label>
-        <label class="wide">Private note<input name="notes" maxlength="500" placeholder="Optional; stored locally only"></label>
-        <button type="submit">Save contact</button>
-      </form>
-      </div></details>
-      {% if outreach_contacts %}
-      <h3 class="subsection-title">Saved contacts</h3>
-      {% for item in outreach_contacts %}
-      <div class="contact-card">
-        <div><strong>{{ item.contact.display_name }}</strong> · {{ item.contact.role_title }} at {{ item.contact.company }}<br><span class="muted">{{ item.score }}/100 · {{ item.reasons|join(' · ') or 'No direct relevance signals yet' }}</span></div>
-        <div class="action-row"><a class="button secondary" href="{{ item.contact.profile_url }}" target="_blank" rel="noopener noreferrer">Open profile manually</a><form method="post" action="/jobs/{{ job.id }}/outreach/preview"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="contact_id" value="{{ item.contact.id }}"><button name="kind" value="connection_note" type="submit">Connection note</button><button name="kind" value="full_message" type="submit">Full message</button></form></div>
-      </div>
-      {% endfor %}
-      {% endif %}
-      {% if outreach_preview %}
-      <div class="change-review"><h3>Edit {{ outreach_preview.kind|replace('_', ' ') }}</h3><p class="muted">Verify every statement before approval.{% if outreach_preview.kind == 'connection_note' %} Limit: 300 characters.{% endif %}</p><form class="draft-editor" method="post" action="/jobs/{{ job.id }}/outreach/approve"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="outreach_token" value="{{ outreach_preview.token }}"><input type="hidden" name="kind" value="{{ outreach_preview.kind }}"><label>Message<textarea name="body" maxlength="{% if outreach_preview.kind == 'connection_note' %}300{% else %}2000{% endif %}" rows="8" required>{{ outreach_preview.body }}</textarea></label><button type="submit">Review message</button></form></div>
-      {% endif %}
-      {% if outreach_confirmation %}<div class="change-review"><h3>Final approval</h3><p class="muted">Confirm this exact text. It will only be stored locally; nothing is sent.</p><p class="preserve-lines">{{ outreach_confirmation.body }}</p><form method="post" action="/jobs/{{ job.id }}/outreach/confirm"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="confirmation_token" value="{{ outreach_confirmation.token }}"><button type="submit">Approve exact message</button></form></div>{% endif %}
-      {% if outreach_drafts %}<h3>Approved messages</h3>{% for draft in outreach_drafts %}<div class="change-review approved-draft"><strong>{{ draft.display_name }} · {{ draft.kind|replace('_', ' ') }}</strong><textarea id="draft-{{ draft.id }}" rows="7" readonly>{{ draft.body }}</textarea><div class="action-row"><button type="button" class="copy-draft" data-copy-target="draft-{{ draft.id }}" data-activity-form="copy-form-{{ draft.id }}">Copy message</button><form id="copy-form-{{ draft.id }}" method="post" action="/jobs/{{ job.id }}/outreach/drafts/{{ draft.id }}/activity"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="copied"><noscript><button type="submit">I copied this manually</button></noscript></form></div><p class="muted">Approved {{ draft.approved_at }}.{% if draft.copied_at %} Copied {{ draft.copied_at }}.{% endif %}{% if draft.sent_at %} Sent manually {{ draft.sent_at }}.{% endif %}{% if draft.replied_at %} Reply recorded {{ draft.replied_at }}.{% endif %}</p><form class="tracking-form" method="post" action="/jobs/{{ job.id }}/outreach/drafts/{{ draft.id }}/activity"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button name="action" value="sent" type="submit">I sent this manually</button><label>Follow up on<input type="date" name="follow_up_at" value="{{ draft.follow_up_at or '' }}"></label><label>Private response note<input name="response_note" maxlength="1000" value="{{ draft.response_note or '' }}"></label><button name="action" value="replied" type="submit">Mark reply received</button></form></div>{% endfor %}<p id="copy-status" class="muted" role="status" aria-live="polite"></p>{% endif %}
-      </div>
-    </details>
+    {% include '_contact_people.html' %}
     {% else %}<p class="notice">Personal resume matching and application files stay on your desktop. This workspace shows collected job information and your saved status.</p>{% endif %}
   </main>
   <script src="{{ url_for('static', path='ui.js') }}?v=20261015-1" defer></script>
-  <script src="{{ url_for('static', path='outreach.js') }}?v=20261015-1" defer></script>
 </body>
 </html>
