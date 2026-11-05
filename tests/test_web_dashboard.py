@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 from datetime import datetime, timezone
 from io import BytesIO
 import re
+import pytest
 from docx import Document
 
 from src.models import JobPosting
@@ -147,7 +148,7 @@ def test_outreach_rejects_invalid_profile_url(tmp_path) -> None:
         "role_title": "Engineer", "company": "Example", "profile_url": "javascript:bad",
     })
     assert "public HTTP(S) URL" in response.text
-    assert "Tailored resume" in response.text
+    assert "Prepare application" not in response.text
     assert "Set RESUME_DIRECTORY and create a tailored" not in response.text
 
 
@@ -400,11 +401,15 @@ def test_job_detail_uses_collapsible_content_sections(tmp_path) -> None:
     response = client.get(f"/jobs/{job_id}")
 
     assert response.status_code == 200
-    assert response.text.count('class="content-section collapsible-section"') >= 5
+    assert response.text.count('class="content-section collapsible-section"') >= 4
     assert "<h2>About the role</h2>" in response.text
     assert "<h2>What they’re looking for</h2>" in response.text
     assert "<h2>Resume match</h2>" in response.text
-    assert "<h2>Prepare application</h2>" in response.text
+    assert "Prepare application" not in response.text
+    assert 'id="application"' not in response.text
+    assert 'href="#application"' not in response.text
+    assert f'/jobs/{job_id}/application' not in response.text
+    assert 'name="application_token"' not in response.text
     assert "<h2>Contact people</h2>" in response.text
     assert "AJob" in response.text
     assert "company-generic.svg" in response.text
@@ -479,22 +484,39 @@ def test_job_detail_summary_preserves_short_technical_requirements() -> None:
     assert result == ["B.Sc.", "C++", "Python"]
 
 
-def test_job_detail_exposes_full_source_when_one_line_contains_omitted_sentences(tmp_path) -> None:
-    long_description = " ".join(f"Sentence {index} about the role." for index in range(1, 9))
+@pytest.mark.parametrize(
+    ("description", "expected"),
+    [
+        (
+            "Skip to main content\nOur team is growing. Build APIs. Maintain deployment tools. "
+            "Debug production issues. Monitor service uptime.",
+            "Not enough information to summarize this role.",
+        ),
+        (
+            "Responsibilities\n- Develop C++ services\n- Test API integrations",
+            "Develop C++ services. Test API integrations.",
+        ),
+        ("", "Not enough information to summarize this role."),
+        ("Build APIs. Python experience preferred.", "Not enough information to summarize this role."),
+    ],
+)
+def test_job_detail_role_overview_is_one_source_based_paragraph(tmp_path, description, expected):
     client, _ = _client_with_jobs(tmp_path)
     repository = JobRepository(tmp_path / "jobs.db")
     job_id = repository.save(
         JobPosting(
             "Software Intern", "Example", "Tel Aviv", "https://example.com/long-role",
-            description=long_description,
+            description=description,
         )
     )
 
     response = client.get(f"/jobs/{job_id}")
-
     assert response.status_code == 200
-    assert "View full captured description" in response.text
-    assert "Sentence 8 about the role." in response.text
+    overview = response.text.split('id="overview"', 1)[1].split("</details>", 1)[0]
+    assert re.findall(r"<p[^>]*>(.*?)</p>", overview) == [expected]
+    assert not re.search(r"<(?:ol|ul|li|details)\b", overview)
+    assert "View full captured description" not in response.text
+    assert repository.get_by_id(job_id).description == description
 
 
 def test_dashboard_uploads_resume_and_preserves_local_path_privacy(tmp_path) -> None:
@@ -617,7 +639,7 @@ def test_job_detail_calculates_a_local_match_without_exposing_resume_text(tmp_pa
     assert "/100 match" in response.text
     assert "Dana Developer" not in response.text
     assert "Set RESUME_DIRECTORY and create a tailored" not in response.text
-    assert "Tailored resume" in response.text
+    assert "Prepare application" not in response.text
 
 
 def test_dashboard_previews_and_generates_an_explicitly_approved_tailored_resume(tmp_path) -> None:
@@ -753,6 +775,13 @@ def test_application_requires_exact_preview_then_records_manual_submission(tmp_p
     assert approved.status_code == 200
     assert "Prepared packages" in approved.text
     assert "Open employer page manually" in approved.text
+    assert approved.url.path == f"/jobs/{job_id}/application"
+    packages_before = (tmp_path / "applications.db").read_bytes()
+    detail = client.get(f"/jobs/{job_id}")
+    assert "Prepared packages" not in detail.text
+    assert "/application/" not in detail.text
+    assert (tmp_path / "applications.db").read_bytes() == packages_before
+    assert "Prepared packages" in client.get(f"/jobs/{job_id}/application").text
     package_id = re.search(r'/application/packages/(\d+)/submitted', approved.text).group(1)
 
     replay = client.post(
@@ -766,7 +795,7 @@ def test_application_requires_exact_preview_then_records_manual_submission(tmp_p
         data={"csrf_token": _csrf_token(client, job_id), "confirm_submission": "yes"},
     )
     assert "Manual submission recorded" in submitted.text
-    assert 'status--applied' in submitted.text
+    assert JobRepository(tmp_path / "jobs.db").get_by_id(job_id).status == "applied"
 
 
 def test_application_form_lists_only_matching_tailored_resume_pairs(tmp_path) -> None:
@@ -775,7 +804,7 @@ def test_application_form_lists_only_matching_tailored_resume_pairs(tmp_path) ->
     unmatched = pdf.parent / "unmatched.pdf"
     unmatched.write_bytes(pdf.read_bytes())
 
-    page = client.get(f"/jobs/{job_id}")
+    page = client.get(f"/jobs/{job_id}/application")
 
     assert f'>{pdf.stem}</option>' in page.text
     assert str(pdf.parent) not in page.text
@@ -872,4 +901,3 @@ def test_dashboard_rejects_status_change_without_csrf_token(tmp_path) -> None:
     response = client.post(f"/jobs/{job_id}/status", data={"status": "applied"})
 
     assert response.status_code == 403
-import re
