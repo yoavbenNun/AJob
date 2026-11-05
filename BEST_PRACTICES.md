@@ -505,3 +505,6 @@ reusable lesson appears.
 - Do not use punctuation insertion as evidence of sentence completeness. Unknown
   unterminated continuations require fallback; only validated duty clauses may
   receive a final period. Deterministic checks cannot certify arbitrary grammar.
+
+- Role previews must retain complete adjacent source context; extract required and
+  preferred qualifications only from explicit sections and stop at the next heading.
