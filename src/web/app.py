@@ -872,31 +872,100 @@ def _clean_captured_lines(text: str, job: JobPosting) -> list[str]:
     return cleaned
 
 
-# Prefer explicit duties over keyword mentions in qualifications or marketing copy.
+# Extract duties verbatim; qualifiers remain attached to the original sentence.
 _ROLE_DUTY = re.compile(
-    r"^(?:(?:you(?:'ll|’ll| will)|the (?:intern|student|engineer) will)\s+)?"
-    r"(?:build|design|develop|implement|maintain|write|test|debug|automate|"
-    r"integrate|deploy|operate|monitor|support|analyze|collaborate|work on)\b"
-    r"|^(?:you(?:'ll|’ll| will) be|the role is) responsible for\b",
+    r"^(?:(?:in this (?:role|position)|as (?:an?|our) [^,.:;]{1,80}),\s*)?"
+    r"(?:(?:you(?:'ll|’ll| will| are)?|the (?:intern|student|engineer) will|"
+    r"the (?:role|position) is)\s+)?"
+    r"(?:(?:be )?responsible for\s+)?"
+    r"(?:build(?:ing)?|design(?:ing)?|develop(?:ing)?|implement(?:ing)?|"
+    r"maintain(?:ing)?|writ(?:e|ing)|test(?:ing)?|debug(?:ging)?|automat(?:e|ing)|"
+    r"integrat(?:e|ing)|deploy(?:ing)?|operat(?:e|ing)|monitor(?:ing)?|support(?:ing)?|"
+    r"analyz(?:e|ing)|collaborat(?:e|ing)|investigat(?:e|ing)|improv(?:e|ing)|"
+    r"work(?:ing)? (?:on|with))\b",
+    re.IGNORECASE,
+)
+_ROLE_SCOPE = re.compile(
+    r"^(?:(?:this|the) (?:work|role|position|responsibility|task)|"
+    r"however\b|but\b|do not\b|you (?:must not|will not|cannot)\b)",
+    re.IGNORECASE,
+)
+_ROLE_ABBREVIATION = re.compile(
+    r"(?:\b(?:e\.g|i\.e|B\.Sc|M\.Sc|Ph\.D|Dr|Mr|Ms)|\b[A-Z])\.$",
     re.IGNORECASE,
 )
 
 
+def _role_sentences(line: str) -> list[str]:
+    """Split plain prose regardless of case, retaining common abbreviations."""
+    sentences: list[str] = []
+    start = 0
+    for boundary in re.finditer(r"(?<=[.!?])\s+(?=\S)", line):
+        if _ROLE_ABBREVIATION.search(line[start:boundary.start()]):
+            continue
+        sentences.append(line[start:boundary.start()])
+        start = boundary.end()
+    sentences.append(line[start:])
+    return sentences
+
+
 def _summarize_role(job: JobPosting) -> str:
-    """Extract up to three short duties without paraphrasing the posting."""
-    duties: list[str] = []
+    """Select two or three complete duties; never truncate or paraphrase them."""
+    groups: list[list[str]] = []
+    current_group = None
+    filler = {"the", "a", "an", "and", "or", "with", "for", "to", "on", "of",
+              "our", "your", "their", "work"}
+    lines: list[str] = []
     for line in _clean_captured_lines(job.description, job):
-        for part in re.split(r"(?<!\b[A-Za-z][.!?])(?<=[.!?])\s+(?=[A-Z])", line):
-            sentence = " ".join(part.split())
-            if len(sentence) > 180 or not _ROLE_DUTY.match(sentence):
+        line = re.sub(r"^\d+[.)]\s+", "", " ".join(line.split()))
+        if (
+            lines and _ROLE_DUTY.match(lines[-1])
+            and not re.search(r"[.!?:]$", lines[-1])
+            and not _ROLE_DUTY.match(line)
+            and (line[0].islower() or re.search(r"\b(?:with|using|for|and|to)$", lines[-1]))
+        ):
+            lines[-1] += " " + line
+        else:
+            lines.append(line)
+    for line in lines:
+        for sentence in _role_sentences(line):
+            duty = _ROLE_DUTY.match(sentence)
+            if current_group is not None and not duty and _ROLE_SCOPE.match(sentence):
+                current_group.append(sentence)
                 continue
-            if sentence[-1] not in ".!?":
-                sentence += "."
-            if sentence not in duties:
-                duties.append(sentence)
-            if len(duties) == 3:
-                return " ".join(duties)
-    return " ".join(duties) if len(duties) >= 2 else ""
+            current_group = None
+            if not duty or re.search(r"\b(?:with|for|and|or|to|of|using)[.!?]?$", sentence):
+                continue
+            responsibility = sentence[duty.end():].strip()
+            if re.match(
+                r"(?:(?:your|our|a|the)\s+)?(?:career|future|skills?|experience|knowledge)\b",
+                responsibility, re.IGNORECASE,
+            ):
+                continue
+            # A verb or a chain of action labels is not an informative duty.
+            objects = re.findall(r"[\w+#]+", responsibility)
+            if not any(
+                len(word) >= 2 and word.casefold() not in filler
+                and not _ROLE_DUTY.fullmatch(word) for word in objects
+            ):
+                continue
+            current_group = [sentence]
+            groups.append(current_group)
+
+    duties: list[str] = []
+    selected_groups = 0
+    for group in groups:
+        # Keep a duty and its adjacent scope together or omit that whole group.
+        sentences = [text if text[-1] in ".!?" else text + "." for text in group]
+        if any(len(text) > 420 for text in sentences) or len(duties) + len(sentences) > 3:
+            continue
+        if sentences[0].casefold() in {text.casefold() for text in duties}:
+            continue
+        if len(" ".join([*duties, *sentences])) > 850:
+            continue
+        duties.extend(sentences)
+        selected_groups += 1
+    return " ".join(duties) if selected_groups >= 2 else ""
 
 
 def _summarize_captured_lines(

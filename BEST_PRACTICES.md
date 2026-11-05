@@ -346,6 +346,10 @@ reusable lesson appears.
 
 ## Job detail presentation
 
+- Test extractive role summaries against narrative prose, lowercase sentences,
+  long duties and action-only fragments. Keep complete source sentences and
+  qualifiers; use the fallback when fewer than two meaningful duties remain.
+
 - Condensed job summaries must stay source-faithful, preserve short technical and
   eligibility facts, and keep the complete captured source available behind an
   explicit disclosure. Never trade a hard requirement for cleaner typography.

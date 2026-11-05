@@ -33,7 +33,7 @@
         <label>GitHub URL<input name="github_url" type="url" value="{{ application_profile.github_url }}" placeholder="Optional HTTPS URL"></label>
         <div class="form-divider wide"><span>2</span><div><h3>Resume and note</h3><p>Choose the approved files and add an optional note.</p></div></div>
         <label class="wide">Tailored resume<select name="resume_pair" required><option value="">Choose a PDF/DOCX pair</option>{% for pair in application_resume_pairs %}<option value="{{ pair.id }}">{{ pair.label }}</option>{% endfor %}</select></label>
-        {% if not application_resume_pairs %}<p class="muted wide">No matching PDF/DOCX pair was found in the tailored resume folder. Generate one above first.</p>{% endif %}
+        {% if not application_resume_pairs %}<p class="muted wide">No matching PDF/DOCX pair was found in the tailored resume folder. Create a tailored resume from the Resume match section on the job details page first.</p>{% endif %}
         <label class="wide">Cover note<textarea name="cover_note" maxlength="3000" rows="6" placeholder="Optional; verify every claim"></textarea></label>
         <button type="submit">Review package</button>
       </form>
