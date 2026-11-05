@@ -1,0 +1,23 @@
+<details class="content-section collapsible-section" id="outreach">
+  <summary><span class="section-summary"><h2>Contact people</h2></span></summary>
+  <div class="collapsible-section__body">
+    {% if contact_cards %}
+    <ul class="contact-profile-list">
+      {% for card in contact_cards %}
+      <li>
+        <a class="contact-profile" href="{{ card.profile_url }}" target="_blank" rel="noopener noreferrer">
+          <span class="contact-profile__text">
+            <strong>{{ card.display_name }}</strong>
+            {% if card.role_title %}<span class="contact-profile__title">{{ card.role_title }}</span>{% endif %}
+            <span class="contact-profile__reason">{{ card.reason }}</span>
+          </span>
+          <span class="contact-profile__network">LinkedIn <span aria-hidden="true">↗</span></span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No verified LinkedIn contacts found for this role.</p>
+    {% endif %}
+  </div>
+</details>

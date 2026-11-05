@@ -43,10 +43,9 @@ from src.notifications.recipient_settings import (
     update_cloud_email_recipient,
     validate_notification_email,
 )
+from src.outreach.contact_cards import ReviewedContactEvidence, contact_cards
 from src.outreach.service import (
-    build_contact_searches,
     draft_outreach_message,
-    rank_contact,
     validate_approved_body,
 )
 from src.resume.resume_parser import parse_resume
@@ -85,6 +84,7 @@ def create_app(
     personal_notes_database_path: str | Path | None = None,
     *,
     cloud_services=None,
+    reviewed_contact_evidence: Callable[[JobPosting], tuple[ReviewedContactEvidence, ...]] | None = None,
 ) -> FastAPI:
     """Create a local dashboard backed by the configured job repository."""
     repository = cloud_services.jobs if cloud_services else create_job_repository(database_path)
@@ -151,6 +151,7 @@ def create_app(
     ] = {}
 
     app = FastAPI(title="AJob", docs_url=None, redoc_url=None)
+    app.state.reviewed_contact_evidence = reviewed_contact_evidence
     if not cloud_services:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]"])
         app.add_middleware(LocalSecurityMiddleware)
@@ -824,11 +825,15 @@ def _application_response(
 
 
 def _detail_response(request: Request, job: JobPosting, **context: object):
+    evidence = request.app.state.reviewed_contact_evidence
+    saved_contacts = context.pop("saved_outreach_contacts", ())
     return templates.TemplateResponse(
         request,
         "job_detail.html",
         {
             "job": job,
+            "contact_cards": contact_cards(job, saved_contacts, evidence(job))
+            if evidence is not None and saved_contacts else (),
             "statuses": JOB_STATUSES,
             "company_logos": COMPANY_LOGOS,
             "role_summary": _summarize_role(job),
@@ -1073,12 +1078,7 @@ def _expire_outreach_approval_sessions(
 
 
 def _outreach_context(repository: OutreachRepository, job: JobPosting) -> dict[str, object]:
-    contacts = repository.list_contacts_for_job(job.id)
-    ranked = sorted((rank_contact(job, contact) for contact in contacts),
-                    key=lambda item: (-item.score, item.contact.display_name.casefold()))
-    return {"outreach_contacts": ranked,
-            "outreach_drafts": repository.list_approved_drafts(job.id),
-            "contact_searches": build_contact_searches(job)}
+    return {"saved_outreach_contacts": repository.list_contacts_for_job(job.id)}
 
 
 def _application_context(

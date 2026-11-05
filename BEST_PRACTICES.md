@@ -391,6 +391,11 @@ reusable lesson appears.
 
 ## Professional outreach
 
+- Legacy outreach labels and generic company matches are not profile
+  verification. Show cards only when trusted evidence ties a normalized
+  LinkedIn person URL to the specific job, team, or hiring company. Keep
+  unverified contacts and approved drafts intact without displaying them.
+
 - Do not scrape LinkedIn, automate logged-in browsing, or send connection requests
   and messages. Accept user-supplied public profile URLs and keep sending manual.
 - Store outreach contacts separately from scheduled cloud job data. Minimize

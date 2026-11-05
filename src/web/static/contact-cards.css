@@ -1,0 +1,27 @@
+.contact-profile-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: .5rem;
+}
+
+.contact-profile {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .5rem;
+  padding: .7rem .85rem;
+  border: 1px solid #dce5ee;
+  border-radius: .75rem;
+  background: #fafbfd;
+  color: #173353;
+  text-decoration: none;
+}
+
+.contact-profile:hover { border-color: #6a89a7; background: #f0f5fa; }
+.contact-profile:focus-visible { outline: 2px solid #22598d; outline-offset: 2px; }
+.contact-profile__text { display: grid; min-width: 0; overflow-wrap: anywhere; }
+.contact-profile__title, .contact-profile__reason, .contact-profile__network { font-size: .8rem; }
+.contact-profile__reason, .contact-profile__network { color: #315879; }
+.contact-profile__network { flex-shrink: 0; }
