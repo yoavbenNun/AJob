@@ -496,3 +496,7 @@ reusable lesson appears.
 - Test manual role/function migrations as a non-superuser too. PostgreSQL 16+
   role creation grants ADMIN without SET/INHERIT; restore temporary membership
   options by grantor and keep FORCE-RLS identity seeding explicit and atomic.
+
+- Do not use punctuation insertion as evidence of sentence completeness. Unknown
+  unterminated continuations require fallback; only validated duty clauses may
+  receive a final period. Deterministic checks cannot certify arbitrary grammar.

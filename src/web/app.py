@@ -936,11 +936,20 @@ def _summarize_role(job: JobPosting) -> str:
 
     duty_count = 0
     for sentence in sentences:
+        # Terminal connectors and modals leave an open grammatical dependency,
+        # even if the captured source already includes punctuation.
+        if re.search(
+            r"\b(?:with|for|and|or|to|of|using|by|that|when|if|unless|because|"
+            r"will|would|can|could|may|might|must|should|shall)[.!?]?$",
+            sentence, re.IGNORECASE,
+        ):
+            return ""
         duty = _ROLE_DUTY.match(sentence)
         if not duty:
+            # Unknown unterminated prose may be a truncated restriction.
+            if sentence[-1] not in ".!?":
+                return ""
             continue
-        if re.search(r"\b(?:with|for|and|or|to|of|using)[.!?]?$", sentence):
-            return ""
         responsibility = sentence[duty.end():].strip()
         if re.match(
             r"(?:(?:your|our|a|the)\s+)?(?:career|future|skills?|experience|knowledge)\b",

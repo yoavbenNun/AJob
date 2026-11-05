@@ -207,3 +207,27 @@ def test_role_page_retains_scope_and_source_without_mutation(tmp_path, restricti
     assert source in overview
     assert "Prepare application" not in response.text
     assert repository.get_by_id(job_id) == before
+
+
+@pytest.mark.parametrize("ending", [
+    "You will", "Subject to", "Provided that", "You may", "Unless approved by",
+    "You will.", "Subject to.", "Maintain services with", "Maintain services when",
+])
+def test_incomplete_continuation_invalidates_the_whole_passage(ending):
+    assert summarize(f"Build APIs. Maintain CI pipelines. {ending}") == ""
+
+
+@pytest.mark.parametrize("source, expected", [
+    ("Build APIs. Maintain CI pipelines", "Build APIs. Maintain CI pipelines."),
+    ("Build reliable APIs\nMaintain CI pipelines", "Build reliable APIs. Maintain CI pipelines."),
+    ("You will develop backend services. You will maintain CI pipelines",
+     "You will develop backend services. You will maintain CI pipelines."),
+])
+def test_clear_duties_without_final_punctuation_remain_supported(source, expected):
+    assert summarize(source) == expected
+
+
+def test_unrecognized_unpunctuated_scope_requires_fallback():
+    assert summarize(
+        "Build APIs. Maintain CI pipelines. Access remains restricted to the test lab"
+    ) == ""
