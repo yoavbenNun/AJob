@@ -1,0 +1,36 @@
+Tel Aviv, Israel
+Software Engineer Intern
+Apply
+Realize your potential by joining the leading performance-driven advertising company!
+As a Software Engineer Intern on the Ad Creatives team in our Tel Aviv office, you’ll work on large-scale systems that power advertising across the open web. You’ll develop software used by thousands of websites and reach more than 1.4B users, while working alongside experienced engineers on high-scale, real-time systems and seeing the impact of your work almost immediately.
+To thrive in this role, you’ll need:
+BSc in Computer Science or equivalent, with strong Computer Science fundamentals including object-oriented design, data structures, systems and multithreading
+Programming experience in Java or another object-oriented programming language
+Knowledge of SQL, data analysis and Big Data concepts
+Experience or academic/project experience with large-scale distributed systems
+Experience with Generative AI coding tools
+Bonus points if you have:
+Experience with Big Data technologies such as Spark or Kafka
+Experience with cloud, containerization or distributed systems technologies
+How you’ll make an impact:
+Develop software components and infrastructure supporting thousands of websites and more than 1.4B users across the open web
+Build and maintain high-scale, real-time systems handling more than 500,000 requests per second and generating 100TB of new data every day
+Collaborate with experienced software engineers and product managers to design and deliver new features
+Work with CI/CD, A/B testing and large-scale data to develop, test and improve production systems
+Work with technologies including Java, Spark, Kafka, Kubernetes, Docker, BigQuery, Airflow and other modern data and infrastructure tools
+Analyze system performance and use data to improve the reliability, scalability and efficiency of our solutions
+Why Taboola?
+If you ask Taboolars what they love about working here, they’ll tell you that they’ve been empowered to realize their full potential while growing and learning from and with smart and talented people. They’ll also share more about:
+Adam Singolda, Taboola Founder and CEO: “You can copy anything from another business but you can’t copy a company’s culture.”
+Well-being: Competitive benefits and well-being programs tailored to the region, including comprehensive health benefits, a fully stocked kitchen, and location-specific perks.
+Flexibility: We offer a hybrid work schedule with 3 days in-office, with an option to come in more often if desired.
+Work with some of the biggest names: Our publisher partners include Yahoo, Conde Nast, Fox Sports, NBCU, ESPN, CBS, and E! Online. Our advertiser clients include Wells Fargo, Honda, Pinterest, and Expedia.
+Ready to realize your potential?
+Taboola is an equal opportunity employer and we value diversity in all forms. We are committed to creating an inclusive environment for all employees and believe such an environment is critical for success. Employment is decided on the basis of qualifications, merit, and business need.
+Learn more about #TaboolaLife on LinkedIn, Facebook, Instagram, X, YouTube, & the Taboola Life Blog.
+About Taboola
+Taboola empowers businesses to grow through performance advertising technology that goes beyond search and social and delivers measurable outcomes at scale.
+Taboola works with thousands of businesses who advertise directly on Realize, Taboola’s powerful ad platform, reaching approximately 600M daily active users across some of the best publishers in the world. Publishers like NBC News, Yahoo, and OEMs such as Samsung, Xiaomi and others use Taboola’s technology to grow audience and revenue, enabling Realize to offer unique data, specialized algorithms, and unmatched scale.
+#LI-DN1
+#LI-Hybrid
+Apply

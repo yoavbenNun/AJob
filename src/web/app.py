@@ -827,6 +827,7 @@ def _application_response(
 def _detail_response(request: Request, job: JobPosting, **context: object):
     evidence = request.app.state.reviewed_contact_evidence
     saved_contacts = context.pop("saved_outreach_contacts", ())
+    extracted_requirements = _description_requirements(job.description) if not job.requirements.strip() else {}
     return templates.TemplateResponse(
         request,
         "job_detail.html",
@@ -847,6 +848,7 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
                 limit=7,
             ),
             "full_requirement_lines": _clean_captured_lines(job.requirements, job),
+            "extracted_requirements": extracted_requirements,
             **context,
         },
     )
@@ -909,17 +911,71 @@ def _role_sentences(line: str) -> list[str]:
     return sentences
 
 
-def _summarize_role(job: JobPosting) -> str:
-    """Render a complete short source passage or fail closed, never cherry-pick.
+# Only explicit headings delimit sections; unknown headings terminate extraction.
+_SECTION_HEADINGS = {
+    "role": r"(?:about the role|role overview|the role|job overview)",
+    "duties": r"(?:responsibilities|what you(?:'|’)ll do|what you will do|how you(?:'|’)ll make an impact)",
+    "required": r"(?:(?:minimum|basic|required)\s+)?(?:requirements|qualifications)|what you(?:'|’)ll need|what you will need|what we(?:'|’)re looking for|what we are looking for|to thrive in this role,? you(?:'|’)ll need",
+    "preferred": r"(?:preferred qualifications|preferred requirements|nice to have|bonus points if you have)",
+    "other": r"(?:why .+|about (?!the role).+|equal opportunity|benefits|who we are)",
+}
 
-    An unrecognized sentence may qualify any duty, even one several sentences
-    earlier. Keep every content sentence, including those before the first duty.
-    Longer passages require semantic rewriting, which this renderer cannot prove.
-    """
+def _description_sections(description: str) -> tuple[list[str], list[tuple[str, list[str]]]]:
+    intro: list[str] = []
+    sections: list[tuple[str, list[str]]] = []
+    current = intro
+    for raw in description.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        heading = line.rstrip(":?").strip()
+        kind = next((name for name, pattern in _SECTION_HEADINGS.items()
+                     if re.fullmatch(pattern, heading, re.I)), None)
+        # Unknown standalone headings end, rather than leak into, a section.
+        if kind is None and (line.endswith(":") or line.endswith("?")) and len(line) < 100:
+            kind = "other"
+        if kind:
+            current = []
+            sections.append((kind, current))
+        else:
+            current.append(line)
+    return intro, sections
+
+
+def _description_requirements(description: str) -> dict[str, list[str]]:
+    _, sections = _description_sections(description)
+    result: dict[str, list[str]] = {}
+    for kind, lines in sections:
+        if kind in {"required", "preferred"} and lines:
+            result.setdefault(kind, []).extend(re.sub(r"^[•*-]\s+", "", line) for line in lines)
+    return result
+
+
+def _section_role_preview(job: JobPosting) -> str:
+    intro, sections = _description_sections(job.description)
+    # A known heading provides a reliable boundary for an opening paragraph.
+    if not sections:
+        return ""
+    candidates = [intro[-1]] if intro and len(_role_sentences(intro[-1])) in (2, 3) else []
+    candidates += [" ".join(lines) for kind, lines in sections
+                   if kind in {"role", "duties"} and len(lines) in (1, 2, 3)]
+    for candidate in candidates:
+        result = _summarize_role(job, _text=candidate)
+        if result:
+            return result
+    return ""
+
+
+def _summarize_role(job: JobPosting, *, _text: str | None = None) -> str:
+    """Return a source passage when its local context fits; otherwise fail closed."""
+    if _text is None:
+        preview = _section_role_preview(job)
+        if preview:
+            return preview
     filler = {"the", "a", "an", "and", "or", "with", "for", "to", "on", "of",
               "our", "your", "their", "work"}
     lines: list[str] = []
-    for line in _clean_captured_lines(job.description, job):
+    for line in _clean_captured_lines(job.description if _text is None else _text, job):
         line = re.sub(r"^\d+[.)]\s+", "", " ".join(line.split()))
         if line.casefold().rstrip(":") in {"responsibilities", "about the role", "what you'll do"}:
             continue
