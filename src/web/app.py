@@ -885,11 +885,6 @@ _ROLE_DUTY = re.compile(
     r"work(?:ing)? (?:on|with))\b",
     re.IGNORECASE,
 )
-_ROLE_SCOPE = re.compile(
-    r"^(?:(?:this|the) (?:work|role|position|responsibility|task)|"
-    r"however\b|but\b|do not\b|you (?:must not|will not|cannot)\b)",
-    re.IGNORECASE,
-)
 _ROLE_ABBREVIATION = re.compile(
     r"(?:\b(?:e\.g|i\.e|B\.Sc|M\.Sc|Ph\.D|Dr|Mr|Ms)|\b[A-Z])\.$",
     re.IGNORECASE,
@@ -910,14 +905,19 @@ def _role_sentences(line: str) -> list[str]:
 
 
 def _summarize_role(job: JobPosting) -> str:
-    """Select two or three complete duties; never truncate or paraphrase them."""
-    groups: list[list[str]] = []
-    current_group = None
+    """Render a complete short source passage or fail closed, never cherry-pick.
+
+    An unrecognized sentence may qualify any duty, even one several sentences
+    earlier. Keep every content sentence, including those before the first duty.
+    Longer passages require semantic rewriting, which this renderer cannot prove.
+    """
     filler = {"the", "a", "an", "and", "or", "with", "for", "to", "on", "of",
               "our", "your", "their", "work"}
     lines: list[str] = []
     for line in _clean_captured_lines(job.description, job):
         line = re.sub(r"^\d+[.)]\s+", "", " ".join(line.split()))
+        if line.casefold().rstrip(":") in {"responsibilities", "about the role", "what you'll do"}:
+            continue
         if (
             lines and _ROLE_DUTY.match(lines[-1])
             and not re.search(r"[.!?:]$", lines[-1])
@@ -927,45 +927,41 @@ def _summarize_role(job: JobPosting) -> str:
             lines[-1] += " " + line
         else:
             lines.append(line)
-    for line in lines:
-        for sentence in _role_sentences(line):
-            duty = _ROLE_DUTY.match(sentence)
-            if current_group is not None and not duty and _ROLE_SCOPE.match(sentence):
-                current_group.append(sentence)
-                continue
-            current_group = None
-            if not duty or re.search(r"\b(?:with|for|and|or|to|of|using)[.!?]?$", sentence):
-                continue
-            responsibility = sentence[duty.end():].strip()
-            if re.match(
-                r"(?:(?:your|our|a|the)\s+)?(?:career|future|skills?|experience|knowledge)\b",
-                responsibility, re.IGNORECASE,
-            ):
-                continue
-            # A verb or a chain of action labels is not an informative duty.
-            objects = re.findall(r"[\w+#]+", responsibility)
-            if not any(
-                len(word) >= 2 and word.casefold() not in filler
-                and not _ROLE_DUTY.fullmatch(word) for word in objects
-            ):
-                continue
-            current_group = [sentence]
-            groups.append(current_group)
 
-    duties: list[str] = []
-    selected_groups = 0
-    for group in groups:
-        # Keep a duty and its adjacent scope together or omit that whole group.
-        sentences = [text if text[-1] in ".!?" else text + "." for text in group]
-        if any(len(text) > 420 for text in sentences) or len(duties) + len(sentences) > 3:
+    sentences = [sentence for line in lines for sentence in _role_sentences(line)]
+    if not 2 <= len(sentences) <= 3:
+        return ""
+    if any(len(sentence) > 420 for sentence in sentences):
+        return ""
+
+    duty_count = 0
+    for sentence in sentences:
+        duty = _ROLE_DUTY.match(sentence)
+        if not duty:
             continue
-        if sentences[0].casefold() in {text.casefold() for text in duties}:
-            continue
-        if len(" ".join([*duties, *sentences])) > 850:
-            continue
-        duties.extend(sentences)
-        selected_groups += 1
-    return " ".join(duties) if selected_groups >= 2 else ""
+        if re.search(r"\b(?:with|for|and|or|to|of|using)[.!?]?$", sentence):
+            return ""
+        responsibility = sentence[duty.end():].strip()
+        if re.match(
+            r"(?:(?:your|our|a|the)\s+)?(?:career|future|skills?|experience|knowledge)\b",
+            responsibility, re.IGNORECASE,
+        ):
+            return ""
+        objects = re.findall(r"[\w+#]+", responsibility)
+        if not any(
+            len(word) >= 2 and word.casefold() not in filler
+            and not _ROLE_DUTY.fullmatch(word) for word in objects
+        ):
+            return ""
+        duty_count += 1
+
+    # Keep unsupported fragments out too; do not turn a heading into a sentence.
+    if duty_count < 2 or any(
+        len(re.findall(r"[\w+#]+", sentence)) < 2 for sentence in sentences
+    ):
+        return ""
+    summary = " ".join(text if text[-1] in ".!?" else text + "." for text in sentences)
+    return summary if len(summary) <= 850 else ""
 
 
 def _summarize_captured_lines(

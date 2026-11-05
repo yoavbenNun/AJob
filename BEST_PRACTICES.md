@@ -347,8 +347,10 @@ reusable lesson appears.
 ## Job detail presentation
 
 - Test extractive role summaries against narrative prose, lowercase sentences,
-  long duties and action-only fragments. Keep complete source sentences and
-  qualifiers; use the fallback when fewer than two meaningful duties remain.
+  long duties and action-only fragments. Do not identify essential scope from a
+  keyword list: preserve every content sentence or use the fallback. A short
+  overview requires 2–3 complete source sentences with meaningful duties; longer
+  passages need semantic rewriting that the deterministic renderer cannot prove.
 
 - Condensed job summaries must stay source-faithful, preserve short technical and
   eligibility facts, and keep the complete captured source available behind an

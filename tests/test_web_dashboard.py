@@ -490,7 +490,7 @@ def test_job_detail_summary_preserves_short_technical_requirements() -> None:
         (
             "Skip to main content\nOur team is growing. Build APIs. Maintain deployment tools. "
             "Debug production issues. Monitor service uptime.",
-            "Build APIs. Maintain deployment tools. Debug production issues.",
+            "Not enough information to summarize this role.",
         ),
         (
             "Responsibilities\n- Develop C++ services\n- Test API integrations",

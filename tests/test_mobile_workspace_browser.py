@@ -80,10 +80,16 @@ def test_mobile_layout_order_focus_fonts_and_touch_targets(mobile_workspace, wid
     assert {'noopener','noreferrer'} <= set(external.get_attribute('rel').split())
 
 
-def test_role_summary_fits_small_viewport(mobile_workspace):
+@pytest.mark.parametrize("description", [
+    "Build and maintain Python services for deployment. Debug failures in the test pipeline.",
+    "Build automated deployment tools. These tools must only target test environments "
+    "and must never deploy to production. Maintain CI pipelines.",
+    "Build analytics tools. You may only use anonymized data and must not access live "
+    "customer records. Maintain data pipelines.",
+])
+def test_role_summary_fits_small_viewport(mobile_workspace, description):
     page, origin, repo, ids = mobile_workspace
     job = repo.get_by_id(ids[0])
-    description = "Build and maintain Python services for deployment. Debug failures in the test pipeline."
     repo.save(replace(job, description=description))
     page.set_viewport_size({'width': 320, 'height': 760})
     page.goto(origin + f'/jobs/{job.id}')

@@ -63,12 +63,12 @@ def test_numbered_duties_do_not_keep_list_markers():
     )
 
 
-def test_disorganized_text_only_uses_supported_duties():
+def test_disorganized_content_uses_fallback_instead_of_dropping_unknown_context():
     source = (
         "Apply now\nPython\nWelcome to our office.\nBuild reliable APIs.\n"
         "Requirements\nKnowledge of Linux.\nMaintain service integration tests."
     )
-    assert summarize(source) == "Build reliable APIs. Maintain service integration tests."
+    assert summarize(source) == ""
 
 
 @pytest.mark.parametrize("description", [
@@ -126,3 +126,84 @@ def test_role_page_renders_qa_prose_without_rewriting_stored_description(tmp_pat
     assert "Prepare application" not in response.text
     assert "View full captured description" not in response.text
     assert repository.get_by_id(job_id).description == NARRATIVE
+
+
+@pytest.mark.parametrize("restriction", [
+    "These tools must only target test environments and must never deploy to production.",
+    "You may only use anonymized data and must not access live customer records.",
+    "Execution is allowed only in test environments.",
+    "Anonymized data only is permitted for this work.",
+    "Access to production databases is prohibited.",
+    "Release to live systems requires a separate approval from the operations team.",
+    "Anything outside the isolated lab remains beyond the remit of this assignment.",
+    "Deploy these tools exclusively to isolated test systems.",
+])
+def test_every_followup_sentence_is_preserved_without_a_scope_keyword_list(restriction):
+    description = f"Build automated deployment tools. {restriction} Maintain CI pipelines."
+    assert summarize(description) == description
+
+
+def test_standalone_anonymized_data_restriction_is_not_treated_as_a_duty():
+    assert summarize(
+        "You may only use anonymized data and must not access live customer records."
+    ) == ""
+
+
+@pytest.mark.parametrize("description", [
+    "You may only use anonymized data and must not access live customer records. "
+    "Build analytics tools. Maintain data pipelines.",
+    "Build analytics tools. Maintain data pipelines. "
+    "You may only use anonymized data and must not access live customer records.",
+])
+def test_scope_before_or_after_duties_is_preserved(description):
+    assert summarize(description) == description
+
+
+def test_late_global_scope_is_not_lost_after_three_duties():
+    assert summarize(
+        "Build deployment tools. Maintain CI pipelines. Debug integration failures. "
+        "All of these activities are confined to isolated test environments."
+    ) == ""
+
+
+def test_overlong_scope_requires_fallback_without_selecting_unqualified_duties():
+    restriction = "These tools must only target " + "isolated test environments and " * 18
+    description = (
+        f"Build deployment tools. {restriction}must never deploy to production. "
+        "Maintain CI pipelines."
+    )
+    assert summarize(description) == ""
+
+
+def test_many_short_qualifiers_cannot_be_dropped_to_meet_the_sentence_limit():
+    assert summarize(
+        "Build deployment tools. These tools are confined to the lab. "
+        "Customer records are outside the scope of the assignment. Maintain CI pipelines."
+    ) == ""
+
+
+def test_invalid_action_fragment_is_not_retained_between_valid_duties():
+    assert summarize("Build reliable APIs. Test and. Maintain CI pipelines.") == ""
+
+
+@pytest.mark.parametrize("restriction", [
+    "These tools must only target test environments and must never deploy to production.",
+    "You may only use anonymized data and must not access live customer records.",
+])
+def test_role_page_retains_scope_and_source_without_mutation(tmp_path, restriction):
+    from test_web_dashboard import _client_with_jobs
+    from src.storage.job_repository import JobRepository
+    client, _ = _client_with_jobs(tmp_path)
+    repository = JobRepository(tmp_path / "jobs.db")
+    source = f"Build automated deployment tools. {restriction} Maintain CI pipelines."
+    job_id = repository.save(JobPosting(
+        "Software Intern", "Example", "Israel", "https://example.test/scope",
+        description=source, status="reviewed",
+    ))
+    before = repository.get_by_id(job_id)
+    response = client.get(f"/jobs/{job_id}")
+    overview = response.text.split('id="overview"', 1)[1].split("</details>", 1)[0]
+    assert overview.count("<p") == 1
+    assert source in overview
+    assert "Prepare application" not in response.text
+    assert repository.get_by_id(job_id) == before
