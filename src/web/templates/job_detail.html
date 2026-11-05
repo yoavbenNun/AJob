@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('static', path='contact-cards.css') }}?v=1">
   <title>{{ job.title }} · AJob</title>
   <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}?v=20261015-7">
-  <link rel="stylesheet" href="{{ url_for('static', path='workspace.css') }}?v=20261031">
+  <link rel="stylesheet" href="{{ url_for('static', path='workspace.css') }}?v=20261105">
 </head>
 <body>
   <a class="skip-link" href="#job-content">Skip to job details</a>
@@ -21,8 +21,14 @@
     </section>
     {% if updated %}<p class="notice" role="status">Job status updated.</p>{% endif %}
     <div class="detail-toolbar"><a class="button secondary" href="{{ job.job_url }}" target="_blank" rel="noopener noreferrer">Open original posting <span aria-hidden="true">↗</span></a><form class="status-form" method="post" action="/jobs/{{ job.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label>Application status<select name="status">{% for item in statuses %}<option value="{{ item }}" {% if item == job.status %}selected{% endif %}>{{ item|status_label }}</option>{% endfor %}</select></label><button type="submit">Save status</button></form></div>
-    <nav class="workspace-nav" aria-label="Job workspace"><a href="#overview">Overview</a><a href="#requirements">Requirements</a><a href="#resume-match">Resume match</a><a href="#application">Application</a><a href="#outreach">Contacts</a></nav>
-    <details class="content-section collapsible-section" id="overview" open><summary><span class="section-summary"><h2>About the role</h2><small>A focused overview from the source</small></span></summary><div class="collapsible-section__body"><div class="reading-panel">{% if description_lines %}{% for line in description_lines %}<p><span aria-hidden="true">{{ '%02d'|format(loop.index) }}</span>{{ line }}</p>{% endfor %}{% else %}<p class="empty-copy">The source page did not provide a description.</p>{% endif %}</div>{% if full_description_lines and full_description_lines != description_lines %}<details class="source-copy"><summary>View full captured description</summary><div>{% for line in full_description_lines %}<p>{{ line }}</p>{% endfor %}</div></details>{% endif %}</div></details>
+    <nav class="workspace-nav" aria-label="Job workspace"><a href="#overview">Overview</a><a href="#requirements">Requirements</a><a href="#resume-match">Resume match</a><a href="#outreach">Contacts</a></nav>
+    <details class="content-section collapsible-section" id="overview" open>
+      <summary><span class="section-summary"><h2>About the role</h2></span></summary>
+      <div class="collapsible-section__body">
+        {% if role_summary %}<p class="role-summary">{{ role_summary }}</p>
+        {% else %}<p class="empty-copy">Not enough information to summarize this role.</p>{% endif %}
+      </div>
+    </details>
     <details class="content-section collapsible-section" id="requirements" open><summary><span class="section-summary"><h2>What they’re looking for</h2><small>{{ requirement_lines|length }} highlighted requirement{% if requirement_lines|length != 1 %}s{% endif %}</small></span></summary><div class="collapsible-section__body">{% if requirement_lines %}<ul class="requirements-list">{% for line in requirement_lines %}<li>{{ line }}</li>{% endfor %}</ul>{% else %}<p class="empty-copy">The source page did not provide separate requirements.</p>{% endif %}{% if full_requirement_lines and full_requirement_lines != requirement_lines %}<details class="source-copy"><summary>View all captured requirements</summary><div>{% for line in full_requirement_lines %}<p>{{ line }}</p>{% endfor %}</div></details>{% endif %}</div></details>
     {% if not cloud_mode %}
     <details class="content-section collapsible-section" id="resume-match" {% if match_error or match_result %}open{% endif %}><summary><span class="section-summary"><h2>Resume match</h2><small>{% if match_result %}{{ match_result.score }}/100{% if not match_result.eligible %} · Review eligibility{% endif %}{% else %}Not calculated{% endif %}</small></span></summary><div class="collapsible-section__body">
@@ -60,42 +66,6 @@
     {% endif %}
     {% if tailoring_error %}<p class="error">{{ tailoring_error }}</p>{% endif %}
     {% if tailored_resume_names %}<p class="notice">Created {{ tailored_resume_names|join(' and ') }} in the configured tailored resume folder. The master resume was not changed.</p>{% endif %}
-    <details class="content-section collapsible-section" id="application" {% if application_error or application_preview %}open{% endif %}>
-      <summary><span class="section-summary"><h2>Prepare application</h2><small>{% if application_packages %}{{ application_packages|length }} prepared{% else %}Review before you submit{% endif %}</small></span></summary>
-      <div class="collapsible-section__body">
-      <p class="safety-note"><strong>You stay in control.</strong> Build the package here, then submit it yourself on the employer’s site.</p>
-      {% if application_error %}<p class="error-panel" role="alert">{{ application_error }}</p>{% endif %}
-      {% if application_enabled %}
-      <div class="step-heading"><span>1</span><div><h3>Candidate details</h3><p>Confirm the information that will be included.</p></div></div>
-      <form class="application-form" method="post" action="/jobs/{{ job.id }}/application/preview">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <label>Full name<input name="full_name" value="{{ application_profile.full_name }}" required></label>
-        <label>Email<input name="email" type="email" value="{{ application_profile.email }}" required></label>
-        <label>Phone<input name="phone" value="{{ application_profile.phone }}" required></label>
-        <label>Location<input name="location" value="{{ application_profile.location }}" required></label>
-        <label>Work authorization<select name="work_authorization" required><option value="unanswered">Choose</option><option value="authorized" {% if application_profile.work_authorization == 'authorized' %}selected{% endif %}>Authorized</option><option value="needs_sponsorship" {% if application_profile.work_authorization == 'needs_sponsorship' %}selected{% endif %}>Needs sponsorship</option><option value="not_authorized" {% if application_profile.work_authorization == 'not_authorized' %}selected{% endif %}>Not authorized</option></select></label>
-        <label>Availability<input name="availability" value="{{ application_profile.availability }}" required></label>
-        <label>Salary expectation<input name="salary_expectation" value="{{ application_profile.salary_expectation }}" placeholder="Optional"></label>
-        <label>LinkedIn URL<input name="linkedin_url" type="url" value="{{ application_profile.linkedin_url }}" placeholder="Optional HTTPS URL"></label>
-        <label>GitHub URL<input name="github_url" type="url" value="{{ application_profile.github_url }}" placeholder="Optional HTTPS URL"></label>
-        <div class="form-divider wide"><span>2</span><div><h3>Resume and note</h3><p>Choose the approved files and add an optional note.</p></div></div>
-        <label class="wide">Tailored resume<select name="resume_pair" required><option value="">Choose a PDF/DOCX pair</option>{% for pair in application_resume_pairs %}<option value="{{ pair.id }}">{{ pair.label }}</option>{% endfor %}</select></label>
-        {% if not application_resume_pairs %}<p class="muted wide">No matching PDF/DOCX pair was found in the tailored resume folder. Generate one above first.</p>{% endif %}
-        <label class="wide">Cover note<textarea name="cover_note" maxlength="3000" rows="6" placeholder="Optional; verify every claim"></textarea></label>
-        <button type="submit">Review package</button>
-      </form>
-      {% else %}<p class="muted">Set RESUME_DIRECTORY and create a tailored PDF/DOCX pair to enable package preparation.</p>{% endif %}
-      {% if application_preview %}
-      <div class="change-review application-preview">
-        <div class="step-heading"><span>3</span><div><h3>Review and approve</h3><p>Check every detail before creating the package.</p></div></div>
-        <p class="safety-note safety-note--warning"><strong>Nothing is submitted.</strong> Approval only prepares these local files; AJob does not submit an application.</p>
-        <dl><dt>Candidate</dt><dd>{{ application_preview.profile.full_name }} · {{ application_preview.profile.email }} · {{ application_preview.profile.phone }}</dd><dt>Location and authorization</dt><dd>{{ application_preview.profile.location }} · {{ application_preview.profile.work_authorization|replace('_', ' ') }} · available {{ application_preview.profile.availability }}</dd><dt>Resume PDF</dt><dd>{{ application_preview.resume_pdf_path }}</dd><dt>Resume DOCX</dt><dd>{{ application_preview.resume_docx_path }}</dd><dt>LinkedIn</dt><dd>{{ application_preview.profile.linkedin_url or 'Not provided' }}</dd><dt>GitHub</dt><dd>{{ application_preview.profile.github_url or 'Not provided' }}</dd><dt>Salary expectation</dt><dd>{{ application_preview.profile.salary_expectation or 'Not provided' }}</dd><dt>Cover note</dt><dd class="preserve-lines">{{ application_preview.cover_note or 'None' }}</dd></dl>
-        <form method="post" action="/jobs/{{ job.id }}/application/approve"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="application_token" value="{{ application_token }}"><button type="submit">Approve package for manual submission</button></form>
-      </div>
-      {% endif %}
-      {% if application_packages %}<h3>Prepared packages</h3>{% for package in application_packages %}<div class="change-review"><strong>{{ package.approved_at }} · {{ package.submission_status|replace('_', ' ') }}</strong><p>PDF: {{ package.resume_pdf_path }}<br>DOCX: {{ package.resume_docx_path }}</p>{% if package.cover_note %}<p class="preserve-lines"><strong>Cover note:</strong> {{ package.cover_note }}</p>{% endif %}<div class="action-row"><a class="button secondary" href="{{ package.job_url }}" target="_blank" rel="noopener noreferrer">Open employer page manually</a>{% if package.submission_status == 'prepared' %}<form method="post" action="/jobs/{{ job.id }}/application/packages/{{ package.id }}/submitted"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label><input type="checkbox" name="confirm_submission" value="yes" required> I already submitted this manually</label><button type="submit">Record manual submission</button></form>{% else %}<span class="notice">Manual submission recorded {{ package.submitted_at }}</span>{% endif %}</div></div>{% endfor %}{% endif %}
-      </div>
-    </details>
     {% include '_contact_people.html' %}
     {% else %}<p class="notice">Personal resume matching and application files stay on your desktop. This workspace shows collected job information and your saved status.</p>{% endif %}
   </main>

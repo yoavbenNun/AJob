@@ -202,3 +202,5 @@ body { background: linear-gradient(180deg, #eaf0f6, #f3f6fa 420px); }
   .dashboard-shell .note-trigger { padding: .4rem; }
   .dashboard-shell .stat-card:hover, .dashboard-shell .job-card:hover { transform: none; }
 }
+
+.detail-shell .role-summary { max-width: 75ch; margin: 0; font-size: .9rem; line-height: 1.7; overflow-wrap: anywhere; }

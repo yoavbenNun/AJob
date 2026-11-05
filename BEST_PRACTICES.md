@@ -346,6 +346,12 @@ reusable lesson appears.
 
 ## Job detail presentation
 
+- Test extractive role summaries against narrative prose, lowercase sentences,
+  long duties and action-only fragments. Do not identify essential scope from a
+  keyword list: preserve every content sentence or use the fallback. A short
+  overview requires 2–3 complete source sentences with meaningful duties; longer
+  passages need semantic rewriting that the deterministic renderer cannot prove.
+
 - Condensed job summaries must stay source-faithful, preserve short technical and
   eligibility facts, and keep the complete captured source available behind an
   explicit disclosure. Never trade a hard requirement for cleaner typography.
@@ -495,3 +501,7 @@ reusable lesson appears.
 - Test manual role/function migrations as a non-superuser too. PostgreSQL 16+
   role creation grants ADMIN without SET/INHERIT; restore temporary membership
   options by grantor and keep FORCE-RLS identity seeding explicit and atomic.
+
+- Do not use punctuation insertion as evidence of sentence completeness. Unknown
+  unterminated continuations require fallback; only validated duty clauses may
+  receive a final period. Deterministic checks cannot certify arbitrary grammar.
