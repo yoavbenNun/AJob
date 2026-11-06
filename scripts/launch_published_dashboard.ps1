@@ -4,7 +4,8 @@ param(
     [switch]$NonInteractive,
     [string]$RuntimeCodeRoot = "",
     [string]$DataRoot = "",
-    [switch]$ReuseRunning
+    [switch]$ReuseRunning,
+    [switch]$ReplacePublishedOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -82,14 +83,22 @@ function Get-AJobProcess([int]$ProcessId) {
     return $null
 }
 
-function Stop-OwnedDashboard($Listener) {
+function Test-PublishedProcess($Process) {
+    if (-not $Process -or $Process.CommandLine -notmatch '(?:^|\s)--app-dir\s+(?:"([^"]+)"|(\S+))') { return $false }
+    $path = if ($Matches[1]) { $Matches[1] } else { $Matches[2] }
+    $path = [IO.Path]::GetFullPath($path).TrimEnd('\')
+    return $path -ieq (Join-Path $runtimeRoot 'code') -or $path.StartsWith($releasePrefix, [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Stop-OwnedDashboard($Listener, [switch]$PublishedOnly) {
     $owned = Get-AJobProcess ([int]$Listener.OwningProcess)
     if (-not $owned) { throw 'The port owner could not be verified as this AJob installation.' }
     # Recheck creation time and port ownership immediately before termination;
     # persisted PIDs can be stale or recycled after a Windows restart.
     $current = Get-AJobProcess ([int]$owned.ProcessId)
     $stillListening = @(Get-DashboardListeners | Where-Object { $_.OwningProcess -eq $owned.ProcessId })
-    if (-not $current -or $current.CreationDate -ne $owned.CreationDate -or -not $stillListening) {
+    if (-not $current -or $current.CreationDate -ne $owned.CreationDate -or -not $stillListening -or
+        ($PublishedOnly -and -not (Test-PublishedProcess $current))) {
         throw 'The port owner changed during launch; no process was stopped.'
     }
     Stop-Process -Id $owned.ProcessId -Force -ErrorAction Stop
@@ -181,7 +190,7 @@ if (-not (Test-DashboardReady)) {
             Show-LauncherError "Port 8001 belongs to a different application. AJob did not stop it. Close that application or free port 8001, then open AJob again."
             exit 1
         }
-        Stop-OwnedDashboard $existingListeners[0]
+        Stop-OwnedDashboard $existingListeners[0] -PublishedOnly:$ReplacePublishedOnly
         if ((Get-DashboardListeners).Count -gt 0) {
             Show-LauncherError "Port 8001 changed owner while AJob was restarting. No additional process was stopped."
             exit 1

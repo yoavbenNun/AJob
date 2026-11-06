@@ -78,6 +78,12 @@ Assert (Test-DashboardReady) 'Reuse may accept an existing verified owned runtim
 $script:processes[123] = New-Server 'C:\foreign\python.exe'
 Assert (-not (Test-DashboardReady)) 'Reuse must still verify interpreter ownership'
 $ReuseRunning = $false
+$script:processes[123] = New-Server $pythonPath $projectRoot
+$refused = $false
+try { Stop-OwnedDashboard $script:connections[0] -PublishedOnly } catch { $refused = $true }
+Assert ($refused -and $script:stopped.Count -eq 0) 'Updater must never stop a development server'
+$script:processes[123] = New-Server $pythonPath (Join-Path $runtimeRoot 'releases\previous')
+Assert (Test-PublishedProcess $script:processes[123]) 'Published release is eligible for verified replacement'
 $script:processes[123] = New-Server 'C:\base-python\python.exe'
 $script:processes[456] = New-Server $pythonPath $appRoot 456
 Assert ($null -ne (Get-AJobProcess 123)) 'Windows venv interpreter delegation must prove ownership'
