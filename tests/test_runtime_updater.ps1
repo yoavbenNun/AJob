@@ -138,7 +138,7 @@ Assert ((Get-Content (Join-Path $prepared 'local-change.txt')) -eq 'uncommitted'
 ${function:Invoke-RuntimeCommand} = $originalCommand
 
 # A launcher exit 0 must not publish a different/unhealthy server after a race.
-function Invoke-RuntimeCommand { param($File,$Arguments,$Seconds,[switch]$IgnoreOutput) return '' }
+function Invoke-RuntimeCommand { param($File,$Arguments,$Seconds,[switch]$IgnoreOutput) $script:lastLauncherArgs = $Arguments; return '' }
 $script:listenerCount = 1
 $script:servingCode = 'C:\synthetic-runtime\.local-runtime\releases\candidate'
 $script:healthName = 'AJob'
@@ -158,6 +158,8 @@ function Invoke-RestMethod { param($Uri,$TimeoutSec) [PSCustomObject]@{name=$scr
 $selected = $script:servingCode
 Start-Runtime 'launcher' 'C:\synthetic-runtime' $selected
 Assert $true 'Selected runtime must be verified after launcher success'
+Start-Runtime 'launcher' 'C:\synthetic-runtime' $selected -PublishedOnly
+Assert ('-ReplacePublishedOnly' -in $script:lastLauncherArgs) 'Update activation must require published-only replacement'
 $script:servingCode = 'C:\synthetic-runtime\.local-runtime\releases\other'
 $refused = $false
 try { Start-Runtime 'launcher' 'C:\synthetic-runtime' $selected } catch { $refused=$true }
@@ -209,6 +211,18 @@ $script:parentExecutable = 'C:\synthetic-runtime\.venv\Scripts\python.exe'
 Start-Runtime 'launcher' 'C:\synthetic-runtime' $selected
 Assert $true 'Windows venv parent delegation must retain ownership across interpreter paths'
 
+# Candidate rejection and both rollback attempts must retain the same restriction.
+$script:safetyFlags = @()
+function Start-Runtime { param($Launcher,$Root,$Code,[switch]$PublishedOnly)
+    $script:safetyFlags += [bool]$PublishedOnly
+    throw 'synthetic development listener must not be stopped'
+}
+function Save-RuntimeVersion { throw 'must not publish' }
+$devVersion = @{commit=$old;code_root='previous';previous_commit='older';previous_code_root='older-runtime';python='python'}
+$refused = $false
+try { [void](Activate-Runtime $devVersion 'candidate' $sha 'launcher' 'root' 'pointer') } catch { $refused=$true }
+Assert ($refused -and ($script:safetyFlags -join ',') -eq 'True,True,True') 'Candidate rejection and every rollback must protect a development listener'
+
 # Current-pointer failures use the recorded fallback; publish only after it starts.
 $script:starts = @()
 $script:savedVersion = $null
@@ -226,4 +240,58 @@ $script:savedVersion = $null
 $refused = $false
 try { Start-CurrentRuntime $broken 'launcher' 'root' 'pointer' } catch { $refused=$true }
 Assert ($refused -and $null -eq $script:savedVersion) 'Failed fallback must never publish an unhealthy pointer'
+# Exercise the complete decision path with isolated mocks; never touch the live port.
+$script:events = @()
+$script:cycleListener = $true
+$script:cycleSha = $sha
+$script:cycleFailure = ''
+function Get-Command { param($Name,$ErrorAction) [PSCustomObject]@{Source='synthetic-git'} }
+function Invoke-RuntimeCommand { param($File,$Arguments,$Seconds,[switch]$IgnoreOutput) $script:events += 'clean'; return '' }
+function Get-ApprovedRuntimeSha { param($Current) $script:events += 'check'; if ($script:cycleFailure -eq 'offline') { throw 'offline' }; return $script:cycleSha }
+function Prepare-Runtime { param($Runtime,$Sha,$Previous) $script:events += 'prepare'; if ($script:cycleFailure -eq 'prepare') { throw 'prepare failed' }; return 'candidate' }
+function Test-RuntimeImport { param($Python,$Candidate) $script:events += 'validate'; if ($script:cycleFailure -eq 'validate') { throw 'invalid' } }
+function Get-RuntimeListeners { if ($script:cycleListener) { return 'synthetic-listener' } }
+function Start-Runtime { param($Launcher,$Root,$Code,[switch]$Reuse) $script:events += "reuse:$Reuse" }
+function Start-CurrentRuntime { param($Version,$Launcher,$Root,$VersionPath,[switch]$PublishedOnly) $script:events += "start-current:$PublishedOnly" }
+function Activate-Runtime { param($Version,$Candidate,$Sha,$Launcher,$Root,$VersionPath) $script:events += 'activate'; return $true }
+$version = @{commit=$old;code_root='old';python='synthetic'}
+Invoke-UpdateCycle $version 'runtime' 'launcher' 'root' 'pointer'
+Assert (($script:events -join ',') -eq 'check,clean,prepare,validate,activate') 'Running server must be updated only after candidate validation'
+$script:events = @(); $script:cycleListener = $false
+Invoke-UpdateCycle $version 'runtime' 'launcher' 'root' 'pointer'
+Assert (($script:events -join ',') -eq 'check,clean,prepare,validate,activate') 'Stopped server must activate the validated candidate'
+$script:cycleListener = $true
+foreach ($failure in 'offline','prepare','validate') {
+    $script:events = @(); $script:cycleFailure = $failure
+    [void](Invoke-UpdateCycle $version 'runtime' 'launcher' 'root' 'pointer')
+    Assert ($script:events[-1] -eq 'reuse:True' -and 'activate' -notin $script:events) "Failure $failure must preserve a running server"
+}
+$script:cycleFailure = ''; $script:cycleSha = $null; $script:events = @()
+Invoke-UpdateCycle $version 'runtime' 'launcher' 'root' 'pointer'
+Assert (($script:events -join ',') -eq 'check,reuse:True') 'No approved update must reuse the existing server'
+$script:cycleListener = $false; $script:events = @()
+Invoke-UpdateCycle $version 'runtime' 'launcher' 'root' 'pointer'
+Assert (($script:events -join ',') -eq 'check,start-current:True') 'No update while stopped must start current runtime'
+
+# Two actual Windows PowerShell processes share a unique synthetic mutex.
+$concurrentRoot = Join-Path $temp 'concurrent'
+[void][IO.Directory]::CreateDirectory((Join-Path $concurrentRoot '.local-runtime'))
+[IO.File]::WriteAllText((Join-Path $concurrentRoot '.local-runtime\runtime-version.json'), '{"commit":"old","code_root":"fixture"}')
+$tracePath = Join-Path $concurrentRoot 'trace.txt'
+$mutexName = 'Local\AJobRuntimeTest' + [guid]::NewGuid().ToString('N')
+$concurrentText = [IO.File]::ReadAllText($updaterSource).Replace('Local\AJobRuntimeUpdate', $mutexName)
+$concurrentText = $concurrentText.Replace('Invoke-UpdateCycle $version $runtime $launcher $root $versionPath', "Add-Content -LiteralPath '$tracePath' -Value 'entered'; Start-Sleep -Seconds 4")
+$concurrentText = $concurrentText.Replace('Start-Sleep -Milliseconds 1500', 'Start-Sleep -Milliseconds 1')
+$concurrentScript = Join-Path $concurrentRoot 'updater.ps1'
+[IO.File]::WriteAllText($concurrentScript, $concurrentText)
+$windowsPs = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+$testArgs = @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"' + $concurrentScript + '"'),'-DataRoot',('"' + $concurrentRoot + '"'),'-NoBrowser','-NonInteractive')
+$first = Start-Process -FilePath $windowsPs -ArgumentList $testArgs -PassThru -WindowStyle Hidden
+$deadline = [DateTime]::UtcNow.AddSeconds(10)
+while (-not (Test-Path -LiteralPath $tracePath) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 50 }
+Assert (Test-Path -LiteralPath $tracePath) 'First isolated launcher must acquire the mutex'
+$second = Start-Process -FilePath $windowsPs -ArgumentList $testArgs -PassThru -WindowStyle Hidden
+$first.WaitForExit(); $second.WaitForExit()
+Assert ($first.ExitCode -eq 0 -and $second.ExitCode -eq 0) 'Both concurrent launch processes must exit successfully'
+Assert (@(Get-Content -LiteralPath $tracePath).Count -eq 1) 'Concurrent launch must enter the update cycle only once'
 Write-Output "PASS: $script:assertions assertions; approval, offline, rollback, atomic publication, dependencies, real isolated Git preparation and selected-server verification."

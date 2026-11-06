@@ -107,10 +107,11 @@ function Get-RuntimeListeners {
         Group-Object OwningProcess | ForEach-Object { $_.Group[0] })
 }
 
-function Start-Runtime([string]$Launcher, [string]$Root, [string]$Code, [switch]$Reuse) {
+function Start-Runtime([string]$Launcher, [string]$Root, [string]$Code, [switch]$Reuse, [switch]$PublishedOnly) {
     $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $Launcher,
                    '-DataRoot', $Root, '-RuntimeCodeRoot', $Code, '-NoBrowser', '-NonInteractive')
     if ($Reuse) { $arguments += '-ReuseRunning' }
+    if ($PublishedOnly) { $arguments += '-ReplacePublishedOnly' }
     if ($ResumeDirectory) { $arguments += @('-ResumeDirectory', $ResumeDirectory) }
     [void](Invoke-RuntimeCommand "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" $arguments 90 -IgnoreOutput)
     # Independently verify every launch, including reuse.
@@ -157,11 +158,11 @@ function Test-RuntimeImport([string]$Python, [string]$Candidate) {
     [void](Invoke-RuntimeCommand $Python @('-I', '-c', $probe, $Candidate) 20)
 }
 
-function Start-CurrentRuntime($Version, [string]$Launcher, [string]$Root, [string]$VersionPath) {
-    try { Start-Runtime $Launcher $Root $Version.code_root }
+function Start-CurrentRuntime($Version, [string]$Launcher, [string]$Root, [string]$VersionPath, [switch]$PublishedOnly) {
+    try { Start-Runtime $Launcher $Root $Version.code_root -PublishedOnly:$PublishedOnly }
     catch {
         if (-not $Version.previous_code_root -or $Version.previous_code_root -eq $Version.code_root) { throw }
-        Start-Runtime $Launcher $Root $Version.previous_code_root
+        Start-Runtime $Launcher $Root $Version.previous_code_root -PublishedOnly:$PublishedOnly
         $restored = [ordered]@{commit=$Version.previous_commit; code_root=$Version.previous_code_root;
             previous_commit=$Version.commit; previous_code_root=$Version.code_root;
             data_working_directory=$Root; python=$Version.python}
@@ -171,7 +172,7 @@ function Start-CurrentRuntime($Version, [string]$Launcher, [string]$Root, [strin
 
 function Activate-Runtime($Version, [string]$Candidate, [string]$Sha, [string]$Launcher, [string]$Root, [string]$VersionPath) {
     try {
-        Start-Runtime $Launcher $Root $Candidate
+        Start-Runtime $Launcher $Root $Candidate -PublishedOnly
         $next = [ordered]@{commit=$Sha; code_root=$Candidate; previous_commit=$Version.commit;
             previous_code_root=$Version.code_root; data_working_directory=$Root; python=$Version.python}
         Save-RuntimeVersion $VersionPath $next
@@ -179,9 +180,37 @@ function Activate-Runtime($Version, [string]$Candidate, [string]$Sha, [string]$L
     }
     catch {
         # The old pointer remains intact until candidate readiness AND atomic publish.
-        Start-CurrentRuntime $Version $Launcher $Root $VersionPath
+        Start-CurrentRuntime $Version $Launcher $Root $VersionPath -PublishedOnly
         return $false
     }
+}
+
+function Invoke-UpdateCycle($Version, [string]$Runtime, [string]$Launcher, [string]$Root, [string]$VersionPath) {
+    # Prepare and validate before the published launcher may replace an owned
+    # listener. Foreign listeners are still refused by the launcher itself.
+    $candidate = $null
+    try {
+        $sha = Get-ApprovedRuntimeSha $Version.commit
+        if ($sha) {
+            $git = (Get-Command git -ErrorAction Stop).Source
+            if (Invoke-RuntimeCommand $git @('-C', $Version.code_root, 'status', '--porcelain', '--untracked-files=all')) {
+                throw 'Active runtime has local changes; defer update.'
+            }
+            $prepared = Prepare-Runtime $Runtime $sha $Version.code_root
+            Test-RuntimeImport $Version.python $prepared
+            $candidate = $prepared
+        }
+    }
+    catch { Write-Output 'Update unavailable; using the existing AJob runtime.' }
+    if ($candidate) {
+        # Start-Runtime delegates replacement to the ownership-checking launcher;
+        # Activate-Runtime preserves the old pointer and restarts it on failure.
+        [void](Activate-Runtime $Version $candidate $sha $Launcher $Root $VersionPath)
+    }
+    elseif (@(Get-RuntimeListeners).Count) {
+        Start-Runtime $Launcher $Root $Version.code_root -Reuse
+    }
+    else { Start-CurrentRuntime $Version $Launcher $Root $VersionPath -PublishedOnly }
 }
 
 if ($LibraryOnly) { return }
@@ -197,34 +226,7 @@ try {
     catch [Threading.AbandonedMutexException] { $locked = $true }
     if (-not $locked) { exit 0 }
     $version = Get-Content -LiteralPath $versionPath -Raw | ConvertFrom-Json
-    if (@(Get-RuntimeListeners).Count) {
-        # Any live listener prevents updating. The launcher verifies ownership.
-        Start-Runtime $launcher $root $version.code_root -Reuse
-    }
-    else {
-        $candidate = $null
-        try {
-            $git = (Get-Command git -ErrorAction Stop).Source
-            if (Invoke-RuntimeCommand $git @('-C', $version.code_root, 'status', '--porcelain', '--untracked-files=all')) {
-                throw 'Active runtime has local changes; defer update.'
-            }
-            $sha = Get-ApprovedRuntimeSha $version.commit
-            if ($sha) {
-                $prepared = Prepare-Runtime $runtime $sha $version.code_root
-                Test-RuntimeImport $version.python $prepared
-                $candidate = $prepared
-            }
-        }
-        catch { Write-Output 'Update unavailable; using the existing AJob runtime.' }
-        if ($candidate) {
-            # Recheck after network/preparation in case a server appeared meanwhile.
-            if (@(Get-RuntimeListeners).Count) {
-                Start-Runtime $launcher $root $version.code_root -Reuse
-            }
-            else { [void](Activate-Runtime $version $candidate $sha $launcher $root $versionPath) }
-        }
-        else { Start-CurrentRuntime $version $launcher $root $versionPath }
-    }
+    Invoke-UpdateCycle $version $runtime $launcher $root $versionPath
     if (-not $NoBrowser) { Start-Process 'http://127.0.0.1:8001/' }
     Start-Sleep -Milliseconds 1500
 }

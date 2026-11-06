@@ -508,3 +508,6 @@ reusable lesson appears.
 
 - Role previews must retain complete adjacent source context; extract required and
   preferred qualifications only from explicit sections and stop at the next heading.
+
+- A running dashboard must not skip update checks: validate the exact approved
+  candidate before the ownership-checking launcher replaces its listener.
