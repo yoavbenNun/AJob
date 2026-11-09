@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import subprocess
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,3 +27,19 @@ def test_docker_config_is_allowlisted():
     assert "config/*" in ignore
     assert "!config/companies.yaml" in ignore
     assert "*.cred" in ignore
+
+
+@pytest.mark.parametrize("dockerfile", ["Dockerfile", "Dockerfile.dashboard"])
+def test_local_contact_avatars_are_excluded_from_each_build_context(dockerfile):
+    # A Dockerfile-specific ignore policy overrides the root policy. Check the
+    # effective file, so introducing one cannot silently reinclude private photos.
+    specific = ROOT / f"{dockerfile}.dockerignore"
+    policy = specific if specific.exists() else ROOT / ".dockerignore"
+    rules = [line.strip() for line in policy.read_text().splitlines()
+             if line.strip() and not line.lstrip().startswith("#")]
+    private_directory = "src/web/static/contact-avatars/"
+    assert private_directory in rules
+    # Keep the explicit privacy boundary after allowlist exceptions, which could
+    # otherwise reinclude a descendant of src. No image build/private photo needed.
+    assert not any(rule.startswith("!") for rule in rules[rules.index(private_directory) + 1:])
+    assert "COPY src ./src" in (ROOT / dockerfile).read_text()

@@ -400,6 +400,9 @@ reusable lesson appears.
   company/job scope and verification age separate from syntactic URL checks;
   never equate synthetic UI screenshots with real discovery coverage. Keep
   contact queries/drafts local and do not load remote avatar tracking URLs.
+- When local private assets live under a copied source directory, exclude them
+  from Docker context as well as Git. Test the effective ignore policy for every
+  Dockerfile, including any Dockerfile-specific override.
 
 - Legacy outreach labels and generic company matches are not profile
   verification. Show cards only when trusted evidence ties a normalized

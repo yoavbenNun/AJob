@@ -28,6 +28,8 @@ By default the file is `contact_people.json` beside the local outreach database
 can select another local file. No file is created automatically. The file and
 optional local avatars are ignored by Git. Keep them private, never in commits,
 fixtures, screenshots of the real dashboard, or shared build contexts.
+The avatar directory is also excluded by the Docker build-context policy used
+by both image definitions; Git exclusion alone would not protect a local build.
 
 The only safe empty starting content is:
 
