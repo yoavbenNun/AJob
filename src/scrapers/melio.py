@@ -14,13 +14,25 @@ ENDPOINT = 'https://api.ashbyhq.com/posting-api/job-board/melio-payments'
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 
 
+class MelioInvalidFeed(ValueError):
+    """Public board schema or contents failed validation."""
+
+
+class MelioNoUsableListings(MelioInvalidFeed):
+    """Nonempty feed could not yield any validated job identity."""
+
+
+class MelioUnexpectedResponse(ValueError):
+    """HTTP response was not the expected public board response."""
+
+
 def extract_jobs(company: Company, payload: dict, metrics: dict) -> list[JobPosting]:
     if not isinstance(payload, dict) or not isinstance(payload.get('jobs'), list):
-        raise ValueError('Melio response has no jobs list')
+        raise MelioInvalidFeed('Melio response has no jobs list')
     # This public posting endpoint is a complete board, not a paginated search.
     # Never infer closure from an ATS migration or this collection response.
     if payload.get('next') or payload.get('nextPage') or payload.get('next_page'):
-        raise ValueError('Unexpected Melio pagination')
+        raise MelioInvalidFeed('Unexpected Melio pagination')
     metrics.update(raw_listings=len(payload['jobs']), invalid_listing=0,
                    unlisted_jobs=0, duplicates_avoided=0, page_limit_reached=False,
                    location_filter_status='not_applied')
@@ -32,13 +44,19 @@ def extract_jobs(company: Company, payload: dict, metrics: dict) -> list[JobPost
         if not isinstance(item, dict):
             metrics['invalid_listing'] += 1
             continue
-        identity, title = item.get('id'), item.get('title')
+        title = item.get('title')
+        url = canonical_url(item.get('jobUrl', '')) if isinstance(item.get('jobUrl'), str) else ''
+        # The documented public posting API does not promise an `id` field.
+        # Derive identity only from the strict official-board URL; when an ID
+        # is supplied, it must agree with that URL as before.
+        path = urlsplit(url).path
+        raw_identity = path.removeprefix('/melio-payments/') if path.startswith('/melio-payments/') else ''
+        identity = item['id'] if 'id' in item else raw_identity
         try:
             identity = str(UUID(identity)) if isinstance(identity, str) else ''
         except ValueError:
             identity = ''
         expected = f'https://jobs.ashbyhq.com/melio-payments/{identity}'
-        url = canonical_url(item.get('jobUrl', '')) if isinstance(item.get('jobUrl'), str) else ''
         if (not identity or not isinstance(title, str) or not title.strip() or url != expected
                 or 'jobs.ashbyhq.com' not in company.allowed_job_hosts
                 or not any(pattern in url for pattern in company.job_url_patterns)):
@@ -57,7 +75,7 @@ def extract_jobs(company: Company, payload: dict, metrics: dict) -> list[JobPost
     metrics['global_discovered'] = len(jobs)
     metrics['coverage_limited'] = bool(metrics['invalid_listing'])
     if not jobs and metrics['invalid_listing']:
-        raise ValueError('Melio response contains no usable listings')
+        raise MelioNoUsableListings('Melio response contains no usable listings')
     return list(jobs.values())
 
 
@@ -69,16 +87,16 @@ def fetch_jobs(company: Company, timeout_ms: int):
     request = Request(ENDPOINT, headers={'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json'})
     with urlopen(request, timeout=min(20, max(1, timeout_ms / 1000))) as response:
         if response.geturl() != ENDPOINT:
-            raise ValueError('Unexpected Melio feed redirect')
+            raise MelioUnexpectedResponse('Unexpected Melio feed redirect')
         if getattr(response, 'status', 200) != 200:
-            raise ValueError('Unexpected Melio response status')
+            raise MelioUnexpectedResponse('Unexpected Melio response status')
         headers = getattr(response, 'headers', {})
         media_type = headers.get('Content-Type', '').split(';', 1)[0].strip().lower()
         if media_type and media_type != 'application/json':
-            raise ValueError('Unexpected Melio response content type')
+            raise MelioUnexpectedResponse('Unexpected Melio response content type')
         body = response.read(MAX_RESPONSE_BYTES + 1)
     if len(body) > MAX_RESPONSE_BYTES:
-        raise ValueError('Melio response exceeds size limit')
+        raise MelioUnexpectedResponse('Melio response exceeds size limit')
     metrics = {}
     jobs = extract_jobs(company, json.loads(body), metrics)
     return jobs, metrics

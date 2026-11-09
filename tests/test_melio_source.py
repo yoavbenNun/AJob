@@ -99,6 +99,40 @@ def test_stable_uuid_identity_deduplicates_and_does_not_change_old_rows(monkeypa
     assert result.closure_snapshot is None
 
 
+def test_documented_public_posting_without_id_uses_verified_url(monkeypatch):
+    payload = deepcopy(FIXTURE)
+    for item in payload['jobs']:
+        item.pop('id')
+    install(monkeypatch, payload)
+    result = CareersScraper(Mock()).scan_company(COMPANY)
+    assert not result.error and len(result.jobs) == 2
+    assert result.jobs[0].job_url == payload['jobs'][0]['jobUrl']
+    assert result.closure_snapshot is None
+
+
+def test_unusable_feed_has_distinct_safe_failure_diagnostics(monkeypatch):
+    payload = deepcopy(FIXTURE)
+    payload['jobs'] = [dict(payload['jobs'][0], jobUrl='https://invalid.example/posting')]
+    install(monkeypatch, payload)
+    result = CareersScraper(Mock()).scan_company(COMPANY)
+    assert result.error
+    assert result.failure_details['exception_type'] == 'MelioNoUsableListings'
+    assert 'invalid.example' not in str(result.failure_details)
+
+
+def test_missing_id_does_not_accept_forged_or_malformed_urls(monkeypatch):
+    for bad_url in ('https://evil.example/melio-payments/78b22a8c-3409-4266-8f3c-f79d446b9ca6',
+                    'https://jobs.ashbyhq.com/other/78b22a8c-3409-4266-8f3c-f79d446b9ca6',
+                    'https://jobs.ashbyhq.com/melio-payments/not-a-uuid'):
+        payload = deepcopy(FIXTURE)
+        item = payload['jobs'][0]
+        item.pop('id')
+        item['jobUrl'] = bad_url
+        payload['jobs'] = [item]
+        install(monkeypatch, payload)
+        assert CareersScraper(Mock()).scan_company(COMPANY).error
+
+
 @pytest.mark.parametrize('change', [
     dict(id='not-a-uuid'), dict(id=None), dict(title=''), dict(jobUrl=''),
     dict(jobUrl='https://evil.example/melio-payments/78b22a8c-3409-4266-8f3c-f79d446b9ca6'),
