@@ -391,6 +391,11 @@ reusable lesson appears.
 
 ## Professional outreach
 
+- Public people data is not automatic reuse permission. Keep reviewed provenance,
+  company/job scope and verification age separate from syntactic URL checks;
+  never equate synthetic UI screenshots with real discovery coverage. Keep
+  contact queries/drafts local and do not load remote avatar tracking URLs.
+
 - Legacy outreach labels and generic company matches are not profile
   verification. Show cards only when trusted evidence ties a normalized
   LinkedIn person URL to the specific job, team, or hiring company. Keep

@@ -32,6 +32,19 @@ class ContactCard:
     display_name: str
     role_title: str
     reason: str
+    company: str = ""
+    evidence_url: str = ""
+    source_type: str = "reviewed_local_evidence"
+    last_verified_at: str = ""
+    avatar_url: str = ""
+
+    @property
+    def identity(self) -> str:
+        return self.profile_url
+
+    @property
+    def initials(self) -> str:
+        return "".join(word[0] for word in self.display_name.split()[:2]).upper()
 
 
 def canonical_profile_url(value: str) -> str | None:
@@ -75,7 +88,7 @@ def contact_cards(
         reason = ("Company recruiter" if item.relevance == ContactRelevance.COMPANY_RECRUITER
                   else "Relevant team member")
         candidates.append((item.relevance, not title, name.casefold(), url,
-                           ContactCard(url, name, title, reason)))
+                           ContactCard(url, name, title, reason, company=job.company)))
     # Prefer stronger evidence; within the same tier prefer a supported title.
     cards: dict[str, ContactCard] = {}
     for _, _, _, url, card in sorted(candidates, key=lambda row: row[:4]):

@@ -44,6 +44,8 @@ from src.notifications.recipient_settings import (
     validate_notification_email,
 )
 from src.outreach.contact_cards import ReviewedContactEvidence, contact_cards
+from src.outreach.discovery import ContactResults, ReviewedFileSource
+from src.outreach.personalized_drafts import personalized_draft
 from src.outreach.service import (
     draft_outreach_message,
     validate_approved_body,
@@ -85,6 +87,7 @@ def create_app(
     *,
     cloud_services=None,
     reviewed_contact_evidence: Callable[[JobPosting], tuple[ReviewedContactEvidence, ...]] | None = None,
+    contact_people_path: str | Path | None = None,
 ) -> FastAPI:
     """Create a local dashboard backed by the configured job repository."""
     repository = cloud_services.jobs if cloud_services else create_job_repository(database_path)
@@ -152,6 +155,9 @@ def create_app(
 
     app = FastAPI(title="AJob", docs_url=None, redoc_url=None)
     app.state.reviewed_contact_evidence = reviewed_contact_evidence
+    app.state.contact_source = None if cloud_services else ReviewedFileSource(
+        Path(contact_people_path) if contact_people_path else outreach_path.parent / "contact_people.json"
+    )
     if not cloud_services:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]"])
         app.add_middleware(LocalSecurityMiddleware)
@@ -408,6 +414,35 @@ def create_app(
                                 resume_matching_enabled=allowed_resume_root is not None,
                                 **match_context,
                                 **(_outreach_context(outreach_repository, job) if not cloud_services else {}))
+
+    @app.post("/jobs/{job_id}/contacts/draft")
+    async def contact_draft(request: Request, job_id: int):
+        if outreach_repository is None:
+            raise HTTPException(status_code=404)
+        body = bytearray()
+        async for chunk in request.stream():
+            if len(body) + len(chunk) > 4096:
+                raise HTTPException(status_code=413)
+            body.extend(chunk)
+        try:
+            payload = json.loads(body)
+        except (ValueError, UnicodeError, RecursionError):
+            raise HTTPException(status_code=400, detail="Invalid draft request") from None
+        if not isinstance(payload, dict) or not isinstance(payload.get("csrf_token"), str):
+            raise HTTPException(status_code=400, detail="Invalid draft request")
+        if not payload["csrf_token"].isascii():
+            raise HTTPException(status_code=403, detail="Invalid form token")
+        _validate_csrf({"csrf_token": [payload["csrf_token"]]}, request_csrf(request))
+        job = _get_job_or_404(repository, job_id)
+        results = _contact_results(request, job, outreach_repository.list_contacts_for_job(job_id))
+        contact = next((card for card in results.cards
+                        if card.identity == payload.get("profile_url")), None)
+        if contact is None:
+            raise HTTPException(status_code=404, detail="Verified contact is not available")
+        try:
+            return personalized_draft(job, contact, payload.get("style"), payload.get("revision", 0))
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid draft options") from None
 
     @app.get("/jobs/{job_id}/application", response_class=HTMLResponse)
     def application_packages(request: Request, job_id: int):
@@ -825,16 +860,16 @@ def _application_response(
 
 
 def _detail_response(request: Request, job: JobPosting, **context: object):
-    evidence = request.app.state.reviewed_contact_evidence
     saved_contacts = context.pop("saved_outreach_contacts", ())
+    people = _contact_results(request, job, saved_contacts)
     extracted_requirements = _description_requirements(job.description) if not job.requirements.strip() else {}
     return templates.TemplateResponse(
         request,
         "job_detail.html",
         {
             "job": job,
-            "contact_cards": contact_cards(job, saved_contacts, evidence(job))
-            if evidence is not None and saved_contacts else (),
+            "contact_cards": people.cards,
+            "contact_state": people.state,
             "statuses": JOB_STATUSES,
             "company_logos": COMPANY_LOGOS,
             "role_summary": _summarize_role(job),
@@ -852,6 +887,20 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
             **context,
         },
     )
+
+
+def _contact_results(request: Request, job: JobPosting, saved_contacts=()) -> ContactResults:
+    # Legacy trusted evidence hook is retained; it is not an automatic discoverer.
+    evidence = request.app.state.reviewed_contact_evidence
+    try:
+        if evidence is not None:
+            cards = contact_cards(job, saved_contacts, evidence(job))
+            return ContactResults(cards, "ready" if cards else "empty")
+        source = request.app.state.contact_source
+        return source.for_job(job) if source is not None else ContactResults()
+    except Exception:
+        # Never leak provider exceptions, profile data or local paths into HTML.
+        return ContactResults(state="unavailable")
 
 
 def _clean_captured_lines(text: str, job: JobPosting) -> list[str]:
