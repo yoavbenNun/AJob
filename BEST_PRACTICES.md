@@ -511,3 +511,7 @@ reusable lesson appears.
 
 - A running dashboard must not skip update checks: validate the exact approved
   candidate before the ownership-checking launcher replaces its listener.
+
+- Ashby public postings need not include a top-level ID. Validate stable IDs
+  against the exact official job URL and distinguish feed validation failures
+  without logging response contents or hiding incomplete scans.
