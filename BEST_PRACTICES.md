@@ -49,6 +49,11 @@ reusable lesson appears.
 
 ## Environment and verification
 
+- Playwright's bundled Node must start before --with-deps can install browser
+  libraries. Bootstrap its loader prerequisites (such as libatomic1 on slim
+  Debian) before invoking the CLI; retain actual browser installation and smoke
+  tests rather than downgrading or skipping them to hide a loader failure.
+
 - Put an explicit synthetic-fixture explanation/allowlist marker on each
   fingerprint line before committing audit exceptions. History scanning cannot
   be fixed just by annotating the latest file; keep any historical exception
