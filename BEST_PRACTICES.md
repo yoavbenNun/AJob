@@ -49,6 +49,11 @@ reusable lesson appears.
 
 ## Environment and verification
 
+- Put an explicit synthetic-fixture explanation/allowlist marker on each
+  fingerprint line before committing audit exceptions. History scanning cannot
+  be fixed just by annotating the latest file; keep any historical exception
+  limited to exact path, detector type and known public-example fingerprint.
+
 - Test updater preparation in the actual desktop PowerShell context. Interactive
   tooling can preload Get-FileHash while a shortcut cannot discover it; import
   the shell's own Utility module explicitly before checking dependency hashes.

@@ -81,3 +81,9 @@ def test_contact_invalid_url_fixture_exception_is_exact_and_history_safe(tmp_pat
     assert len(inspect(b"public label in other file", "src/outreach/discovery.py")) == 1
     setattr(secret, "secret_value", "unrecognized-label")
     assert len(inspect(b"other label", "tests/test_secret_audit.py")) == 1
+    secret.type = "Hex High Entropy String"
+    setattr(secret, "secret_value", hashlib.sha256("Basic Auth Credentials".encode()).hexdigest())
+    assert inspect(b"public fingerprint", "scripts/audit_secrets.py", blob="history") == []
+    assert len(inspect(b"fingerprint elsewhere", "src/outreach/discovery.py")) == 1
+    setattr(secret, "secret_value", hashlib.sha256("unrecognized-label".encode()).hexdigest())
+    assert len(inspect(b"unknown fingerprint", "scripts/audit_secrets.py")) == 1
