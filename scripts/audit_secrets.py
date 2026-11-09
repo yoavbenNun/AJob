@@ -35,6 +35,7 @@ def inspect_text(raw, path, blob=None):
         for secret in scan_file(str(target)):
             # Exact example fingerprints, scoped to path and detector type.
             examples = {
+                ("tests/test_contact_discovery.py", "Basic Auth Credentials"): "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8",  # pragma: allowlist secret -- SHA256 of synthetic invalid-URL fixture only; exact path/type/value, including history
                 ("tests/test_cloud_auth.py", "Secret Keyword"): "c0582f792635b9d7a071aa4e84692a34b9efb3f5d18173f9e3a75044c81b1cd1",  # pragma: allowlist secret -- SHA256 of synthetic-only fixture; exact path/type/value, including history
                 ("tests/test_email_notifier.py", "Secret Keyword"): "ed24bc0bb03d0e89e8bacafb1545ee4ed6a2b273f3db69199787632b32545179",  # pragma: allowlist secret -- SHA256 of a public example
                 ("README.md", "Basic Auth Credentials"): "0be64ae89ddd24e225434de95d501711339baeee18f009ba9b4369af27d30d60",  # pragma: allowlist secret -- SHA256 of a public example
