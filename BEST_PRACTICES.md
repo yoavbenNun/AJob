@@ -515,3 +515,8 @@ reusable lesson appears.
 - Ashby public postings need not include a top-level ID. Validate stable IDs
   against the exact official job URL and distinguish feed validation failures
   without logging response contents or hiding incomplete scans.
+
+- History secret-scan exceptions must identify the exact immutable blob, path,
+  line and detector; never exempt an entire fixture or a current working file.
+- Git rev-list --objects emits each blob once under one selected path. Do not
+  interpret it as a complete inventory of every historical pathname for a blob.
