@@ -72,5 +72,12 @@ def test_contact_invalid_url_fixture_exception_is_exact_and_history_safe(tmp_pat
     assert len(inspect(b"other path", "src/outreach/discovery.py")) == 1
     secret.type = "Secret Keyword"
     assert len(inspect(b"other detector", "tests/test_contact_discovery.py")) == 1
-    secret.type, secret.secret_value = "Basic Auth Credentials", "different-fixture-value"
+    secret.type = "Basic Auth Credentials"
+    setattr(secret, "secret_value", "different-fixture-value")
     assert len(inspect(b"other value", "tests/test_contact_discovery.py")) == 1
+    secret.type = "Secret Keyword"
+    setattr(secret, "secret_value", "Basic Auth Credentials")
+    assert inspect(b"public detector label", "tests/test_secret_audit.py", blob="history") == []
+    assert len(inspect(b"public label in other file", "src/outreach/discovery.py")) == 1
+    setattr(secret, "secret_value", "unrecognized-label")
+    assert len(inspect(b"other label", "tests/test_secret_audit.py")) == 1
