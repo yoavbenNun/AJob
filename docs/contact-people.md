@@ -94,8 +94,9 @@ resume details. Referral wording is conditional, never a claim of willingness.
 Revise chooses another deterministic wording, not a new set of facts.
 
 The draft dialog supports loading, edit, revise, copy, failure retention and
-keyboard close/focus return. Drafts stay in the current browser DOM until close
-or navigation; no localStorage or new SQL storage is used. Without JavaScript,
+keyboard close/focus return. Drafts stay in the current browser DOM until
+navigation (opening another draft replaces the previous text); no localStorage
+or new SQL storage is used. Without JavaScript,
 profile links and reviewed cards still work, while drafting stays disabled.
 
 ## Real-source validation, 9 November 2026
