@@ -110,6 +110,30 @@ def worker(company, timeout, pages, headed, pipe):
     pipe.close()
 
 
+def incomplete_melio_worker(company, timeout, pages, headed, pipe):
+    import os
+    if os.name != 'nt':
+        os.setsid()
+    posting = JobPosting('Software Student', company.name, 'Israel',
+                         'https://jobs.ashbyhq.com/melio-payments/78b22a8c-3409-4266-8f3c-f79d446b9ca6',
+                         source=company.careers_url, description='Develop software.')
+    pipe.send(('collection', {'invalid_listing': 1, 'coverage_limited': True}))
+    pipe.send(('job', True, posting))
+    pipe.send(('error', 'MelioIncompleteFeed'))
+    pipe.close()
+
+
+def test_melio_incomplete_worker_retains_discovery_and_records_partial(store):
+    company = Company('Melio', 'https://careers.meliopayments.com/')
+    run = store.start_run('melio-partial-slot')
+    result = scan_with_budgets([company], store, run, 'melio-partial-slot',
+                               source_seconds=10, scan_seconds=20, worker=incomplete_melio_worker)
+    assert result.status == 'partial' and result.jobs_saved == 1 and result.failures == 1
+    assert result.metrics[0]['status'] == 'failed'
+    assert result.metrics[0]['error_type'] == 'MelioIncompleteFeed'
+    assert store.execute('SELECT count(*) AS n FROM notification_outbox').fetchone()['n'] == 1
+
+
 def corrected_workday_worker(company, timeout, pages, headed, pipe):
     import os
     if os.name != 'nt':

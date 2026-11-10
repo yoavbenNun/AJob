@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from urllib.error import HTTPError
 from unittest.mock import Mock
+from types import SimpleNamespace
 
 import pytest
 
@@ -99,6 +100,47 @@ def test_stable_uuid_identity_deduplicates_and_does_not_change_old_rows(monkeypa
     assert result.closure_snapshot is None
 
 
+@pytest.mark.parametrize('has_id', [True, False])
+def test_observed_mixed_case_board_uses_stable_existing_identity(monkeypatch, has_id):
+    payload = deepcopy(FIXTURE)
+    for item in payload['jobs']:
+        item['jobUrl'] = item['jobUrl'].replace('/melio-payments/', '/Melio-payments/')
+        if not has_id:
+            item.pop('id')
+    install(monkeypatch, payload)
+    result = CareersScraper(Mock()).scan_company(COMPANY)
+    assert not result.error and len(result.jobs) == 2
+    assert result.jobs[0].job_url == FIXTURE['jobs'][0]['jobUrl']
+    assert result.closure_snapshot is None
+
+
+def test_board_case_variants_do_not_duplicate_postings(monkeypatch):
+    payload = deepcopy(FIXTURE)
+    other = deepcopy(payload['jobs'][0])
+    other['jobUrl'] = other['jobUrl'].replace('/melio-payments/', '/Melio-payments/')
+    payload['jobs'].append(other)
+    install(monkeypatch, payload)
+    result = CareersScraper(Mock()).scan_company(COMPANY)
+    assert not result.error and len(result.jobs) == 2
+    assert result.collection_metrics['duplicates_avoided'] == 1
+
+
+def test_observed_case_preserves_existing_applied_job(monkeypatch, tmp_path):
+    repository = JobRepository(tmp_path / 'jobs.db')
+    repository.initialize()
+    install(monkeypatch)
+    old = CareersScraper(Mock()).scan_company(COMPANY).jobs[0]
+    old.status = 'applied'
+    original_id = repository.save(old)
+    payload = deepcopy(FIXTURE)
+    payload['jobs'][0]['jobUrl'] = payload['jobs'][0]['jobUrl'].replace('/melio-payments/', '/Melio-payments/')
+    install(monkeypatch, payload)
+    discovered = CareersScraper(Mock()).scan_company(COMPANY).jobs[0]
+    assert repository.save(discovered) == original_id
+    assert len(repository.list_all()) == 1
+    assert repository.get_by_id(original_id).status == 'applied'
+
+
 def test_documented_public_posting_without_id_uses_verified_url(monkeypatch):
     payload = deepcopy(FIXTURE)
     for item in payload['jobs']:
@@ -137,6 +179,7 @@ def test_missing_id_does_not_accept_forged_or_malformed_urls(monkeypatch):
     dict(id='not-a-uuid'), dict(id=None), dict(title=''), dict(jobUrl=''),
     dict(jobUrl='https://evil.example/melio-payments/78b22a8c-3409-4266-8f3c-f79d446b9ca6'),
     dict(jobUrl='https://jobs.ashbyhq.com/other/78b22a8c-3409-4266-8f3c-f79d446b9ca6'),
+    dict(jobUrl='https://jobs.ashbyhq.com/melio-paymentſ/78b22a8c-3409-4266-8f3c-f79d446b9ca6'),
     dict(jobUrl='https://jobs.ashbyhq.com/melio-payments/1203e6eb-5467-445e-a766-efacc11543b8'),
 ])
 def test_missing_or_forged_identity_is_not_collected(monkeypatch, change):
@@ -157,6 +200,43 @@ def test_mixed_valid_and_invalid_listings_retain_jobs_and_report_limited_coverag
     assert result.collection_metrics['invalid_listing'] == 1
     assert result.collection_metrics['coverage_limited'] is True
     assert result.closure_snapshot is None
+
+
+@pytest.mark.parametrize("source", ["https://careers.meliopayments.com/", "HTTPS://careers.meliopayments.com/"])
+def test_incomplete_melio_feed_keeps_jobs_but_worker_does_not_report_full(monkeypatch, source):
+    from src.scrapers import budgeted_scan
+    payload = deepcopy(FIXTURE)
+    payload['jobs'].append(dict(payload['jobs'][0], id='invalid-identity'))
+    metrics = {}
+    jobs = melio.extract_jobs(COMPANY, payload, metrics)
+    assert len(jobs) == 2 and metrics['invalid_listing'] == 1
+    result = SimpleNamespace(error='', jobs=jobs, collection_metrics=metrics, closure_snapshot=None)
+    monkeypatch.setattr(budgeted_scan, 'CareersScraper', lambda *a, **k: SimpleNamespace(scan_company=lambda _: result))
+    if hasattr(budgeted_scan.os, 'setsid'):
+        monkeypatch.setattr(budgeted_scan.os, 'setsid', lambda: None)
+    events = []
+    pipe = Mock()
+    pipe.send.side_effect = events.append
+    company = Company('Melio', source, job_url_patterns=COMPANY.job_url_patterns,
+                      allowed_job_hosts=COMPANY.allowed_job_hosts)
+    budgeted_scan.source_worker(company, 1000, 1, True, pipe)
+    assert len([event for event in events if event[0] == 'job']) == 2
+    assert ('done',) not in events
+    assert any(event[:2] == ('error', 'MelioIncompleteFeed') for event in events)
+
+
+def test_incomplete_feed_policy_does_not_change_other_sources(monkeypatch):
+    from src.scrapers import budgeted_scan
+    result = SimpleNamespace(error='', jobs=[], collection_metrics={'invalid_listing': 1}, closure_snapshot=None)
+    monkeypatch.setattr(budgeted_scan, 'CareersScraper', lambda *a, **k: SimpleNamespace(scan_company=lambda _: result))
+    if hasattr(budgeted_scan.os, 'setsid'):
+        monkeypatch.setattr(budgeted_scan.os, 'setsid', lambda: None)
+    events = []
+    pipe = Mock()
+    pipe.send.side_effect = events.append
+    budgeted_scan.source_worker(Company('Other', 'https://example.test/'), 1000, 1, True, pipe)
+    assert ('done',) in events
+    assert not any(event[0] == 'error' for event in events)
 
 
 def test_missing_location_and_description_never_invent_evidence(monkeypatch):
