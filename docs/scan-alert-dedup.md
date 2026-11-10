@@ -1,5 +1,11 @@
 # Scheduled scan incident reporting
 
+For AJ-008's run-42789814970 evidence, SMTP-vs-GitHub distinction and the exact
+separately approved schema/permissions/backup/activation/rollback sequence, see
+[the gated rollout checklist](scan-alert-dedup-rollout.md). The two aged incidents
+in that run were warnings, not its only failures; fresh and recent operational
+failures remained. No activation is performed by either document.
+
 ## Cause and semantics
 
 Previously both scheduled-tick and scan-report --check returned nonzero for every

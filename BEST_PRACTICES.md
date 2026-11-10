@@ -291,6 +291,12 @@ reusable lesson appears.
 
 ## Notifications and scheduled runs
 
+- A report may contain aged FINAL_FAILURE warnings alongside fresh operational
+  failures. Identify which rows actually affect the exit before blaming history.
+  SMTP acceptance, a verified Actions failure receipt and inbox delivery are
+  distinct facts. Optional RLS tables require runtime-role policy checks as well
+  as table grants before activation.
+
 - A pending alert row written before exit is not proof of a GitHub failure.
   Suppress duplicates only after verifying the exact prior workflow attempt and
   business-step failure. Preserve the current pending observation even if receipt
