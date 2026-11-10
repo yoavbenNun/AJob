@@ -5,6 +5,7 @@ import hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
+from urllib.parse import urlsplit
 
 
 def test_public_workday_fixture_exception_is_exact_and_history_safe(tmp_path):
@@ -49,3 +50,40 @@ def test_synthetic_cloud_credential_exception_is_exact_and_history_safe(tmp_path
     assert len(inspect(b'fixture', 'src/web/cloud_auth.py')) == 1
     secret.secret_value += '-different'
     assert len(inspect(b'fixture', 'tests/test_cloud_auth.py')) == 1
+
+
+def test_contact_invalid_url_fixture_exception_is_exact_and_history_safe(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    fixture = ast.parse((root / "tests/test_contact_discovery.py").read_text(encoding="utf-8"))
+    url = next(node.value for node in ast.walk(fixture)
+               if isinstance(node, ast.Constant) and isinstance(node.value, str)
+               and node.value.startswith("https://user:"))
+    value = urlsplit(url).password
+    tree = ast.parse((root / "scripts/audit_secrets.py").read_text(encoding="utf-8"))
+    inspector = next(node for node in tree.body
+                     if isinstance(node, ast.FunctionDef) and node.name == "inspect_text")
+    secret = SimpleNamespace(secret_value=value, type="Basic Auth Credentials", line_number=1)
+    namespace = dict(Path=Path, TemporaryDirectory=lambda **kw: TemporaryDirectory(dir=tmp_path, **kw),
+                     hashlib=hashlib, scan_file=lambda _: [secret])
+    exec(compile(ast.Module(body=[inspector], type_ignores=[]), "audit-policy", "exec"), namespace)
+    inspect = namespace["inspect_text"]
+    assert inspect(b"synthetic invalid URL", "tests/test_contact_discovery.py") == []
+    assert inspect(b"synthetic invalid URL", "tests/test_contact_discovery.py", blob="history") == []
+    assert len(inspect(b"other path", "src/outreach/discovery.py")) == 1
+    secret.type = "Secret Keyword"
+    assert len(inspect(b"other detector", "tests/test_contact_discovery.py")) == 1
+    secret.type = "Basic Auth Credentials"
+    setattr(secret, "secret_value", "different-fixture-value")
+    assert len(inspect(b"other value", "tests/test_contact_discovery.py")) == 1
+    secret.type = "Secret Keyword"
+    setattr(secret, "secret_value", "Basic Auth Credentials")
+    assert inspect(b"public detector label", "tests/test_secret_audit.py", blob="history") == []
+    assert len(inspect(b"public label in other file", "src/outreach/discovery.py")) == 1
+    setattr(secret, "secret_value", "unrecognized-label")
+    assert len(inspect(b"other label", "tests/test_secret_audit.py")) == 1
+    secret.type = "Hex High Entropy String"
+    setattr(secret, "secret_value", hashlib.sha256("Basic Auth Credentials".encode()).hexdigest())
+    assert inspect(b"public fingerprint", "scripts/audit_secrets.py", blob="history") == []
+    assert len(inspect(b"fingerprint elsewhere", "src/outreach/discovery.py")) == 1
+    setattr(secret, "secret_value", hashlib.sha256("unrecognized-label".encode()).hexdigest())
+    assert len(inspect(b"unknown fingerprint", "scripts/audit_secrets.py")) == 1

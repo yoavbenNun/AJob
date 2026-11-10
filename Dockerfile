@@ -7,6 +7,11 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# Bootstrap the bundled Node loader before Playwright can install browser deps.
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt ./
 RUN python -m pip install --no-cache-dir --upgrade "pip>=26.2,<27" \
     && pip install --no-cache-dir -r requirements.txt \

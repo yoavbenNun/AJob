@@ -87,7 +87,9 @@ def test_render_is_read_only_and_escapes_contact(workspace):
     assert "&lt;Test Contact&gt;" in section and "Engineer &amp; mentor" in section
     assert 'target="_blank" rel="noopener noreferrer"' in section
     assert 'href="https://www.linkedin.com/in/synthetic-test-contact"' in section
-    assert all(tag not in section for tag in ("<form", "<input", "<button", "<textarea", "<select"))
+    assert all(tag not in section for tag in ("<form", "<input"))
+    assert "Draft message" in section
+    assert 'data-profile-url="https://www.linkedin.com/in/synthetic-test-contact"' in section
     assert "Private draft" not in section
     client.app.state.reviewed_contact_evidence = None
     assert "No verified LinkedIn contacts found for this role." in client.get(path).text

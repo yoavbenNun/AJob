@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% include '_app_metadata.html' %}
-  <link rel="stylesheet" href="{{ url_for('static', path='contact-cards.css') }}?v=1">
+  <link rel="stylesheet" href="{{ url_for('static', path='contact-cards.css') }}?v=2">
   <title>{{ job.title }} · AJob</title>
   <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}?v=20261015-7">
   <link rel="stylesheet" href="{{ url_for('static', path='workspace.css') }}?v=20261105">
@@ -70,5 +70,6 @@
     {% else %}<p class="notice">Personal resume matching and application files stay on your desktop. This workspace shows collected job information and your saved status.</p>{% endif %}
   </main>
   <script src="{{ url_for('static', path='ui.js') }}?v=20261015-1" defer></script>
+  <script src="{{ url_for('static', path='contact-people.js') }}?v=1" defer></script>
 </body>
 </html>

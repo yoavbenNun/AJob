@@ -1,23 +1,58 @@
-<details class="content-section collapsible-section" id="outreach">
-  <summary><span class="section-summary"><h2>Contact people</h2></span></summary>
+<details class="content-section collapsible-section" id="outreach" data-draft-url="/jobs/{{ job.id }}/contacts/draft" data-csrf-token="{{ csrf_token }}">
+  <summary><span class="section-summary"><h2>Contact people</h2>{% if contact_cards %}<small>{{ contact_cards|length }} verified contact{% if contact_cards|length != 1 %}s{% endif %}</small>{% endif %}</span></summary>
   <div class="collapsible-section__body">
     {% if contact_cards %}
+    <p class="contact-intro">People with a reviewed connection to this company or role. AJob never sends messages.</p>
     <ul class="contact-profile-list">
       {% for card in contact_cards %}
-      <li>
-        <a class="contact-profile" href="{{ card.profile_url }}" target="_blank" rel="noopener noreferrer">
-          <span class="contact-profile__text">
-            <strong>{{ card.display_name }}</strong>
-            {% if card.role_title %}<span class="contact-profile__title">{{ card.role_title }}</span>{% endif %}
-            <span class="contact-profile__reason">{{ card.reason }}</span>
-          </span>
-          <span class="contact-profile__network">LinkedIn <span aria-hidden="true">↗</span></span>
-        </a>
+      <li class="contact-person-card">
+        <div class="contact-person-card__cover" aria-hidden="true"></div>
+        <div class="contact-person-card__avatar" aria-hidden="true">
+          <span>{{ card.initials|default(card.display_name[:1]) }}</span>
+          {% if card.avatar_url|default('') %}<img src="{{ card.avatar_url }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+        </div>
+        <div class="contact-person-card__content">
+          <strong class="contact-person-card__name">{{ card.display_name }}</strong>
+          {% if card.role_title %}<p class="contact-person-card__headline" title="{{ card.role_title }}">{{ card.role_title }}</p>{% endif %}
+          {% if card.company|default('') %}<p class="contact-person-card__company">{{ card.company }}</p>{% endif %}
+          <p class="contact-person-card__reason">{{ card.reason }}</p>
+          {% if card.evidence_url|default('') %}
+          <p class="contact-person-card__source"><a href="{{ card.evidence_url }}" target="_blank" rel="noopener noreferrer">View evidence <span aria-hidden="true">↗</span></a><span>{{ card.source_type|replace('_', ' ') }}</span>{% if card.last_verified_at|default('') %}<time datetime="{{ card.last_verified_at }}" title="{{ card.last_verified_at }}">Reviewed {{ card.last_verified_at[:10] }}</time>{% endif %}</p>
+          {% endif %}
+          <div class="contact-person-card__actions">
+            <a class="contact-profile" href="{{ card.profile_url }}" target="_blank" rel="noopener noreferrer">Open LinkedIn <span aria-hidden="true">↗</span></a>
+            <button class="contact-draft-trigger" type="button" data-profile-url="{{ card.profile_url }}" data-contact-name="{{ card.display_name }}" disabled>Draft message</button>
+          </div>
+        </div>
       </li>
       {% endfor %}
     </ul>
+    <noscript><p class="muted">Enable JavaScript to prepare an editable message draft. Profile links work without it.</p></noscript>
+    <dialog class="contact-draft-dialog" aria-labelledby="contact-draft-title">
+      <div class="contact-draft-dialog__header">
+        <div><p class="eyebrow">Manual outreach</p><h3 id="contact-draft-title">Message draft</h3></div>
+        <button class="contact-draft-close" type="button" aria-label="Close message draft">×</button>
+      </div>
+      <p class="contact-draft-note">A suggestion only. Review and edit every claim. Nothing is sent or saved automatically.</p>
+      <label class="contact-draft-label" for="contact-draft-style">Message style</label>
+      <select id="contact-draft-style">
+        <option value="short">Short connection request</option>
+        <option value="inquiry">Professional inquiry</option>
+        <option value="referral">Polite referral request</option>
+      </select>
+      <label class="contact-draft-label" for="contact-draft-body">Edit your draft</label>
+      <textarea id="contact-draft-body" rows="8" spellcheck="true" aria-describedby="contact-draft-count contact-draft-status"></textarea>
+      <div class="contact-draft-meta"><span id="contact-draft-count"></span><span id="contact-draft-status" role="status" aria-live="polite"></span></div>
+      <div class="contact-draft-actions">
+        <button class="contact-draft-copy" type="button" disabled>Copy message</button>
+        <button class="contact-draft-regenerate secondary" type="button">Revise draft</button>
+        <a class="contact-draft-profile" target="_blank" rel="noopener noreferrer">Open profile <span aria-hidden="true">↗</span></a>
+      </div>
+    </dialog>
+    {% elif contact_state|default('empty') == 'unavailable' %}
+    <p class="contact-empty" role="status">Contact source is unavailable. You can still review and apply for this job.</p>
     {% else %}
-    <p class="muted">No verified LinkedIn contacts found for this role.</p>
+    <p class="contact-empty">No verified LinkedIn contacts found for this role.</p>
     {% endif %}
   </div>
 </details>
