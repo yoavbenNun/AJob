@@ -8,6 +8,7 @@ import os
 import signal
 import subprocess
 import time
+from urllib.parse import urlsplit
 
 from src.filtering.job_filter import classify_job, prefilter_job
 from src.scrapers.careers_scraper import CareersScraper, _enrich_job
@@ -125,7 +126,17 @@ def source_worker(company, timeout_ms, max_pages, headless, pipe):
             else:
                 accepted = False
             pipe.send(("job", accepted, job))
-        pipe.send(("error", "JobDetailUnavailable") if detail_failures else ("done",))
+        # A partially invalid Melio feed can still contain usable discoveries.
+        # Deliver those events first, but leave this source retryable instead of
+        # marking incomplete coverage as a successful scan.
+        melio_incomplete = (
+            urlsplit(company.careers_url).hostname == 'careers.meliopayments.com'
+            and getattr(result, 'collection_metrics', {}).get('invalid_listing', 0) > 0
+        )
+        if melio_incomplete:
+            pipe.send(('error', 'MelioIncompleteFeed'))
+        else:
+            pipe.send(("error", "JobDetailUnavailable") if detail_failures else ("done",))
     except Exception as error:
         pipe.send(("error", type(error).__name__, source_failure(error, 'source_worker')))
     finally:
