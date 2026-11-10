@@ -538,3 +538,10 @@ reusable lesson appears.
   line and detector; never exempt an entire fixture or a current working file.
 - Git rev-list --objects emits each blob once under one selected path. Do not
   interpret it as a complete inventory of every historical pathname for a blob.
+
+- An Ashby feed can return a differently cased board slug from its endpoint.
+  Verify both public paths and normalize only that board segment while keeping
+  the exact official host, UUID and any supplied identity consistent.
+
+- Retain valid Melio discoveries from a mixed feed, but treat rejected invalid
+  listings as incomplete coverage so recovery does not mark the source full.

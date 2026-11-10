@@ -45,19 +45,25 @@ def extract_jobs(company: Company, payload: dict, metrics: dict) -> list[JobPost
             metrics['invalid_listing'] += 1
             continue
         title = item.get('title')
-        url = canonical_url(item.get('jobUrl', '')) if isinstance(item.get('jobUrl'), str) else ''
-        # The documented public posting API does not promise an `id` field.
-        # Derive identity only from the strict official-board URL; when an ID
-        # is supplied, it must agree with that URL as before.
-        path = urlsplit(url).path
-        raw_identity = path.removeprefix('/melio-payments/') if path.startswith('/melio-payments/') else ''
+        raw_url = canonical_url(item.get('jobUrl', '')) if isinstance(item.get('jobUrl'), str) else ''
+        parts = urlsplit(raw_url)
+        segments = parts.path.split('/')
+        # Ashby currently returns the board as "Melio-payments" even for the
+        # lowercase endpoint. Both official paths resolve, but persist the
+        # lowercase board used previously to retain stable identity.
+        valid_board = (parts.scheme == 'https' and parts.netloc == 'jobs.ashbyhq.com'
+                       and not parts.query and len(segments) == 3
+                       and segments[0] == '' and segments[1].isascii()
+                       and segments[1].lower() == 'melio-payments')
+        raw_identity = segments[2] if valid_board else ''
         identity = item['id'] if 'id' in item else raw_identity
         try:
             identity = str(UUID(identity)) if isinstance(identity, str) else ''
         except ValueError:
             identity = ''
-        expected = f'https://jobs.ashbyhq.com/melio-payments/{identity}'
-        if (not identity or not isinstance(title, str) or not title.strip() or url != expected
+        url = f'https://jobs.ashbyhq.com/melio-payments/{identity}'
+        if (not valid_board or not identity or raw_identity != identity
+                or not isinstance(title, str) or not title.strip()
                 or 'jobs.ashbyhq.com' not in company.allowed_job_hosts
                 or not any(pattern in url for pattern in company.job_url_patterns)):
             metrics['invalid_listing'] += 1
