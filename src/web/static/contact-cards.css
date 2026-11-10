@@ -1,27 +1,116 @@
-.contact-profile-list {
+#outreach .contact-intro { margin: 0 0 .9rem; color: #607083; font-size: .82rem; }
+#outreach .contact-empty { margin: .2rem 0; color: #607083; font-size: .85rem; }
+#outreach .contact-profile-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 205px), 240px));
+  align-items: stretch;
+  gap: .85rem;
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  gap: .5rem;
 }
-
-.contact-profile {
+#outreach .contact-person-card {
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #dce4ed;
+  border-radius: .85rem;
+  box-shadow: 0 3px 12px #17335308;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: .5rem;
-  padding: .7rem .85rem;
-  border: 1px solid #dce5ee;
-  border-radius: .75rem;
-  background: #fafbfd;
-  color: #173353;
-  text-decoration: none;
+  flex-direction: column;
+  text-align: center;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
-
-.contact-profile:hover { border-color: #6a89a7; background: #f0f5fa; }
-.contact-profile:focus-visible { outline: 2px solid #22598d; outline-offset: 2px; }
-.contact-profile__text { display: grid; min-width: 0; overflow-wrap: anywhere; }
-.contact-profile__title, .contact-profile__reason, .contact-profile__network { font-size: .8rem; }
-.contact-profile__reason, .contact-profile__network { color: #315879; }
-.contact-profile__network { flex-shrink: 0; }
+#outreach .contact-person-card__cover { height: 64px; background: linear-gradient(115deg, #e7edf3, #dce8eb 55%, #edf2f5); }
+#outreach .contact-person-card__avatar {
+  display: grid;
+  place-items: center;
+  width: 90px;
+  height: 90px;
+  flex-shrink: 0;
+  margin: -51px auto 0;
+  position: relative;
+  border: 4px solid #fff;
+  border-radius: 50%;
+  overflow: hidden;
+  color: #244f65;
+  background: #e0ebef;
+  font: 600 1.25rem/1 system-ui, sans-serif;
+  box-shadow: 0 1px 5px #17335314;
+}
+#outreach .contact-person-card__avatar img { position: absolute; width: 100%; height: 100%; object-fit: cover; }
+#outreach .contact-person-card__content { display: flex; flex: 1; flex-direction: column; min-width: 0; padding: .65rem .85rem .85rem; }
+#outreach .contact-person-card__name { font-size: .95rem; color: #19374b; overflow-wrap: anywhere; }
+#outreach .contact-person-card__headline {
+  margin: .3rem 0;
+  color: #536577;
+  font-size: .8rem;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+#outreach .contact-person-card__company { margin: .2rem 0; font-size: .78rem; font-weight: 600; color: #425970; overflow-wrap: anywhere; }
+#outreach .contact-person-card__reason { align-self: center; padding: .2rem .5rem; margin: .4rem 0; background: #edf3f5; color: #315c66; border-radius: 1rem; font-size: .7rem; line-height: 1.4; }
+#outreach .contact-person-card__source { display: grid; gap: .15rem; margin: .2rem 0 .8rem; font-size: .67rem; color: #6a7988; }
+#outreach .contact-person-card__source a { color: #526f83; text-underline-offset: .15rem; }
+#outreach .contact-person-card__actions { display: grid; gap: .4rem; margin-top: auto; }
+#outreach .contact-profile, #outreach .contact-draft-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .3rem;
+  width: 100%;
+  min-height: 38px;
+  padding: .45rem .7rem;
+  border: 1px solid #25566a;
+  border-radius: 1.4rem;
+  background: #25566a;
+  color: #fff;
+  font: 600 .78rem/1.3 system-ui, sans-serif;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+#outreach .contact-draft-trigger { border-color: #d6e0e8; background: #fff; color: #31566b; }
+#outreach .contact-profile:hover { background: #1c4659; }
+#outreach .contact-draft-trigger:hover { background: #f1f5f8; }
+#outreach button:disabled { cursor: default; opacity: .55; }
+#outreach .contact-profile:focus-visible, #outreach button:focus-visible, #outreach a:focus-visible { outline: 2px solid #377d9e; outline-offset: 3px; }
+.contact-draft-dialog {
+  width: min(540px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  box-sizing: border-box;
+  overflow-y: auto;
+  padding: 1.2rem;
+  border: 1px solid #d8e2ea;
+  border-radius: 1rem;
+  color: #1d394b;
+  background: #fff;
+  box-shadow: 0 24px 80px #102e4b40;
+}
+.contact-draft-dialog::backdrop { background: #172b405e; backdrop-filter: blur(2px); }
+.contact-draft-dialog__header { display: flex; justify-content: space-between; align-items: start; gap: 1rem; }
+.contact-draft-dialog__header h3 { margin: .2rem 0 .65rem; font: 600 1.1rem/1.4 system-ui, sans-serif; overflow-wrap: anywhere; }
+.contact-draft-dialog__header .eyebrow { margin: 0; font-size: .65rem; }
+.contact-draft-dialog .contact-draft-close { padding: .1rem .55rem; min-width: 36px; min-height: 36px; background: #edf2f5; color: #3c576d; border: 0; font-size: 1.35rem; }
+.contact-draft-note { margin: 0 0 1rem; color: #627184; font-size: .78rem; line-height: 1.5; }
+.contact-draft-label { display: block; margin: .7rem 0 .3rem; color: #425b71; font-size: .78rem; font-weight: 600; }
+.contact-draft-dialog select, .contact-draft-dialog textarea { width: 100%; box-sizing: border-box; border: 1px solid #ccd9e3; border-radius: .5rem; padding: .65rem; font: 400 .9rem/1.5 system-ui, sans-serif; color: #253f54; background: #fff; }
+.contact-draft-dialog textarea { resize: vertical; min-height: 180px; }
+.contact-draft-meta { display: flex; flex-wrap: wrap; gap: .35rem 1rem; justify-content: space-between; margin: .4rem 0 .9rem; font-size: .72rem; color: #627184; }
+.contact-draft-dialog [data-over-limit="true"] { color: #a12e39; font-weight: 600; }
+.contact-draft-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.contact-draft-actions button { min-height: 40px; font-size: .8rem; }
+.contact-draft-profile { margin-left: auto; font-size: .76rem; color: #25566a; text-underline-offset: .2rem; }
+@media (max-width: 480px) {
+  #outreach .contact-profile-list { grid-template-columns: minmax(0, 1fr); }
+  #outreach .contact-person-card__actions { grid-template-columns: 1fr 1fr; }
+  #outreach .contact-profile, #outreach .contact-draft-trigger { min-height: 44px; }
+  .contact-draft-dialog { padding: 1rem; }
+  .contact-draft-dialog select, .contact-draft-dialog textarea { font-size: 16px; }
+  .contact-draft-actions button { min-height: 44px; }
+  .contact-draft-profile { width: 100%; margin: .3rem 0 0; }
+}

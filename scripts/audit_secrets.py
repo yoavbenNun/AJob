@@ -46,14 +46,23 @@ def inspect_text(raw, path, blob=None):
                 continue
             # Exact example fingerprints, scoped to path and detector type.
             examples = {
+                ("tests/test_contact_discovery.py", "Basic Auth Credentials"): "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8",  # pragma: allowlist secret -- SHA256 of synthetic invalid-URL fixture only; exact path/type/value, including history
                 ("tests/test_cloud_auth.py", "Secret Keyword"): "c0582f792635b9d7a071aa4e84692a34b9efb3f5d18173f9e3a75044c81b1cd1",  # pragma: allowlist secret -- SHA256 of synthetic-only fixture; exact path/type/value, including history
                 ("tests/test_email_notifier.py", "Secret Keyword"): "ed24bc0bb03d0e89e8bacafb1545ee4ed6a2b273f3db69199787632b32545179",  # pragma: allowlist secret -- SHA256 of a public example
                 ("README.md", "Basic Auth Credentials"): "0be64ae89ddd24e225434de95d501711339baeee18f009ba9b4369af27d30d60",  # pragma: allowlist secret -- SHA256 of a public example
                 ("tests/test_workday_locations.py", "Base64 High Entropy String"): "f6a5f14458ceb19a10a51ba2ea6bafe345c867041f984524aefdaf2935c5aff1",  # pragma: allowlist secret -- SHA256 of Intel's public requisition path
-                ("tests/test_secret_audit.py", "Secret Keyword"): "afd546925353636cc3a93a1fbf241a5c5d5f7d66c423915f25cb3d194012c439",  # pragma: allowlist secret -- SHA256 of a public detector label in a historical test
+                ("tests/test_secret_audit.py", "Secret Keyword"): (
+                    "afd546925353636cc3a93a1fbf241a5c5d5f7d66c423915f25cb3d194012c439",  # pragma: allowlist secret -- SHA256 of public detector label
+                    "513f2d48a38cca16b06574b982aa319c86cc20cfdfdbdc3ba875f8f993bc58e0",  # pragma: allowlist secret -- SHA256 of public detector label
+                ),  # pragma: allowlist secret -- SHA256 of public detector labels in historical tests, exact path/type/value
+                ("scripts/audit_secrets.py", "Hex High Entropy String"): (
+                    "977884dbe430fa91456863e5899b967683d712205ff54474cc818b529c281fe7",  # pragma: allowlist secret -- SHA256 of historical public detector-label fingerprint
+                    "f01fe9be9f1b22e6178d7e155ec07041431b3313157e96b1826a7ce6e621e006",  # pragma: allowlist secret -- SHA256 of historical public detector-label fingerprint
+                ),
             }
             fingerprint = hashlib.sha256(secret.secret_value.encode()).hexdigest()
-            if examples.get((path.replace("\\", "/"), secret.type)) == fingerprint:
+            expected = examples.get((path.replace("\\", "/"), secret.type), ())
+            if fingerprint in ((expected,) if isinstance(expected, str) else expected):
                 continue
             findings.append({"path": path, "line": secret.line_number, "type": secret.type,
                              **({"blob": blob[:12]} if blob else {})})

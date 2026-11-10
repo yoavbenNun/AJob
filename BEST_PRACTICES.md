@@ -50,8 +50,14 @@ reusable lesson appears.
 ## Environment and verification
 
 - Playwright's bundled Node must start before --with-deps can install browser
-  libraries. Bootstrap loader prerequisites such as libatomic1 before invoking
-  the CLI; retain browser installation and smoke tests.
+  libraries. Bootstrap its loader prerequisites (such as libatomic1 on slim
+  Debian) before invoking the CLI; retain actual browser installation and smoke
+  tests rather than downgrading or skipping them to hide a loader failure.
+
+- Put an explicit synthetic-fixture explanation/allowlist marker on each
+  fingerprint line before committing audit exceptions. History scanning cannot
+  be fixed just by annotating the latest file; keep any historical exception
+  limited to exact path, detector type and known public-example fingerprint.
 
 - Test updater preparation in the actual desktop PowerShell context. Interactive
   tooling can preload Get-FileHash while a shortcut cannot discover it; import
@@ -394,6 +400,14 @@ reusable lesson appears.
   fallback for browsers without Popover API support.
 
 ## Professional outreach
+
+- Public people data is not automatic reuse permission. Keep reviewed provenance,
+  company/job scope and verification age separate from syntactic URL checks;
+  never equate synthetic UI screenshots with real discovery coverage. Keep
+  contact queries/drafts local and do not load remote avatar tracking URLs.
+- When local private assets live under a copied source directory, exclude them
+  from Docker context as well as Git. Test the effective ignore policy for every
+  Dockerfile, including any Dockerfile-specific override.
 
 - Legacy outreach labels and generic company matches are not profile
   verification. Show cards only when trusted evidence ties a normalized

@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 data/*.db
+data/contact_people.json
+src/web/static/contact-avatars/
 config/local_settings.txt
 config/local_server.pid
 config/database_url.cred

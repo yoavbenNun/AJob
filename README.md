@@ -42,14 +42,16 @@ They are demonstrations, not live search results or performance measurements.
   summaries after scanning. Persistent delivery slots coordinate retries.
 - Prepares factual resume edits and application packages only after explicit
   approval. No applications or LinkedIn messages are sent automatically.
-- The desktop job page shows read-only LinkedIn cards for saved contacts only
-  when separately reviewed evidence establishes relevance to the posting.
-  Existing contacts and drafts remain stored locally.
+- The desktop job page shows LinkedIn-style cards only when reviewed evidence
+  establishes relevance to the posting. A private local evidence file can supply
+  permitted records; existing contacts and drafts remain stored locally.
+  Editable, deterministic outreach drafts support manual copying only.
 
 **CONTACT_DISCOVERY_DEPENDENCY:** The default dashboard has no authorized
 contact discovery or verification provider. Manual contact labels and search
 shortcuts are not evidence; without a trusted source, Contact people shows an
 empty state. This does not affect job discovery.
+See [Contact People sources, validation and limitations](docs/contact-people.md).
 
 The configured source list is visible in the dashboard. Site availability and
 coverage change; an enabled source does not guarantee listings or personal matches.
