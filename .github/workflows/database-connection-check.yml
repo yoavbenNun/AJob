@@ -49,14 +49,60 @@ jobs:
 
                   connection.execute("BEGIN READ ONLY")
                   connection.execute("SET LOCAL statement_timeout = '10s'")
-                  role, version = connection.execute(
-                      "SELECT current_user, current_setting('server_version')"
+                  role, session_role, database, search_path, version, read_only, schema_usage = connection.execute(
+                      "SELECT current_user, session_user, current_database(), "
+                      "current_setting('search_path'), current_setting('server_version'), "
+                      "current_setting('transaction_read_only'), "
+                      "has_schema_privilege(current_user, 'public', 'USAGE')"
                   ).fetchone()
+                  if read_only != "on":
+                      raise RuntimeError("Read-only transaction is not active")
+                  rows = connection.execute("""
+                      SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+                             has_table_privilege(current_user, c.oid, 'SELECT'),
+                             has_table_privilege(current_user, c.oid, 'INSERT'),
+                             has_table_privilege(current_user, c.oid, 'UPDATE'),
+                             (SELECT count(*) FROM pg_catalog.pg_policies p
+                              WHERE p.schemaname = n.nspname AND p.tablename = c.relname)
+                      FROM pg_catalog.pg_class c
+                      JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                      WHERE n.nspname = 'public'
+                        AND c.relname IN ('scan_alert_schema', 'scan_alert_receipts')
+                        AND c.relkind IN ('r', 'p')
+                  """).fetchall()
+                  tables = {name: {"exists": False} for name in
+                            ("scan_alert_schema", "scan_alert_receipts")}
+                  for name, rls, force_rls, can_select, can_insert, can_update, policies in rows:
+                      tables[name] = {"exists": True, "rls": rls, "force_rls": force_rls,
+                                      "select": can_select, "insert": can_insert,
+                                      "update": can_update, "policy_count": policies}
+                  schema_version = None
+                  schema_version_status = "table_absent"
+                  if tables["scan_alert_schema"].get("exists"):
+                      schema_version_status = "select_not_granted"
+                  if tables["scan_alert_schema"].get("select") and not schema_usage:
+                      schema_version_status = "schema_usage_not_granted"
+                  if tables["scan_alert_schema"].get("select") and schema_usage:
+                      schema_version_status = "row_absent_or_rls_hidden"
+                      row = connection.execute(
+                          "SELECT version FROM public.scan_alert_schema WHERE id = 1"
+                      ).fetchone()
+                      if row is not None:
+                          schema_version = row[0]
+                          schema_version_status = "visible"
                   connection.execute("COMMIT")
                   tls = bool(connection.pgconn.ssl_in_use)
                   result = {
                       "current_user": role,
+                      "session_user": session_role,
+                      "current_database": database,
+                      "search_path": search_path,
                       "server_version": version,
+                      "transaction_read_only": read_only,
+                      "public_schema_usage": schema_usage,
+                      "alert_tables": tables,
+                      "schema_version": schema_version,
+                      "schema_version_status": schema_version_status,
                       "tls": tls,
                       "endpoint_classification": endpoint,
                   }

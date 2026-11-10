@@ -551,3 +551,6 @@ reusable lesson appears.
 
 - Retain valid Melio discoveries from a mixed feed, but treat rejected invalid
   listings as incomplete coverage so recovery does not mark the source full.
+
+- Production database diagnostics must prove READ ONLY inside the transaction;
+  report missing, inaccessible and RLS-hidden metadata as distinct unknowns.
