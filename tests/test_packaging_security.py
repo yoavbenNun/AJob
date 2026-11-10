@@ -26,3 +26,13 @@ def test_docker_config_is_allowlisted():
     assert "config/*" in ignore
     assert "!config/companies.yaml" in ignore
     assert "*.cred" in ignore
+
+
+def test_playwright_node_runtime_dependency_precedes_cli():
+    dockerfile = (ROOT / "Dockerfile").read_text()
+    bootstrap = "apt-get install --no-install-recommends -y libatomic1"
+    browser_install = "playwright install --with-deps chromium"
+    assert bootstrap in dockerfile
+    assert dockerfile.index(bootstrap) < dockerfile.index(browser_install)
+    assert "rm -rf /var/lib/apt/lists/*" in dockerfile
+    assert "USER appuser" in dockerfile

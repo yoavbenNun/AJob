@@ -49,6 +49,10 @@ reusable lesson appears.
 
 ## Environment and verification
 
+- Playwright's bundled Node must start before --with-deps can install browser
+  libraries. Bootstrap loader prerequisites such as libatomic1 before invoking
+  the CLI; retain browser installation and smoke tests.
+
 - Test updater preparation in the actual desktop PowerShell context. Interactive
   tooling can preload Get-FileHash while a shortcut cannot discover it; import
   the shell's own Utility module explicitly before checking dependency hashes.
