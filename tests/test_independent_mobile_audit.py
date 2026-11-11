@@ -183,6 +183,8 @@ def login(page, server):
                               and response.request.method=='POST') as result:
         page.get_by_role('button', name='Sign in', exact=True).tap()
     expect(page.locator('.job-card')).to_have_count(3)
+    # The cards can render before deferred note handlers are registered.
+    page.wait_for_load_state('load')
     return result.value
 
 

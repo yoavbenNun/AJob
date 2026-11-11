@@ -21,7 +21,7 @@ jobs:
           & ./tests/test_runtime_updater.ps1
           & ./tests/test_published_launcher.ps1
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
@@ -42,18 +42,47 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: "3.12"
-          cache: pip
-      - run: python -m pip install --upgrade "pip>=26.2,<27"
-      - run: pip install -r requirements.txt
       - name: Pull pinned disposable PostgREST test gateway
         timeout-minutes: 2
         run: docker pull postgrest/postgrest:v13.0.7@sha256:0a46780309a604cdc8b56c776c6e5e15788ce58174d709e40459ab5a2d44d228
-      - name: Install Chromium and WebKit for dashboard browser regressions
-        run: python -m playwright install --with-deps chromium webkit
-      - run: python -m pytest
+      - name: Pull pinned Playwright Python image
+        timeout-minutes: 8
+        run: docker pull mcr.microsoft.com/playwright/python:v1.65.0-noble@sha256:f9294526294a7bdfb8ca8aa7d815c049125a10e73b65d47fb9a80f5d74f284a6
+      - name: Prepare licensed test fonts
+        timeout-minutes: 3
+        run: |
+          mkdir -p "$RUNNER_TEMP/ajob-ci-fonts"
+          base=https://raw.githubusercontent.com/matplotlib/matplotlib/v3.10.7/lib/matplotlib/mpl-data/fonts/ttf
+          for file in DejaVuSans.ttf DejaVuSans-Bold.ttf LICENSE_DEJAVU; do
+            curl --fail --location --retry 2 --connect-timeout 15 "$base/$file" -o "$RUNNER_TEMP/ajob-ci-fonts/$file"
+          done
+          cd "$RUNNER_TEMP/ajob-ci-fonts"
+          printf '%s\n' \
+            '3fdf69cabf06049ea70a00b5919340e2ce1e6d02b0cc3c4b44fb6801bd1e0d22  DejaVuSans.ttf' \
+            'b184b89e3c1075f22f6b71575b6fc20d4972b3cfd3b23322ca6fd596dcaef167  DejaVuSans-Bold.ttf' | sha256sum --check
+      - name: Run full suite with preinstalled Chromium and WebKit
+        timeout-minutes: 20
+        run: |
+          # Host networking preserves loopback PostgreSQL and the disposable
+          # host-networked PostgREST gateway used by the integration tests.
+          docker run --rm --init --ipc=host --network host \
+            -v "$PWD:$PWD" -w "$PWD" \
+            -v "$RUNNER_TEMP/ajob-ci-fonts:/usr/share/fonts/truetype/dejavu:ro" \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$(readlink -f "$(command -v docker)"):/usr/local/bin/docker:ro" \
+            -e AJOB_TEST_POSTGRES_DSN -e AJOB_TEST_DATA_API_GATEWAY \
+            mcr.microsoft.com/playwright/python:v1.65.0-noble@sha256:f9294526294a7bdfb8ca8aa7d815c049125a10e73b65d47fb9a80f5d74f284a6 \
+            bash -euo pipefail -c '
+              python -c "import sys; assert sys.version_info[:2] == (3, 12)"
+              docker version --format "{{.Server.Version}}"
+              git config --global --add safe.directory "$PWD"
+              git rev-parse --show-toplevel
+              python -m pip install --upgrade "pip>=26.2,<27"
+              python -m pip install -r requirements.txt "playwright==1.65.0"
+              python -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); c=p.chromium.launch(); c.close(); w=p.webkit.launch(); w.close(); p.stop()"
+              python -m pytest -q "tests/test_independent_mobile_audit.py::test_native_restart_expiry_and_mock_cold_start[chromium]" "tests/test_independent_mobile_audit.py::test_cloud_note_visual_viewport_keyboard_simulation[chromium]" tests/test_packaging_security.py::test_sensitive_paths_are_ignored_without_ignoring_documentation tests/test_tailored_resume.py::test_pdf_generation_supports_hebrew_contact_text
+              python -m pytest
+            '
   container:
     runs-on: ubuntu-latest
     steps:
