@@ -49,7 +49,8 @@ def test_detail_reuses_list_score_without_recomputing_and_invalidates_changed_jo
     assert matcher.call_count == 3
     expected = next(call.args for call in matcher.call_args_list if call.args[1].id == ids[0])
     result = matcher._mock_wraps(*expected)
-    assert f'{result.score}/100' in detail.text
+    assert f'{result.score}/100' not in detail.text
+    assert 'Not enough job evidence for a reliable score' in detail.text
     assert result.eligibility_label in detail.text
     assert 'Not calculated' not in detail.text
     assert 'Refresh match' in detail.text
@@ -59,6 +60,15 @@ def test_detail_reuses_list_score_without_recomputing_and_invalidates_changed_jo
     assert client.get(f'/jobs/{ids[0]}').status_code == 200
     assert matcher.call_count == 4
     assert repo.get_by_id(ids[0]).status == 'new'
+    job = repo.get_by_id(ids[0])
+    job.description = ('Develop Python software services for internal users. '
+                       'Maintain reliable systems and work with a team to deliver improvements. '
+                       'Build and test software components throughout the development cycle.')
+    repo.save(job)
+    detail = client.get(f'/jobs/{ids[0]}')
+    assert matcher.call_count == 5
+    expected = matcher.call_args.args
+    assert f'{matcher._mock_wraps(*expected).score}/100' in detail.text
 
 
 def test_changed_active_resume_invalidates_cached_score(workspace, tmp_path, monkeypatch):
