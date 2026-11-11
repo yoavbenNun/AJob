@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from src.models import JobPosting
 from src.storage.job_repository import JobRepository
-from src.web.app import _description_requirements, _role_list_duty, _role_list_preview, _summarize_role, create_app
+from src.web.app import _description_requirements, _role_list_duty, _role_list_preview, _source_role_preview, _summarize_role, create_app
 
 
 NVIDIA_DESCRIPTION = Path(__file__).parent / "fixtures" / "nvidia_12706_description.txt"
@@ -138,6 +138,38 @@ def test_blank_line_does_not_hide_invalid_list_tail(tail):
 def test_sparse_marketing_and_legal_text_are_not_duties():
     assert not _role_list_preview('Software Student\nPython')
     assert not _role_list_preview('About us:\nBuild a better world\nEqual opportunity employer')
+
+
+@pytest.mark.parametrize("separated", [False, True])
+def test_scoped_duties_are_never_selected_without_their_context(separated):
+    deploy = "Deploy automated release tooling for supported service versions."
+    restriction = "Operate only in isolated staging environments and never use production credentials."
+    unrelated = "Maintain automated integration checks for distributed services across all supported versions."
+    context = [deploy, unrelated, restriction] if separated else [deploy, restriction, unrelated]
+    assert _role_list_preview("Responsibilities:\n" + "\n\n".join(context)) == " · ".join(context)
+    extra = [
+        "Develop backend services for internal engineering teams to coordinate and validate application releases across supported platforms.",
+        "Monitor scheduled jobs and investigate integration failures with developers responsible for the affected services and their automated pipelines.",
+        "Improve deployment diagnostics for software engineers who maintain distributed services and validate changes across supported versions.",
+    ]
+    source = "Responsibilities:\n\n" + "\n\n".join(context + extra)
+    assert len(" · ".join(context + extra)) > 500
+    assert not _role_list_preview(source)
+    job = JobPosting("Engineer", "Example", "Israel", "https://example.test/job", description=source)
+    assert not _source_role_preview(job)
+    assert not _summarize_role(job)
+
+
+@pytest.mark.parametrize("ending", ["unless", "except", "provided that", "only if", "as long as", "subject to"])
+def test_testing_duty_rejects_unfinished_conditions(ending):
+    source = f"Responsibilities:\nDevelop automated test tools\nPerform regression testing {ending}."
+    assert not _role_list_preview(source)
+
+
+def test_blank_separator_does_not_admit_career_marketing():
+    source = ("Responsibilities:\n\nBuild your career with our global engineering team.\n"
+              "Maintain software test tools.")
+    assert not _role_list_preview(source)
 
 
 def test_detail_page_displays_workday_list_and_requirements(tmp_path):

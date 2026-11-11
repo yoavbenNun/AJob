@@ -4,6 +4,8 @@
   against the stored plain text, and keep adjacent restrictions with their duties.
 - Validate the entire responsibility list before choosing preview lines. Blank
   lines do not end a list or make a following restriction safe to omit.
+- Scope restrictions can govern non-adjacent duties. If a scoped list cannot
+  fit intact, do not shorten it or fall back to one of its paragraphs.
 
 - Cloud dashboard sessions and login budgets must survive worker restarts in a
   private persistent store. Authenticate before serving private routes; never
