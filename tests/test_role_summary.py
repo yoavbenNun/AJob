@@ -120,7 +120,7 @@ def test_role_page_renders_qa_prose_without_rewriting_stored_description(tmp_pat
         description=NARRATIVE,
     ))
     response = client.get(f"/jobs/{job_id}")
-    overview = response.text.split('id="overview"', 1)[1].split("</details>", 1)[0]
+    overview = response.text.split('id="overview"', 1)[1].split("</div>", 1)[0]
     assert overview.count("<p") == 1
     assert NARRATIVE in overview
     assert "Prepare application" not in response.text
@@ -202,7 +202,7 @@ def test_role_page_retains_scope_and_source_without_mutation(tmp_path, restricti
     ))
     before = repository.get_by_id(job_id)
     response = client.get(f"/jobs/{job_id}")
-    overview = response.text.split('id="overview"', 1)[1].split("</details>", 1)[0]
+    overview = response.text.split('id="overview"', 1)[1].split("</div>", 1)[0]
     assert overview.count("<p") == 1
     assert source in overview
     assert "Prepare application" not in response.text

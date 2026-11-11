@@ -871,6 +871,20 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
     match = context.get('match_result')
     match_supported = bool(match and match.job_skills and len(job.description.strip()) >= 150
                            and (job.requirements.strip() or extracted_requirements))
+    role_summary = _summarize_role(job) or _source_role_preview(job)
+    requirement_highlights = []
+    remaining = 560 - len(role_summary)
+    seen = set()
+    for line in extracted_requirements.get("required", ()) or _clean_captured_lines(job.requirements, job):
+        line = " ".join(line.split())
+        key = line.casefold().rstrip(".")
+        if not key or len(line) > min(remaining, 160) or key in role_summary.casefold() or key in seen:
+            continue
+        requirement_highlights.append(line)
+        seen.add(key)
+        remaining -= len(line) + 3
+        if len(requirement_highlights) == 2:
+            break
     return templates.TemplateResponse(
         request,
         "job_detail.html",
@@ -882,18 +896,8 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
             "match_supported": match_supported,
             "statuses": JOB_STATUSES,
             "company_logos": COMPANY_LOGOS,
-            "role_summary": _summarize_role(job) or _source_role_preview(job),
-            "requirement_lines": _summarize_captured_lines(
-                job.requirements, job,
-                keywords=(
-                    "required", "must", "experience", "years", "degree", "student",
-                    "knowledge", "proficien", "authorization", "citizen", "graduate",
-                    "availability", "location", "language", "python", "java", "c++", "c#",
-                ),
-                limit=7,
-            ),
-            "full_requirement_lines": _clean_captured_lines(job.requirements, job),
-            "extracted_requirements": extracted_requirements,
+            "role_summary": role_summary,
+            "requirement_highlights": requirement_highlights,
             **context,
         },
     )

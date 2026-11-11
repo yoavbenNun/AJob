@@ -2,7 +2,9 @@
 import socket
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 import uvicorn
@@ -116,6 +118,57 @@ def test_long_title_and_empty_description_do_not_overflow(browser_workspace):
     card = page.locator(f'.job-card[data-job-id="{ids[0]}"]')
     expect(card.locator('h2')).to_have_text(job.title)
     expect(card.locator('.text-link')).to_be_visible()
+
+
+def test_job_detail_v3_disclosures_and_synthetic_previews(browser_workspace):
+    page, origin, repo, ids = browser_workspace
+    job = repo.get_by_id(ids[0])
+    job.description = (
+        "Develop Python services that validate incoming events and produce reports for internal teams. "
+        "Maintain API integrations and automated regression tests for scheduled data pipelines. "
+        "These tools must use anonymized data and must not access live customer records."
+    )
+    job.requirements = "Python\nExperience with Git\nCurrently pursuing a BSc in Software Engineering"
+    repo.save(job)
+    page.set_viewport_size({"width": 1280, "height": 900})
+    page.goto(origin + f"/jobs/{job.id}")
+    card = page.locator("#job-content")
+    expect(card.locator(".role-summary")).to_have_text(job.description)
+    expect(card.locator(".job-detail-highlights")).to_contain_text("Experience with Git")
+    expect(card.locator(".job-detail-highlights")).not_to_contain_text("Python")
+    original = card.get_by_role("link", name="Open original posting")
+    expect(original).to_have_attribute("href", job.job_url)
+    expect(original).to_have_attribute("rel", "noopener noreferrer")
+    expect(page.locator("main > details")).to_have_count(2)
+    expect(page.locator("details[open]")).to_have_count(0)
+    folder = Path(".pytest_cache/job-detail-v3").resolve()
+    folder.mkdir(parents=True, exist_ok=True)
+    page.screenshot(path=str(folder / "full.png"))
+    resume = page.locator("#resume-match")
+    contacts = page.locator("#outreach")
+    expect(resume.locator("summary").first).not_to_contain_text("Not calculated")
+    resume.locator(":scope > summary").click()
+    expect(resume.get_by_text("Processed locally on this computer")).to_be_visible()
+    contacts.locator(":scope > summary").click()
+    search = contacts.get_by_role("link", name="Search LinkedIn for people")
+    expect(search).to_be_visible()
+    expect(search).to_have_attribute("target", "_blank")
+    expect(search).to_have_attribute("rel", "noopener noreferrer")
+    assert parse_qs(urlsplit(search.get_attribute("href")).query) == {
+        "keywords": [f"{job.company} {job.title}"],
+    }
+    resume.get_by_role("button", name="Refresh match").click()
+    expect(page.locator("details[open]")).to_have_count(0)
+    expect(resume.locator(":scope > summary")).not_to_contain_text("Not calculated")
+    page.reload()
+    expect(page.locator("details[open]")).to_have_count(0)
+
+    sparse_id = repo.save(replace(job, id=None, job_url=job.job_url + "-sparse", description="", requirements=""))
+    page.goto(origin + f"/jobs/{sparse_id}")
+    expect(card.locator(".role-summary")).to_have_text("Not enough information to summarize this role.")
+    expect(card.locator(".job-detail-highlights")).to_have_count(0)
+    expect(resume.locator(":scope > summary")).to_contain_text("Insufficient evidence")
+    page.screenshot(path=str(folder / "sparse.png"))
 
 
 def test_premium_focus_reduced_motion_and_eligibility_contrast(browser_workspace):
