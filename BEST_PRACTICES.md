@@ -1,5 +1,8 @@
 # Project Best Practices
 
+- Workday HTML cleanup can remove list markers and blank lines; test role previews
+  against the stored plain text, and keep adjacent restrictions with their duties.
+
 - Cloud dashboard sessions and login budgets must survive worker restarts in a
   private persistent store. Authenticate before serving private routes; never
   expose the loopback app as an internet entry point or trust identity headers.
