@@ -318,7 +318,8 @@ def test_student_eligibility_dashboard_possible_filter_and_status_preservation(t
     assert 'still studying' in all_jobs.text
     detail = client.post(f'/jobs/{blocked_id}/match', data={'csrf_token': _csrf_token(client, blocked_id)})
     assert 'Ineligible' in detail.text
-    assert 'Technical fit:' in detail.text
+    assert 'Not enough job evidence for a reliable score' in detail.text
+    assert 'Technical fit:' not in detail.text
     assert repository.get_by_id(blocked_id).status == 'applied'
 
 
@@ -637,7 +638,8 @@ def test_job_detail_calculates_a_local_match_without_exposing_resume_text(tmp_pa
     )
 
     assert response.status_code == 200
-    assert "/100 match" in response.text
+    assert "Not enough job evidence for a reliable score" in response.text
+    assert "/100 match" not in response.text
     assert "Dana Developer" not in response.text
     assert "Set RESUME_DIRECTORY and create a tailored" not in response.text
     assert "Prepare application" not in response.text
