@@ -871,7 +871,7 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
     match = context.get('match_result')
     match_supported = bool(match and match.job_skills and len(job.description.strip()) >= 150
                            and (job.requirements.strip() or extracted_requirements))
-    role_summary = _summarize_role(job) or _source_role_preview(job)
+    role_summary = _summarize_role(job) or _source_role_preview(job) or _role_list_preview(job.description)
     requirement_highlights = []
     remaining = 560 - len(role_summary)
     seen = set()
@@ -978,7 +978,7 @@ def _role_sentences(line: str) -> list[str]:
 _SECTION_HEADINGS = {
     "role": r"(?:about the role|role overview|the role|job overview)",
     "duties": r"(?:responsibilities|what you(?:'|’)ll do|what you will do|how you(?:'|’)ll make an impact)",
-    "required": r"(?:(?:minimum|basic|required)\s+)?(?:requirements|qualifications)|what you(?:'|’)ll need|what you will need|what we(?:'|’)re looking for|what we are looking for|to thrive in this role,? you(?:'|’)ll need",
+    "required": r"(?:(?:minimum|basic|required)\s+)?(?:requirements|qualifications)|what you(?:'|’)ll need|what you will need|what we(?:'|’)re looking for|what we are looking for|what we need to see|to thrive in this role,? you(?:'|’)ll need",
     "preferred": r"(?:preferred qualifications|preferred requirements|nice to have|bonus points if you have)",
     "other": r"(?:why .+|about (?!the role).+|equal opportunity|benefits|who we are)",
 }
@@ -1037,6 +1037,39 @@ def _source_role_preview(job: JobPosting) -> str:
                 and any(_ROLE_DUTY.match(s) for s in sentences)
                 and not re.search(r'\b(?:requirements|qualifications|must have|you must|experience preferred)\b', paragraph, re.I)):
             return paragraph
+    return ''
+
+
+def _role_list_preview(description: str) -> str:
+    """Extract a bounded list of duties, including Workday's plain-text lists."""
+    lines = description.splitlines()
+    def duty(line):
+        line = re.sub(r'^\s*[•*\-]\s+', '', line).strip()
+        return bool(18 <= len(line) <= 200 and _ROLE_DUTY.match(line)
+            and not re.search(r'\b(?:with|for|and|or|to|of|using|by|will|must|should)[.!?]?$', line, re.I)
+            and not re.search(r'\b(?:equal opportunity|benefits|requirements|qualifications)\b', line, re.I))
+
+    heading = re.compile(r"^(?:what you(?:'|’)ll be doing|what you will be doing|"
+                         r"what you(?:'|’)ll do|what you will do|responsibilities|"
+                         r"your responsibilities|your impact|day.to.day)\s*:?$", re.I)
+    for index, line in enumerate(lines):
+        if not heading.fullmatch(line.strip()):
+            continue
+        start = index + 1
+        group = []
+        end = start
+        while end < len(lines) and duty(lines[end]):
+            group.append(re.sub(r'^\s*[•*\-]\s+', '', lines[end]).strip())
+            end += 1
+        # Do not detach a continuation or restrictive sentence from the list.
+        next_line = lines[end].strip().rstrip(':?') if end < len(lines) else ''
+        if next_line and not any(re.fullmatch(pattern, next_line, re.I) for pattern in _SECTION_HEADINGS.values()):
+            continue
+        if len(group) < 2:
+            continue
+        preview = ' · '.join(group[:3])
+        if len(preview) <= 500:
+            return preview
     return ''
 
 
