@@ -72,7 +72,7 @@ def test_mobile_layout_order_focus_fonts_and_touch_targets(mobile_workspace, wid
     assert page.locator('.job-card').first.get_attribute('data-status') == 'new'
     page.goto(origin + f'/jobs/{ids[0]}')
     assert page.evaluate('document.documentElement.scrollWidth') <= width
-    for target in page.locator('.workspace-nav a').all():
+    for target in page.locator('main > details > summary').all():
         assert target.bounding_box()['height'] >= 44
     assert page.locator('.status-form select').evaluate('e=>parseFloat(getComputedStyle(e).fontSize)') >= 16
     external = page.get_by_role('link', name='Open original posting')
@@ -93,7 +93,7 @@ def test_role_summary_fits_small_viewport(mobile_workspace, description):
     repo.save(replace(job, description=description))
     page.set_viewport_size({'width': 320, 'height': 760})
     page.goto(origin + f'/jobs/{job.id}')
-    summary = page.locator('#overview p')
+    summary = page.locator('#overview .role-summary')
     expect(summary).to_have_text(description)
     assert summary.is_visible()
     assert page.evaluate('document.documentElement.scrollWidth') <= 320

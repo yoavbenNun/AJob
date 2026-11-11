@@ -204,3 +204,21 @@ body { background: linear-gradient(180deg, #eaf0f6, #f3f6fa 420px); }
 }
 
 .detail-shell .role-summary { max-width: 75ch; margin: 0; font-size: .9rem; line-height: 1.7; overflow-wrap: anywhere; }
+
+.detail-shell .detail-hero--v3 {
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: .85rem 1rem;
+  margin-bottom: .8rem;
+  padding: clamp(1rem, 2.5vw, 1.6rem);
+  background: #fff;
+  border-color: var(--ui-border);
+}
+.detail-hero--v3 h1, .detail-hero--v3 .detail-meta { overflow-wrap: anywhere; }
+.detail-hero--v3 > :is(.job-detail-overview, .detail-toolbar, .job-detail-updated) { grid-column: 1 / -1; min-width: 0; }
+.job-detail-overview { padding-top: .8rem; border-top: 1px solid var(--ui-border); }
+.job-detail-highlights { max-width: 75ch; margin: .45rem 0 0; font-size: .84rem; line-height: 1.55; overflow-wrap: anywhere; }
+.detail-shell .detail-hero--v3 .detail-toolbar { margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; flex-wrap: wrap; }
+.detail-hero--v3 .job-detail-updated { margin: 0; }
+.detail-shell :is(#resume-match, #outreach) > summary { padding: .65rem 1rem; min-height: 44px; }
+.job-detail-tailoring { margin-top: 1rem; }
+.job-detail-contact-search { margin-bottom: 0; font-size: .85rem; }

@@ -403,9 +403,10 @@ def test_job_detail_uses_collapsible_content_sections(tmp_path) -> None:
     response = client.get(f"/jobs/{job_id}")
 
     assert response.status_code == 200
-    assert response.text.count('class="content-section collapsible-section"') >= 4
-    assert "<h2>About the role</h2>" in response.text
-    assert "<h2>What they’re looking for</h2>" in response.text
+    assert response.text.count('class="content-section collapsible-section"') == 2
+    assert "<h2>About the role</h2>" not in response.text
+    assert "<h2>What they’re looking for</h2>" not in response.text
+    assert not re.search(r"<details\b[^>]*\sopen\b", response.text)
     assert "<h2>Resume match</h2>" in response.text
     assert "Prepare application" not in response.text
     assert 'id="application"' not in response.text
@@ -514,7 +515,7 @@ def test_job_detail_role_overview_is_one_source_based_paragraph(tmp_path, descri
 
     response = client.get(f"/jobs/{job_id}")
     assert response.status_code == 200
-    overview = response.text.split('id="overview"', 1)[1].split("</details>", 1)[0]
+    overview = response.text.split('id="overview"', 1)[1].split("</div>", 1)[0]
     assert re.findall(r"<p[^>]*>(.*?)</p>", overview) == [expected]
     assert not re.search(r"<(?:ol|ul|li|details)\b", overview)
     assert "View full captured description" not in response.text

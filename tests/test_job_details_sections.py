@@ -39,7 +39,7 @@ def test_adjacent_restriction_and_partial_sentence():
     partial = "About the role:\nBuild APIs. Maintain CI pipelines. You will\nRequirements:\nPython"
     assert _summarize_role(job(partial)) == ""
 
-def test_taboola_detail_renders_sections_without_changing_job(tmp_path):
+def test_taboola_detail_renders_top_card_without_changing_job(tmp_path):
     from test_web_dashboard import _client_with_jobs
     from src.storage.job_repository import JobRepository
     client, _ = _client_with_jobs(tmp_path)
@@ -50,10 +50,10 @@ def test_taboola_detail_renders_sections_without_changing_job(tmp_path):
     before = repo.get_by_id(job_id)
     page = client.get(f'/jobs/{job_id}')
     assert page.status_code == 200
-    overview = page.text.split('id="overview"', 1)[1].split('</details>', 1)[0]
-    requirements = page.text.split('id="requirements"', 1)[1].split('</details>', 1)[0]
+    card = page.text.split('id="job-content"', 1)[1].split('</section>', 1)[0]
+    overview = card.split('id="overview"', 1)[1].split('</div>', 1)[0]
     assert 'Ad Creatives team' in overview and 'Not enough information' not in overview
-    assert 'Required qualifications' in requirements and 'Nice to have' in requirements
-    assert 'Java' in requirements and 'Spark' in requirements and 'cloud' in requirements
-    assert 'Why Taboola' not in requirements and 'Equal opportunity' not in requirements
+    assert 'BSc in Computer Science or equivalent' in overview and 'Spark' not in overview
+    assert 'Why Taboola' not in overview and 'Equal opportunity' not in overview
+    assert 'id="requirements"' not in page.text
     assert repo.get_by_id(job_id) == before
