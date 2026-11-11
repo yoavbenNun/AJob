@@ -1040,16 +1040,18 @@ def _source_role_preview(job: JobPosting) -> str:
     return ''
 
 
+def _role_list_duty(line: str) -> bool:
+    return bool(18 <= len(line) <= 200 and (_ROLE_DUTY.match(line)
+        or re.match(r'^review\b', line, re.I)
+        or re.match(r'^report\s+(?:bugs?|defects?|issues?|errors?|findings?)\b', line, re.I)
+        or re.match(r'^perform\s+(?:(?:[\w-]+\s+){0,3})test(?:s|ing)\b', line, re.I))
+        and not re.search(r'(?:\.\.\.|…|[,;:])$|\b(?:with|for|and|or|to|of|using|by|will|must|should|during|in|from|after|before|while|when|the|a|an)[.!?]?$', line, re.I)
+        and not re.search(r'\b(?:equal opportunity|benefits|qualifications)\b', line, re.I))
+
+
 def _role_list_preview(description: str) -> str:
     """Extract a bounded list of duties, including Workday's plain-text lists."""
-    lines = description.splitlines()
-    def duty(line):
-        line = re.sub(r'^\s*[•*\-]\s+', '', line).strip()
-        return bool(18 <= len(line) <= 200 and (_ROLE_DUTY.match(line)
-            or re.match(r'^review\b', line, re.I)
-            or re.match(r'^report\s+(?:bugs?|defects?|issues?|errors?|findings?)\b', line, re.I))
-            and not re.search(r'(?:\.\.\.|…)$|\b(?:with|for|and|or|to|of|using|by|will|must|should|during|in|from|after|before|while|when|the|a|an)[.!?]?$', line, re.I)
-            and not re.search(r'\b(?:equal opportunity|benefits|qualifications)\b', line, re.I))
+    lines = [line.strip() for line in description.splitlines() if line.strip()]
 
     heading = re.compile(r"^(?:what you(?:'|’)ll be doing|what you will be doing|"
                          r"what you(?:'|’)ll do|what you will do|responsibilities|"
@@ -1060,8 +1062,11 @@ def _role_list_preview(description: str) -> str:
         start = index + 1
         group = []
         end = start
-        while end < len(lines) and duty(lines[end]):
-            group.append(re.sub(r'^\s*[•*\-]\s+', '', lines[end]).strip())
+        while end < len(lines):
+            duty = re.sub(r'^[•*\-]\s+', '', lines[end])
+            if not _role_list_duty(duty):
+                break
+            group.append(duty)
             end += 1
         # Do not detach a continuation or restrictive sentence from the list.
         next_line = lines[end].strip().rstrip(':?') if end < len(lines) else ''
@@ -1069,9 +1074,16 @@ def _role_list_preview(description: str) -> str:
             continue
         if len(group) < 2:
             continue
-        preview = ' · '.join(group[:3])
-        if len(preview) <= 500:
-            return preview
+        # Prefer coverage of both ends over an arbitrary prefix, while
+        # rendering selected duties in their original order and verbatim.
+        selected = []
+        remaining = 500
+        for i in sorted(range(len(group)), key=lambda i: (min(i, len(group) - 1 - i), -i)):
+            cost = len(group[i]) + (3 if selected else 0)
+            if cost <= remaining:
+                selected.append(i)
+                remaining -= cost
+        return ' · '.join(group[i] for i in sorted(selected))
     return ''
 
 

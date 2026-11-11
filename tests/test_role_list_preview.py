@@ -1,9 +1,14 @@
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
 from src.models import JobPosting
 from src.storage.job_repository import JobRepository
-from src.web.app import _description_requirements, _role_list_preview, _summarize_role, create_app
+from src.web.app import _description_requirements, _role_list_duty, _role_list_preview, _summarize_role, create_app
+
+
+NVIDIA_DESCRIPTION = Path(__file__).parent / "fixtures" / "nvidia_12706_description.txt"
 
 
 @pytest.mark.parametrize('heading', ["What you'll be doing:", 'What you will do:', 'Day-to-day:'])
@@ -94,17 +99,49 @@ def test_report_duties_stop_before_qualifications():
         'Currently pursuing a relevant degree', 'Experience with Python']
 
 
+def test_saved_nvidia_duties_fit_a_source_faithful_preview():
+    source = NVIDIA_DESCRIPTION.read_text(encoding="utf-8")
+    duties = source.split("What you'll be doing:\n\n", 1)[1].split("\nWhat we need to see:", 1)[0].splitlines()
+    assert len(duties) == 5
+    assert all(_role_list_duty(duty) for duty in duties)
+    preview = _role_list_preview(source)
+    selected = preview.split(" · ")
+    assert 3 <= len(selected) <= 5 and len(preview) <= 500
+    assert selected == [duty for duty in duties if duty in selected]
+    assert duties[3] in selected and duties[4] in selected
+    assert "Scripting skills in Python" in _description_requirements(source)["required"]
+    assert "All applicants welcome" not in preview
+
+
+def test_preview_keeps_all_duties_when_they_fit():
+    duties = ["Review design documents", "Design integration tests", "Automate release checks",
+              "Report defects found during testing", "Perform regression tests"]
+    assert _role_list_preview("Responsibilities:\n" + "\n".join(duties)) == " · ".join(duties)
+
+
+@pytest.mark.parametrize("tail", [
+    "Perform regression tests with",
+    "Perform tests in different scopes…",
+    "Perform tests in different scopes:",
+    "Only use anonymized customer data.",
+    "Perform at your best and enjoy our benefits.",
+    "You must have experience performing regression tests.",
+    "Equal opportunity employer and welcoming workplace.",
+])
+def test_blank_line_does_not_hide_invalid_list_tail(tail):
+    source = ("Responsibilities:\n\nDevelop automated test tools\n"
+              "Perform automated regression testing on new releases\n\n")
+    assert "Perform automated regression testing" in _role_list_preview(source)
+    assert not _role_list_preview(source + tail + "\nRequirements:\nPython")
+
+
 def test_sparse_marketing_and_legal_text_are_not_duties():
     assert not _role_list_preview('Software Student\nPython')
     assert not _role_list_preview('About us:\nBuild a better world\nEqual opportunity employer')
 
 
 def test_detail_page_displays_workday_list_and_requirements(tmp_path):
-    description = ("What you'll be doing:\nReview arch design and requirements documents\n"
-                   'Report bugs found during execution of software tests\n'
-                   'Analyze software test results for production systems\n'
-                   'What we need to see:\nCurrently pursuing a relevant degree\n'
-                   'Experience with Python\nEqual opportunity:\nAll applicants welcome')
+    description = NVIDIA_DESCRIPTION.read_text(encoding="utf-8")
     db = tmp_path / 'jobs.db'
     repo = JobRepository(db)
     repo.initialize()
@@ -114,9 +151,11 @@ def test_detail_page_displays_workday_list_and_requirements(tmp_path):
                      application_database_path=tmp_path / 'applications.db')
     html = TestClient(app, base_url='http://127.0.0.1').get(f'/jobs/{job_id}').text
     assert 'Review arch design and requirements documents' in html
-    assert 'Report bugs found during execution of software tests' in html
-    assert 'Currently pursuing a relevant degree' in html
-    assert 'Experience with Python' in html
+    assert 'Report bugs found during execution' in html
+    assert 'Perform tests in different scopes' in html
+    assert 'Current B.Sc. student' in html
+    summary = html.split('class="role-summary">', 1)[1].split("</p>", 1)[0]
+    assert "Current B.Sc. student" not in summary and "Scripting skills in Python" not in summary
     assert 'All applicants welcome' not in html
     assert 'Find People on LinkedIn' in html
     assert repo.get_by_id(job_id).description == description

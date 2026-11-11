@@ -2,6 +2,8 @@
 
 - Workday HTML cleanup can remove list markers and blank lines; test role previews
   against the stored plain text, and keep adjacent restrictions with their duties.
+- Validate the entire responsibility list before choosing preview lines. Blank
+  lines do not end a list or make a following restriction safe to omit.
 
 - Cloud dashboard sessions and login budgets must survive worker restarts in a
   private persistent store. Authenticate before serving private routes; never
