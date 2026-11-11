@@ -1045,8 +1045,10 @@ def _role_list_preview(description: str) -> str:
     lines = description.splitlines()
     def duty(line):
         line = re.sub(r'^\s*[•*\-]\s+', '', line).strip()
-        return bool(18 <= len(line) <= 200 and (_ROLE_DUTY.match(line) or re.match(r'^review\b', line, re.I))
-            and not re.search(r'\b(?:with|for|and|or|to|of|using|by|will|must|should)[.!?]?$', line, re.I)
+        return bool(18 <= len(line) <= 200 and (_ROLE_DUTY.match(line)
+            or re.match(r'^review\b', line, re.I)
+            or re.match(r'^report\s+(?:bugs?|defects?|issues?|errors?|findings?)\b', line, re.I))
+            and not re.search(r'(?:\.\.\.|…)$|\b(?:with|for|and|or|to|of|using|by|will|must|should|during|in|from|after|before|while|when|the|a|an)[.!?]?$', line, re.I)
             and not re.search(r'\b(?:equal opportunity|benefits|qualifications)\b', line, re.I))
 
     heading = re.compile(r"^(?:what you(?:'|’)ll be doing|what you will be doing|"

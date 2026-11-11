@@ -60,6 +60,40 @@ def test_review_duties_keep_restrictive_continuations_and_exclude_qualifications
     assert not _role_list_preview('Requirements:\nReview job requirements documents\nDevelop Python skills')
 
 
+def test_reported_bug_duties_without_a_following_heading():
+    source = ("What you'll be doing:\nReview arch design and requirements documents\n"
+              'Report bugs found during execution of software tests')
+    assert _role_list_preview(source) == (
+        'Review arch design and requirements documents · '
+        'Report bugs found during execution of software tests')
+
+
+@pytest.mark.parametrize('tail', [
+    'Report bugs found during',
+    'Report bugs found during execution...',
+    'Report bugs found during execution of',
+    'Only use anonymized customer data.',
+    'Equal opportunity employer and welcoming workplace.',
+    'Learn more about the benefits of working here.',
+])
+def test_report_list_fails_closed_for_truncated_or_unrelated_continuations(tail):
+    source = ("What you'll be doing:\nReview arch design and requirements documents\n"
+              'Develop Python automation for software testing\n' + tail)
+    assert not _role_list_preview(source)
+
+
+def test_report_duties_stop_before_qualifications():
+    source = ("What you'll be doing:\nReview arch design and requirements documents\n"
+              'Report bugs found during execution of software tests\n'
+              'Requirements:\nCurrently pursuing a relevant degree\n'
+              'Experience with Python\nEqual opportunity:\nAll applicants welcome')
+    preview = _role_list_preview(source)
+    assert len(preview) <= 500 and 'Report bugs found during execution' in preview
+    assert all(text not in preview for text in ('degree', 'Python', 'Equal opportunity'))
+    assert _description_requirements(source)['required'] == [
+        'Currently pursuing a relevant degree', 'Experience with Python']
+
+
 def test_sparse_marketing_and_legal_text_are_not_duties():
     assert not _role_list_preview('Software Student\nPython')
     assert not _role_list_preview('About us:\nBuild a better world\nEqual opportunity employer')
@@ -67,6 +101,7 @@ def test_sparse_marketing_and_legal_text_are_not_duties():
 
 def test_detail_page_displays_workday_list_and_requirements(tmp_path):
     description = ("What you'll be doing:\nReview arch design and requirements documents\n"
+                   'Report bugs found during execution of software tests\n'
                    'Analyze software test results for production systems\n'
                    'What we need to see:\nCurrently pursuing a relevant degree\n'
                    'Experience with Python\nEqual opportunity:\nAll applicants welcome')
@@ -79,6 +114,8 @@ def test_detail_page_displays_workday_list_and_requirements(tmp_path):
                      application_database_path=tmp_path / 'applications.db')
     html = TestClient(app, base_url='http://127.0.0.1').get(f'/jobs/{job_id}').text
     assert 'Review arch design and requirements documents' in html
+    assert 'Report bugs found during execution of software tests' in html
+    assert 'Currently pursuing a relevant degree' in html
     assert 'Experience with Python' in html
     assert 'All applicants welcome' not in html
     assert 'Find People on LinkedIn' in html
