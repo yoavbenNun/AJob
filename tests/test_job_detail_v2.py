@@ -31,8 +31,10 @@ def test_sparse_page_has_search_and_no_empty_requirements(tmp_path):
     response = TestClient(app, base_url='http://127.0.0.1').get(f'/jobs/{job_id}')
     assert response.status_code == 200
     assert 'id="requirements"' not in response.text
-    assert 'Search LinkedIn for people' in response.text
-    assert 'Search results are not verified contacts' in response.text
+    assert 'Find People on LinkedIn' in response.text
+    assert response.text.count('https://www.linkedin.com/search/results/people/?') == 1
+    assert 'target="_blank" rel="noopener noreferrer"' in response.text
+    assert 'No verified LinkedIn contacts' not in response.text
     assert 'A+%26+B+C%2B%2B+%26+Python' in response.text
 
 

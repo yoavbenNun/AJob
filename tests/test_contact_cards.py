@@ -1,8 +1,4 @@
-from pathlib import Path
-from urllib.parse import urlsplit
-
 from fastapi.testclient import TestClient
-from playwright.sync_api import sync_playwright
 import pytest
 
 from src.models import JobPosting, OutreachContact
@@ -78,54 +74,18 @@ def workspace(tmp_path, monkeypatch):
     return TestClient(app, base_url="http://127.0.0.1"), job_id, outreach, contact_id, draft_id
 
 
-def test_render_is_read_only_and_escapes_contact(workspace):
+def test_job_detail_hides_contacts_and_leaves_saved_data_unchanged(workspace):
     client, job_id, outreach, contact_id, draft_id = workspace
     path = f"/jobs/{job_id}"
+    contact_before = outreach.get_contact(contact_id, job_id)
+    drafts_before = outreach.list_approved_drafts(job_id)
     response = client.get(path)
     assert response.status_code == 200
-    section = response.text.split('id="outreach"', 1)[1].split("</details>", 1)[0]
-    assert "&lt;Test Contact&gt;" in section and "Engineer &amp; mentor" in section
-    assert 'target="_blank" rel="noopener noreferrer"' in section
-    assert 'href="https://www.linkedin.com/in/synthetic-test-contact"' in section
-    assert all(tag not in section for tag in ("<form", "<input"))
-    assert "Draft message" in section
-    assert 'data-profile-url="https://www.linkedin.com/in/synthetic-test-contact"' in section
-    assert "Private draft" not in section
+    for text in ('id="outreach"', "Test Contact", "synthetic-test-contact", "Private draft", "Draft message"):
+        assert text not in response.text
+    assert response.text.count("Find People on LinkedIn") == 1
     client.app.state.reviewed_contact_evidence = None
-    assert "No verified LinkedIn contacts found for this role." in client.get(path).text
-    assert outreach.get_contact(contact_id, job_id) is not None
-    assert [(draft["id"], draft["body"]) for draft in outreach.list_approved_drafts(job_id)] == [
-        (draft_id, "Private draft"),
-    ]
-
-
-@pytest.mark.parametrize("width", [360, 1280])
-def test_contact_card_browser_layout(workspace, width):
-    client, job_id, *_ = workspace
-    with sync_playwright() as playwright:
-        if not Path(playwright.chromium.executable_path).is_file():
-            pytest.skip("Chromium is not installed")
-        browser = playwright.chromium.launch()
-        try:
-            page = browser.new_page(viewport={"width": width, "height": 800})
-
-            def serve_local(route):
-                url = urlsplit(route.request.url)
-                if url.netloc != "127.0.0.1":
-                    route.abort()
-                    return
-                response = client.get(url.path)
-                route.fulfill(status=response.status_code, body=response.content,
-                              content_type=response.headers.get("content-type"))
-
-            page.route("**/*", serve_local)
-            page.goto(f"http://127.0.0.1/jobs/{job_id}")
-            page.locator("#outreach summary").click()
-            card = page.locator("#outreach a.contact-profile")
-            assert card.is_visible()
-            assert card.evaluate("(node) => getComputedStyle(node).display") == "flex"
-            box = card.bounding_box()
-            assert 0 <= box["x"] < box["x"] + box["width"] <= width
-            assert card.evaluate("(node) => node.scrollWidth <= node.clientWidth")
-        finally:
-            browser.close()
+    assert "No verified LinkedIn contacts found for this role." not in client.get(path).text
+    assert contact_before is not None and outreach.get_contact(contact_id, job_id) == contact_before
+    assert drafts_before[0]["id"] == draft_id
+    assert outreach.list_approved_drafts(job_id) == drafts_before

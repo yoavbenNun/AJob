@@ -65,7 +65,7 @@ def test_outreach_requires_preview_and_approval_before_storing_draft(tmp_path) -
         "relationship": "hiring_team", "location": "Remote",
     })
     assert added.status_code == 200
-    assert "No verified LinkedIn contacts" in added.text
+    assert "No verified LinkedIn contacts" not in added.text
     assert "Approved messages" not in added.text
 
     contact_id = str(OutreachRepository(tmp_path / "outreach.db").list_contacts_for_job(job_id)[0].id)
@@ -403,7 +403,7 @@ def test_job_detail_uses_collapsible_content_sections(tmp_path) -> None:
     response = client.get(f"/jobs/{job_id}")
 
     assert response.status_code == 200
-    assert response.text.count('class="content-section collapsible-section"') == 2
+    assert response.text.count('class="content-section collapsible-section"') == 1
     assert "<h2>About the role</h2>" not in response.text
     assert "<h2>What they’re looking for</h2>" not in response.text
     assert not re.search(r"<details\b[^>]*\sopen\b", response.text)
@@ -413,7 +413,7 @@ def test_job_detail_uses_collapsible_content_sections(tmp_path) -> None:
     assert 'href="#application"' not in response.text
     assert f'/jobs/{job_id}/application' not in response.text
     assert 'name="application_token"' not in response.text
-    assert "<h2>Contact people</h2>" in response.text
+    assert 'id="outreach"' not in response.text
     assert "AJob" in response.text
     assert "company-generic.svg" in response.text
 

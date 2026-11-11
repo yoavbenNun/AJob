@@ -28,7 +28,7 @@ def test_draft_ignores_forged_contact_facts_and_preserves_history(tmp_path, reco
     assert OutreachRepository(tmp_path / "outreach.db").list_approved_drafts(job_id) == []
     page = client.get(f"/jobs/{job_id}")
     assert "Prepare application" not in page.text
-    assert "data-profile-url" in page.text
+    assert "data-profile-url" not in page.text
 
 
 @pytest.mark.parametrize("patch,code", [

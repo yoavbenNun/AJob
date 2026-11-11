@@ -214,6 +214,12 @@ body { background: linear-gradient(180deg, #eaf0f6, #f3f6fa 420px); }
   border-color: var(--ui-border);
 }
 .detail-hero--v3 h1, .detail-hero--v3 .detail-meta { overflow-wrap: anywhere; }
+.detail-hero--v3 .job-detail-linkedin { justify-self: start; grid-column: 1 / -1; min-height: 44px; gap: .5rem; }
+.job-detail-linkedin svg { flex: none; }
+@media (min-width: 760px) {
+  .detail-shell .detail-hero--v3 { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .detail-hero--v3 .job-detail-linkedin { grid-column: 3; justify-self: end; }
+}
 .detail-hero--v3 > :is(.job-detail-overview, .detail-toolbar, .job-detail-updated) { grid-column: 1 / -1; min-width: 0; }
 .job-detail-overview { padding-top: .8rem; border-top: 1px solid var(--ui-border); }
 .job-detail-highlights { max-width: 75ch; margin: .45rem 0 0; font-size: .84rem; line-height: 1.55; overflow-wrap: anywhere; }

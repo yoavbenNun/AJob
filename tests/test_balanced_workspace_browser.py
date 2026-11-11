@@ -120,7 +120,7 @@ def test_long_title_and_empty_description_do_not_overflow(browser_workspace):
     expect(card.locator('.text-link')).to_be_visible()
 
 
-def test_job_detail_v3_disclosures_and_synthetic_previews(browser_workspace):
+def test_job_detail_linkedin_layout_resume_and_synthetic_previews(browser_workspace):
     page, origin, repo, ids = browser_workspace
     job = repo.get_by_id(ids[0])
     job.description = (
@@ -139,24 +139,32 @@ def test_job_detail_v3_disclosures_and_synthetic_previews(browser_workspace):
     original = card.get_by_role("link", name="Open original posting")
     expect(original).to_have_attribute("href", job.job_url)
     expect(original).to_have_attribute("rel", "noopener noreferrer")
-    expect(page.locator("main > details")).to_have_count(2)
+    expect(page.locator("main > details")).to_have_count(1)
     expect(page.locator("details[open]")).to_have_count(0)
-    folder = Path(".pytest_cache/job-detail-v3").resolve()
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    folder = Path(".pytest_cache/job-detail-v31").resolve()
     folder.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(folder / "full.png"))
     resume = page.locator("#resume-match")
-    contacts = page.locator("#outreach")
     expect(resume.locator("summary").first).not_to_contain_text("Not calculated")
     resume.locator(":scope > summary").click()
     expect(resume.get_by_text("Processed locally on this computer")).to_be_visible()
-    contacts.locator(":scope > summary").click()
-    search = contacts.get_by_role("link", name="Search LinkedIn for people")
+    search = card.get_by_role("link", name="Find People on LinkedIn")
     expect(search).to_be_visible()
     expect(search).to_have_attribute("target", "_blank")
     expect(search).to_have_attribute("rel", "noopener noreferrer")
     assert parse_qs(urlsplit(search.get_attribute("href")).query) == {
         "keywords": [f"{job.company} {job.title}"],
     }
+    assert search.bounding_box()["x"] > card.locator("h1").bounding_box()["x"]
+    search.focus()
+    expect(search).to_be_focused()
+    page.set_viewport_size({"width": 320, "height": 900})
+    box = search.bounding_box()
+    assert box["y"] > card.locator(".detail-meta").bounding_box()["y"]
+    assert box["height"] >= 44 and box["x"] + box["width"] <= 320
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    page.set_viewport_size({"width": 1280, "height": 900})
     resume.get_by_role("button", name="Refresh match").click()
     expect(page.locator("details[open]")).to_have_count(0)
     expect(resume.locator(":scope > summary")).not_to_contain_text("Not calculated")
