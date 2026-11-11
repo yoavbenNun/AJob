@@ -52,7 +52,18 @@ jobs:
         timeout-minutes: 2
         run: docker pull postgrest/postgrest:v13.0.7@sha256:0a46780309a604cdc8b56c776c6e5e15788ce58174d709e40459ab5a2d44d228
       - name: Install Chromium and WebKit for dashboard browser regressions
-        run: python -m playwright install --with-deps chromium webkit
+        timeout-minutes: 8
+        env:
+          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT: "30000"
+        run: |
+          # Fail on unavailable indexes rather than using stale metadata. Bound
+          # transient package-network errors; the step timeout also covers DNS.
+          printf '%s\n' \
+            'Acquire::Retries "2";' \
+            'Acquire::http::Timeout "15";' \
+            'Acquire::https::Timeout "15";' \
+            'APT::Update::Error-Mode "any";' | sudo tee /etc/apt/apt.conf.d/99-ajob-ci-network >/dev/null
+          python -m playwright install --with-deps chromium webkit
       - run: python -m pytest
   container:
     runs-on: ubuntu-latest
