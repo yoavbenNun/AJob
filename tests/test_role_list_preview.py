@@ -106,8 +106,8 @@ def test_saved_nvidia_duties_fit_a_source_faithful_preview():
     assert all(_role_list_duty(duty) for duty in duties)
     preview = _role_list_preview(source)
     selected = preview.split(" · ")
-    assert 3 <= len(selected) <= 5 and len(preview) <= 500
-    assert selected == [duty for duty in duties if duty in selected]
+    assert 2 <= len(selected) <= 5 and len(preview) <= 500
+    assert selected == duties[-len(selected):]
     assert duties[3] in selected and duties[4] in selected
     assert "Scripting skills in Python" in _description_requirements(source)["required"]
     assert "All applicants welcome" not in preview
@@ -172,6 +172,49 @@ def test_blank_separator_does_not_admit_career_marketing():
     assert not _role_list_preview(source)
 
 
+def _long_duty_list(context, final):
+    duties = [
+        "Develop validation services for internal engineering teams to coordinate application releases across multiple platforms and monitor delivery failures.",
+        "Build automated integration checks for deployment tooling across supported platforms and record detailed diagnostics for engineers investigating failures.",
+        context,
+        "Improve regression coverage and publish detailed test results for platform engineering teams responsible for validating every supported software release.",
+        "Monitor integration pipelines and investigate recurring failures with developers responsible for supported services and automated release environments.",
+        final,
+    ]
+    assert len(" · ".join(duties)) > 500
+    return "Responsibilities:\n\n" + "\n\n".join(duties)
+
+
+def test_over_budget_list_does_not_drop_a_prohibition_in_a_second_sentence():
+    restriction = "Operate release tooling in staging environments. Production deployment is forbidden."
+    source = _long_duty_list(restriction, "Deploy release tooling for internal engineering teams.")
+    assert not _role_list_preview(source)
+    job = JobPosting("Engineer", "Example", "Israel", "https://example.test/job", description=source)
+    assert not _source_role_preview(job) and not _summarize_role(job)
+
+
+@pytest.mark.parametrize(("referent", "dependent"), [
+    ("Build a separate incident triage service for integration testing", "Maintain that service"),
+    ("Design an internal incident management system", "Maintain this system during software releases"),
+    ("Develop diagnostic tools for integration testing", "Maintain these tools for release engineering"),
+    ("Build an automated test framework for internal services", "Maintain the framework for integration testing"),
+])
+def test_over_budget_list_does_not_orphan_a_referring_duty(referent, dependent):
+    assert _role_list_preview("Responsibilities:\n" + referent + "\n" + dependent) == f"{referent} · {dependent}"
+    assert not _role_list_preview(_long_duty_list(referent, dependent))
+
+
+@pytest.mark.parametrize("technical_duty", [
+    "Develop skills assessment tools for engineering teams",
+    "Build experience sampling software for research teams",
+    "Maintain knowledge management APIs for internal services",
+])
+def test_technical_duty_is_not_mistaken_for_career_marketing(technical_duty):
+    assert _role_list_preview("Responsibilities:\n" + technical_duty + "\nMaintain integration tests") == (
+        technical_duty + " · Maintain integration tests"
+    )
+
+
 def test_detail_page_displays_workday_list_and_requirements(tmp_path):
     description = NVIDIA_DESCRIPTION.read_text(encoding="utf-8")
     db = tmp_path / 'jobs.db'
@@ -182,10 +225,10 @@ def test_detail_page_displays_workday_list_and_requirements(tmp_path):
     app = create_app(db, outreach_database_path=tmp_path / 'outreach.db',
                      application_database_path=tmp_path / 'applications.db')
     html = TestClient(app, base_url='http://127.0.0.1').get(f'/jobs/{job_id}').text
-    assert 'Review arch design and requirements documents' in html
     assert 'Report bugs found during execution' in html
     assert 'Perform tests in different scopes' in html
     assert 'Current B.Sc. student' in html
+    assert 'Scripting skills in Python' in html
     summary = html.split('class="role-summary">', 1)[1].split("</p>", 1)[0]
     assert "Current B.Sc. student" not in summary and "Scripting skills in Python" not in summary
     assert 'All applicants welcome' not in html

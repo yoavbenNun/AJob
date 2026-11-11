@@ -6,6 +6,9 @@
   lines do not end a list or make a following restriction safe to omit.
 - Scope restrictions can govern non-adjacent duties. If a scoped list cannot
   fit intact, do not shorten it or fall back to one of its paragraphs.
+- When a duty list is too long, never stitch non-contiguous duties together.
+  Require a self-contained suffix; compound entries and unresolved references
+  make omission unsafe even when no restriction keyword is present.
 
 - Cloud dashboard sessions and login budgets must survive worker restarts in a
   private persistent store. Authenticate before serving private routes; never

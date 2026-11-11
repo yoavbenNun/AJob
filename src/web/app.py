@@ -965,7 +965,9 @@ _ROLE_DANGLING = re.compile(
     r"will|would|can|could|may|might|must|should|shall)[.!?]?$", re.I,
 )
 _ROLE_MARKETING_OBJECT = re.compile(
-    r"(?:(?:your|our|a|the)\s+)?(?:career|future|skills?|experience|knowledge)\b", re.I,
+    r"(?:(?:your|our|their|own)\s+(?:career|future|skills?|experience|knowledge)\b|"
+    r"(?:(?:a|the)\s+)?(?:career|future|skills?|experience|knowledge)"
+    r"(?=\s+(?:with|at|in|through|by)\b|[.!?]?$))", re.I,
 )
 _ROLE_LIST_HEADING = re.compile(
     r"^(?:what you(?:'|’)ll be doing|what you will be doing|what you(?:'|’)ll do|"
@@ -976,6 +978,9 @@ _ROLE_LIST_SCOPE = re.compile(
     r"\b(?:only|never|unless|except|provided that|as long as|subject to|"
     r"exclusively|solely|without|prohibited|(?:limited|restricted) to|"
     r"requires? (?:a |prior |separate )?approval|(?:do|must|may|can|should) not)\b", re.I,
+)
+_ROLE_LIST_REFERENCE = re.compile(
+    r"\b(?:this|that|these|those|it|its|them|their|such|aforementioned|above|the)\b", re.I,
 )
 
 
@@ -1099,25 +1104,21 @@ def _role_list_preview(description: str) -> str:
         full_preview = ' · '.join(group)
         if len(full_preview) <= 500:
             return full_preview
-        # Scope may apply to a non-adjacent duty. Without explicit dependency
-        # metadata, do not shorten a list that contains restrictive language.
-        if any(_ROLE_LIST_SCOPE.search(duty) for duty in group):
+        # A later statement can qualify the entire block. Do not shorten
+        # compound entries or a block with explicit scope restrictions.
+        if any(len(_role_sentences(duty)) != 1 or _ROLE_LIST_SCOPE.search(duty)
+               for duty in group):
             return ''
-        # Prefer coverage of both ends over an arbitrary prefix, while
-        # rendering selected duties in their original order and verbatim.
-        selected = []
-        remaining = 500
-        for i in sorted(range(len(group)), key=lambda i: (min(i, len(group) - 1 - i), -i)):
-            cost = len(group[i]) + (3 if selected else 0)
-            if cost <= remaining:
-                selected.append(i)
-                remaining -= cost
-        # An inline condition stays with its original duty. Do not silently
-        # omit the conditioned line when fitting the remaining duties.
-        if any(re.search(r'\bif\b', duty, re.I) and i not in selected
-               for i, duty in enumerate(group)):
-            return ''
-        return ' · '.join(group[i] for i in sorted(selected))
+        # Only a contiguous suffix is eligible, so no later context is lost.
+        # Do not discard an inline condition or guess what a reference in
+        # the retained text points to after removing earlier duties.
+        for start in range(1, len(group) - 1):
+            if re.search(r'\bif\b', group[start - 1], re.I):
+                return ''
+            suffix = ' · '.join(group[start:])
+            if len(suffix) <= 500 and not _ROLE_LIST_REFERENCE.search(suffix):
+                return suffix
+        return ''
     return ''
 
 
