@@ -863,6 +863,14 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
     saved_contacts = context.pop("saved_outreach_contacts", ())
     people = _contact_results(request, job, saved_contacts)
     extracted_requirements = _description_requirements(job.description) if not job.requirements.strip() else {}
+    if not job.requirements.strip() and not extracted_requirements:
+        extracted_requirements = _prose_requirements(job.description)
+    from urllib.parse import urlencode
+    contact_search_url = 'https://www.linkedin.com/search/results/people/?' + urlencode(
+        {'keywords': f'{job.company} {job.title}'})
+    match = context.get('match_result')
+    match_supported = bool(match and match.job_skills and len(job.description.strip()) >= 150
+                           and (job.requirements.strip() or extracted_requirements))
     return templates.TemplateResponse(
         request,
         "job_detail.html",
@@ -870,9 +878,11 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
             "job": job,
             "contact_cards": people.cards,
             "contact_state": people.state,
+            "contact_search_url": contact_search_url,
+            "match_supported": match_supported,
             "statuses": JOB_STATUSES,
             "company_logos": COMPANY_LOGOS,
-            "role_summary": _summarize_role(job),
+            "role_summary": _summarize_role(job) or _source_role_preview(job),
             "requirement_lines": _summarize_captured_lines(
                 job.requirements, job,
                 keywords=(
@@ -998,6 +1008,32 @@ def _description_requirements(description: str) -> dict[str, list[str]]:
         if kind in {"required", "preferred"} and lines:
             result.setdefault(kind, []).extend(re.sub(r"^[•*-]\s+", "", line) for line in lines)
     return result
+
+
+def _prose_requirements(description: str) -> dict[str, list[str]]:
+    """Use only explicit candidate requirements, without rewriting the source."""
+    found = []
+    for line in description.splitlines():
+        for sentence in _role_sentences(line.strip()):
+            sentence = sentence.strip()
+            if (len(sentence) <= 320 and re.search(r'\b(?:you must|must have|we require)\b', sentence, re.I)
+                    and not re.search(r'\b(?:preferred|nice to have|not required)\b', sentence, re.I)
+                    and sentence not in found):
+                found.append(sentence)
+    return {'required': found[:7]} if found else {}
+
+
+def _source_role_preview(job: JobPosting) -> str:
+    """Show a whole source paragraph, preserving adjacent qualifications."""
+    for paragraph in re.split(r'\n\s*\n', job.description):
+        paragraph = ' '.join(line.strip() for line in paragraph.splitlines()).strip()
+        sentences = _role_sentences(paragraph)
+        if (len(paragraph) <= 850 and 1 <= len(sentences) <= 3
+                and all(s.endswith(('.', '!', '?')) for s in sentences)
+                and any(_ROLE_DUTY.match(s) for s in sentences)
+                and not re.search(r'\b(?:requirements|qualifications|must have|you must|experience preferred)\b', paragraph, re.I)):
+            return paragraph
+    return ''
 
 
 def _section_role_preview(job: JobPosting) -> str:
