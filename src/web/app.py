@@ -873,6 +873,10 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
                            and (job.requirements.strip() or extracted_requirements))
     role_summary = _summarize_role(job) or _source_role_preview(job)
     role_duties = _role_list_items(job.description)
+    # Ignore punctuation and whitespace, but retain any additional source words.
+    normalize = lambda text: re.sub(r'[^\w+#]+', ' ', text.casefold()).strip()
+    if role_duties and normalize(role_summary) == normalize(' '.join(role_duties)):
+        role_summary = ''
     requirement_highlights = []
     remaining = 560 - len(role_summary)
     seen = set()
@@ -1091,6 +1095,10 @@ def _role_list_items(description: str) -> list[str]:
         while end < len(lines):
             duty = re.sub(r'^[•*\-]\s+', '', lines[end])
             qualifier = (group and _ROLE_LIST_SCOPE.search(duty)
+                         and re.match(r'^(?:(?:these|those|this|that|they|it)\b|'
+                                      r'(?:only|never)\s+(?:use|access|operate|deploy|test|run|work)\b)', duty, re.I)
+                         and not re.search(r'\b(?:candidates?|applicants?|students?|degrees?|b\.?sc|m\.?sc)\b', duty, re.I)
+                         and not _ROLE_MARKETING_OBJECT.search(duty)
                          and duty.endswith(('.', '!', '?'))
                          and not _ROLE_DANGLING.search(duty)
                          and not duty.endswith(('...', '…'))

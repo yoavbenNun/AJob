@@ -45,6 +45,18 @@ def test_never_drop_restrictive_continuation():
     assert _role_list_preview(source).endswith('These tools must never deploy to production.')
 
 
+@pytest.mark.parametrize('tail', [
+    'Candidates without a B.Sc. will not be considered.',
+    'Build your career with our global engineering team without limits.',
+    'Applicants without prior experience cannot be considered.',
+    'Our company grows without limits.',
+])
+def test_qualifier_rejects_candidate_marketing_and_ambiguous_text(tail):
+    source = ('Responsibilities:\nBuild tools for automated deployments\n'
+              'Maintain the existing release pipelines\n\n' + tail + '\nRequirements:\nPython')
+    assert not _role_list_preview(source)
+
+
 def test_review_requirements_documents_in_long_workday_description():
     source = ("About our company:\n" + "We build products for customers. " * 40 +
               "\nWhat you'll be doing:\nReview arch design and requirements documents\n"
@@ -243,3 +255,19 @@ def test_detail_page_displays_workday_list_and_requirements(tmp_path):
     assert 'All applicants welcome' not in html
     assert 'Find People on LinkedIn' in html
     assert repo.get_by_id(job_id).description == description
+
+
+def test_distinct_intro_is_preserved_alongside_responsibilities(tmp_path):
+    db = tmp_path / 'jobs.db'
+    repo = JobRepository(db)
+    repo.initialize()
+    description = ('Develop reliable APIs. Maintain customer integrations.\n'
+                   'Responsibilities:\nBuild tools for automated deployments\n'
+                   'Maintain the existing release pipelines\nRequirements:\nPython')
+    job_id = repo.save(JobPosting('Engineer', 'Example', 'Israel',
+                                  'https://example.test/intro', description=description))
+    app = create_app(db, outreach_database_path=tmp_path / 'outreach.db',
+                     application_database_path=tmp_path / 'applications.db')
+    html = TestClient(app, base_url='http://127.0.0.1').get(f'/jobs/{job_id}').text
+    assert '<p class="role-summary">Develop reliable APIs. Maintain customer integrations.</p>' in html
+    assert '<li>Build tools for automated deployments</li>' in html

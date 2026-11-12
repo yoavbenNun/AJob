@@ -2,13 +2,12 @@
 
 - Workday HTML cleanup can remove list markers and blank lines; test role previews
   against the stored plain text, and keep adjacent restrictions with their duties.
-- Validate the entire responsibility list before choosing preview lines. Blank
-  lines do not end a list or make a following restriction safe to omit.
-- Scope restrictions can govern non-adjacent duties. If a scoped list cannot
-  fit intact, do not shorten it or fall back to one of its paragraphs.
-- When a duty list is too long, never stitch non-contiguous duties together.
-  Require a self-contained suffix; compound entries and unresolved references
-  make omission unsafe even when no restriction keyword is present.
+- Validate and preserve the entire responsibility list; blank lines do not end
+  it, and restrictions can govern non-adjacent duties. Use visual expansion
+  rather than selecting a subset to meet a display limit.
+- A restriction keyword alone does not identify a duty qualifier: candidate
+  requirements and marketing can contain the same words. Fail closed when its
+  relationship to the responsibilities is ambiguous.
 
 - Cloud dashboard sessions and login budgets must survive worker restarts in a
   private persistent store. Authenticate before serving private routes; never
