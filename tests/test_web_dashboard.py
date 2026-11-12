@@ -517,7 +517,11 @@ def test_job_detail_role_overview_is_one_source_based_paragraph(tmp_path, descri
     assert response.status_code == 200
     overview = response.text.split('id="overview"', 1)[1].split("</div>", 1)[0]
     assert re.findall(r"<p[^>]*>(.*?)</p>", overview) == [expected]
-    assert not re.search(r"<(?:ol|ul|li|details)\b", overview)
+    if description.startswith('Responsibilities'):
+        assert '<details class="role-duties">' in overview
+        assert '<li>Develop C++ services</li><li>Test API integrations</li>' in overview
+    else:
+        assert not re.search(r"<(?:ol|ul|li|details)\b", overview)
     assert "View full captured description" not in response.text
     assert repository.get_by_id(job_id).description == description
 
