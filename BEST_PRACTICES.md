@@ -2,6 +2,12 @@
 
 - Workday HTML cleanup can remove list markers and blank lines; test role previews
   against the stored plain text, and keep adjacent restrictions with their duties.
+- Validate and preserve the entire responsibility list; blank lines do not end
+  it, and restrictions can govern non-adjacent duties. Use visual expansion
+  rather than selecting a subset to meet a display limit.
+- A restriction keyword alone does not identify a duty qualifier: candidate
+  requirements and marketing can contain the same words. Fail closed when its
+  relationship to the responsibilities is ambiguous.
 
 - Cloud dashboard sessions and login budgets must survive worker restarts in a
   private persistent store. Authenticate before serving private routes; never

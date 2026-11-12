@@ -1,0 +1,17 @@
+Software QA Student
+The student will join the SW/FW testing team and participate in manual and automated testing and automation development.
+What you'll be doing:
+
+Review arch design and requirements documents for new features introduced in different domains.
+Design, develop and implement tests for the new features, as part of SW/FW update releases.
+Automate newly added tests in the existing automation framework, add new capabilities and features to the framework.
+Report bugs found during execution, assist with reproduction and debugs to understand root cause, verify bug fixes provided by R&D team, raise if not fixed.
+Perform tests in different scopes: regression, performance, functional, security; report progress of testing and provide summary reports of testing activity.
+What we need to see:
+Current B.Sc. student in Computer Science, Computer Engineering, Software Engineering, or a related engineering field.
+Scripting skills in Python
+Clear verbal and written communication, proficient written and spoken English.
+Ways to stand out from the crowd:
+Academic/technical knowledge in Networking
+Equal opportunity:
+All applicants welcome.

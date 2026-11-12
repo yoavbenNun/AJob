@@ -871,7 +871,12 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
     match = context.get('match_result')
     match_supported = bool(match and match.job_skills and len(job.description.strip()) >= 150
                            and (job.requirements.strip() or extracted_requirements))
-    role_summary = _summarize_role(job) or _source_role_preview(job) or _role_list_preview(job.description)
+    role_summary = _summarize_role(job) or _source_role_preview(job)
+    role_duties = _role_list_items(job.description)
+    # Ignore punctuation and whitespace, but retain any additional source words.
+    normalize = lambda text: re.sub(r'[^\w+#]+', ' ', text.casefold()).strip()
+    if role_duties and normalize(role_summary) == normalize(' '.join(role_duties)):
+        role_summary = ''
     requirement_highlights = []
     remaining = 560 - len(role_summary)
     seen = set()
@@ -897,6 +902,7 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
             "statuses": JOB_STATUSES,
             "company_logos": COMPANY_LOGOS,
             "role_summary": role_summary,
+            "role_duties": role_duties,
             "requirement_highlights": requirement_highlights,
             **context,
         },
@@ -958,6 +964,26 @@ _ROLE_DUTY = re.compile(
 _ROLE_ABBREVIATION = re.compile(
     r"(?:\b(?:e\.g|i\.e|B\.Sc|M\.Sc|Ph\.D|Dr|Mr|Ms)|\b[A-Z])\.$",
     re.IGNORECASE,
+)
+_ROLE_DANGLING = re.compile(
+    r"\b(?:with|for|and|or|to|of|using|by|that|when|if|unless|except|because|"
+    r"provided|as|until|during|in|from|after|before|while|the|a|an|"
+    r"will|would|can|could|may|might|must|should|shall)[.!?]?$", re.I,
+)
+_ROLE_MARKETING_OBJECT = re.compile(
+    r"(?:(?:your|our|their|own)\s+(?:career|future|skills?|experience|knowledge)\b|"
+    r"(?:(?:a|the)\s+)?(?:career|future|skills?|experience|knowledge)"
+    r"(?=\s+(?:with|at|in|through|by)\b|[.!?]?$))", re.I,
+)
+_ROLE_LIST_HEADING = re.compile(
+    r"^(?:what you(?:'|’)ll be doing|what you will be doing|what you(?:'|’)ll do|"
+    r"what you will do|responsibilities|your responsibilities|your impact|day.to.day)\s*:?$",
+    re.I,
+)
+_ROLE_LIST_SCOPE = re.compile(
+    r"\b(?:only|never|unless|except|provided that|as long as|subject to|"
+    r"exclusively|solely|without|prohibited|(?:limited|restricted) to|"
+    r"requires? (?:a |prior |separate )?approval|(?:do|must|may|can|should) not)\b", re.I,
 )
 
 
@@ -1029,7 +1055,11 @@ def _prose_requirements(description: str) -> dict[str, list[str]]:
 
 def _source_role_preview(job: JobPosting) -> str:
     """Show a whole source paragraph, preserving adjacent qualifications."""
-    for paragraph in re.split(r'\n\s*\n', job.description):
+    # A blank-separated paragraph inside an explicit list is not independent
+    # of the rest of the list. Leave the entire block to the list validator.
+    lines = job.description.splitlines()
+    end = next((i for i, line in enumerate(lines) if _ROLE_LIST_HEADING.fullmatch(line.strip())), len(lines))
+    for paragraph in re.split(r'\n\s*\n', '\n'.join(lines[:end])):
         paragraph = ' '.join(line.strip() for line in paragraph.splitlines()).strip()
         sentences = _role_sentences(paragraph)
         if (len(paragraph) <= 850 and 1 <= len(sentences) <= 3
@@ -1040,28 +1070,43 @@ def _source_role_preview(job: JobPosting) -> str:
     return ''
 
 
-def _role_list_preview(description: str) -> str:
-    """Extract a bounded list of duties, including Workday's plain-text lists."""
-    lines = description.splitlines()
-    def duty(line):
-        line = re.sub(r'^\s*[•*\-]\s+', '', line).strip()
-        return bool(18 <= len(line) <= 200 and (_ROLE_DUTY.match(line)
-            or re.match(r'^review\b', line, re.I)
-            or re.match(r'^report\s+(?:bugs?|defects?|issues?|errors?|findings?)\b', line, re.I))
-            and not re.search(r'(?:\.\.\.|…)$|\b(?:with|for|and|or|to|of|using|by|will|must|should|during|in|from|after|before|while|when|the|a|an)[.!?]?$', line, re.I)
-            and not re.search(r'\b(?:equal opportunity|benefits|qualifications)\b', line, re.I))
+def _role_list_duty(line: str) -> bool:
+    action = (_ROLE_DUTY.match(line)
+              or re.match(r'^review\b', line, re.I)
+              or re.match(r'^report\s+(?=(?:bugs?|defects?|issues?|errors?|findings?)\b)', line, re.I)
+              or re.match(r'^perform\s+(?=(?:[\w-]+\s+){0,3}test(?:s|ing)\b)', line, re.I))
+    return bool(18 <= len(line) <= 200 and action
+        and not _ROLE_MARKETING_OBJECT.match(line[action.end():].strip())
+        and not _ROLE_DANGLING.search(line)
+        and not re.search(r'(?:\.\.\.|…|[,;:])$', line)
+        and not re.search(r'\b(?:equal opportunity|benefits|qualifications)\b', line, re.I))
 
-    heading = re.compile(r"^(?:what you(?:'|’)ll be doing|what you will be doing|"
-                         r"what you(?:'|’)ll do|what you will do|responsibilities|"
-                         r"your responsibilities|your impact|day.to.day)\s*:?$", re.I)
+
+def _role_list_items(description: str) -> list[str]:
+    """Return the complete validated source list, never a selected subset."""
+    lines = [line.strip() for line in description.splitlines() if line.strip()]
+
     for index, line in enumerate(lines):
-        if not heading.fullmatch(line.strip()):
+        if not _ROLE_LIST_HEADING.fullmatch(line):
             continue
         start = index + 1
         group = []
         end = start
-        while end < len(lines) and duty(lines[end]):
-            group.append(re.sub(r'^\s*[•*\-]\s+', '', lines[end]).strip())
+        while end < len(lines):
+            duty = re.sub(r'^[•*\-]\s+', '', lines[end])
+            qualifier = (group and _ROLE_LIST_SCOPE.search(duty)
+                         and re.match(r'^(?:(?:these|those|this|that|they|it)\b|'
+                                      r'(?:only|never)\s+(?:use|access|operate|deploy|test|run|work)\b)', duty, re.I)
+                         and not re.search(r'\b(?:candidates?|applicants?|students?|degrees?|b\.?sc|m\.?sc)\b', duty, re.I)
+                         and not _ROLE_MARKETING_OBJECT.search(duty)
+                         and duty.endswith(('.', '!', '?'))
+                         and not _ROLE_DANGLING.search(duty)
+                         and not duty.endswith(('...', '…'))
+                         and not re.search(r'\b(?:equal opportunity|benefits|qualifications)\b', duty, re.I)
+                         and len(duty) <= 200)
+            if not _role_list_duty(duty) and not qualifier:
+                break
+            group.append(duty)
             end += 1
         # Do not detach a continuation or restrictive sentence from the list.
         next_line = lines[end].strip().rstrip(':?') if end < len(lines) else ''
@@ -1069,10 +1114,13 @@ def _role_list_preview(description: str) -> str:
             continue
         if len(group) < 2:
             continue
-        preview = ' · '.join(group[:3])
-        if len(preview) <= 500:
-            return preview
-    return ''
+        return group
+    return []
+
+
+def _role_list_preview(description: str) -> str:
+    """Compatibility helper; presentation alone controls the compact view."""
+    return ' · '.join(_role_list_items(description))
 
 
 def _section_role_preview(job: JobPosting) -> str:
@@ -1123,11 +1171,7 @@ def _summarize_role(job: JobPosting, *, _text: str | None = None) -> str:
     for sentence in sentences:
         # Terminal connectors and modals leave an open grammatical dependency,
         # even if the captured source already includes punctuation.
-        if re.search(
-            r"\b(?:with|for|and|or|to|of|using|by|that|when|if|unless|because|"
-            r"will|would|can|could|may|might|must|should|shall)[.!?]?$",
-            sentence, re.IGNORECASE,
-        ):
+        if _ROLE_DANGLING.search(sentence):
             return ""
         duty = _ROLE_DUTY.match(sentence)
         if not duty:
@@ -1136,10 +1180,7 @@ def _summarize_role(job: JobPosting, *, _text: str | None = None) -> str:
                 return ""
             continue
         responsibility = sentence[duty.end():].strip()
-        if re.match(
-            r"(?:(?:your|our|a|the)\s+)?(?:career|future|skills?|experience|knowledge)\b",
-            responsibility, re.IGNORECASE,
-        ):
+        if _ROLE_MARKETING_OBJECT.match(responsibility):
             return ""
         objects = re.findall(r"[\w+#]+", responsibility)
         if not any(
