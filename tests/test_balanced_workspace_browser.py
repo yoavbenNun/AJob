@@ -44,6 +44,34 @@ def browser_workspace(workspace):
         thread.join(timeout=10)
 
 
+@pytest.mark.parametrize('width', [390, 1280])
+def test_complete_responsibilities_expand_without_overflow(browser_workspace, width):
+    page, origin, repo, ids = browser_workspace
+    job = repo.get_by_id(ids[0])
+    duties = [
+        'Develop validation services for internal engineering teams across supported platforms.',
+        'Build automated integration tests for deployment tooling and software releases.',
+        'Maintain those tools for teams responsible for integration testing.',
+        'Operate only in isolated staging environments and never use production credentials.',
+    ]
+    job.description = 'Responsibilities:\n' + '\n'.join(duties) + '\nRequirements:\nPython'
+    repo.save(job)
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    page.set_viewport_size({'width': width, 'height': 844})
+    page.goto(f'{origin}/jobs/{ids[0]}')
+    section = page.locator('.role-duties')
+    expect(section).not_to_have_attribute('open', '')
+    expect(section.locator('ul')).not_to_be_visible()
+    section.locator('summary').focus()
+    page.keyboard.press('Enter')
+    expect(section.locator('li')).to_have_text(duties)
+    expect(section.locator('ul')).to_be_visible()
+    expect(page.locator('#resume-match')).not_to_have_attribute('open', '')
+    assert page.evaluate('document.documentElement.scrollWidth') <= width
+    assert not errors
+
+
 @pytest.mark.parametrize('width', [390, 768, 1280, 1440])
 def test_balanced_layout_touch_targets_and_popover_bounds(browser_workspace, width):
     page, origin, _, _ = browser_workspace

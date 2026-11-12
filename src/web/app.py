@@ -871,7 +871,8 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
     match = context.get('match_result')
     match_supported = bool(match and match.job_skills and len(job.description.strip()) >= 150
                            and (job.requirements.strip() or extracted_requirements))
-    role_summary = _summarize_role(job) or _source_role_preview(job) or _role_list_preview(job.description)
+    role_summary = _summarize_role(job) or _source_role_preview(job)
+    role_duties = _role_list_items(job.description)
     requirement_highlights = []
     remaining = 560 - len(role_summary)
     seen = set()
@@ -897,6 +898,7 @@ def _detail_response(request: Request, job: JobPosting, **context: object):
             "statuses": JOB_STATUSES,
             "company_logos": COMPANY_LOGOS,
             "role_summary": role_summary,
+            "role_duties": role_duties,
             "requirement_highlights": requirement_highlights,
             **context,
         },
@@ -978,9 +980,6 @@ _ROLE_LIST_SCOPE = re.compile(
     r"\b(?:only|never|unless|except|provided that|as long as|subject to|"
     r"exclusively|solely|without|prohibited|(?:limited|restricted) to|"
     r"requires? (?:a |prior |separate )?approval|(?:do|must|may|can|should) not)\b", re.I,
-)
-_ROLE_LIST_REFERENCE = re.compile(
-    r"\b(?:this|that|these|those|it|its|them|their|such|aforementioned|above|the)\b", re.I,
 )
 
 
@@ -1079,8 +1078,8 @@ def _role_list_duty(line: str) -> bool:
         and not re.search(r'\b(?:equal opportunity|benefits|qualifications)\b', line, re.I))
 
 
-def _role_list_preview(description: str) -> str:
-    """Extract a bounded list of duties, including Workday's plain-text lists."""
+def _role_list_items(description: str) -> list[str]:
+    """Return the complete validated source list, never a selected subset."""
     lines = [line.strip() for line in description.splitlines() if line.strip()]
 
     for index, line in enumerate(lines):
@@ -1091,7 +1090,13 @@ def _role_list_preview(description: str) -> str:
         end = start
         while end < len(lines):
             duty = re.sub(r'^[•*\-]\s+', '', lines[end])
-            if not _role_list_duty(duty):
+            qualifier = (group and _ROLE_LIST_SCOPE.search(duty)
+                         and duty.endswith(('.', '!', '?'))
+                         and not _ROLE_DANGLING.search(duty)
+                         and not duty.endswith(('...', '…'))
+                         and not re.search(r'\b(?:equal opportunity|benefits|qualifications)\b', duty, re.I)
+                         and len(duty) <= 200)
+            if not _role_list_duty(duty) and not qualifier:
                 break
             group.append(duty)
             end += 1
@@ -1101,25 +1106,13 @@ def _role_list_preview(description: str) -> str:
             continue
         if len(group) < 2:
             continue
-        full_preview = ' · '.join(group)
-        if len(full_preview) <= 500:
-            return full_preview
-        # A later statement can qualify the entire block. Do not shorten
-        # compound entries or a block with explicit scope restrictions.
-        if any(len(_role_sentences(duty)) != 1 or _ROLE_LIST_SCOPE.search(duty)
-               for duty in group):
-            return ''
-        # Only a contiguous suffix is eligible, so no later context is lost.
-        # Do not discard an inline condition or guess what a reference in
-        # the retained text points to after removing earlier duties.
-        for start in range(1, len(group) - 1):
-            if re.search(r'\bif\b', group[start - 1], re.I):
-                return ''
-            suffix = ' · '.join(group[start:])
-            if len(suffix) <= 500 and not _ROLE_LIST_REFERENCE.search(suffix):
-                return suffix
-        return ''
-    return ''
+        return group
+    return []
+
+
+def _role_list_preview(description: str) -> str:
+    """Compatibility helper; presentation alone controls the compact view."""
+    return ' · '.join(_role_list_items(description))
 
 
 def _section_role_preview(job: JobPosting) -> str:

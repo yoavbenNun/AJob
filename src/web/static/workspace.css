@@ -204,6 +204,12 @@ body { background: linear-gradient(180deg, #eaf0f6, #f3f6fa 420px); }
 }
 
 .detail-shell .role-summary { max-width: 75ch; margin: 0; font-size: .9rem; line-height: 1.7; overflow-wrap: anywhere; }
+.role-duties { max-width: 75ch; min-width: 0; margin-top: .5rem; font-size: .9rem; line-height: 1.6; overflow-wrap: anywhere; }
+.role-duties summary { cursor: pointer; }
+.role-duties-preview { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.role-duties-toggle { display: inline-block; color: var(--ui-accent, #245c8a); font-weight: 600; margin-top: .35rem; }
+.role-duties[open] .role-duties-preview { display: none; }
+.role-duties ul { padding-inline-start: 1.25rem; }
 
 .detail-shell .detail-hero--v3 {
   grid-template-columns: auto minmax(0, 1fr);

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import html as html_lib
 import pytest
 from fastapi.testclient import TestClient
 
@@ -41,7 +42,7 @@ def test_never_drop_restrictive_continuation():
     source = ('Responsibilities:\nBuild tools for automated deployments\n'
               'Maintain the existing release pipelines\n'
               'These tools must never deploy to production.\nRequirements:\nPython')
-    assert _role_list_preview(source) == ''
+    assert _role_list_preview(source).endswith('These tools must never deploy to production.')
 
 
 def test_review_requirements_documents_in_long_workday_description():
@@ -61,7 +62,7 @@ def test_review_duties_keep_restrictive_continuations_and_exclude_qualifications
     source = ("What you'll be doing:\nReview arch design and requirements documents\n"
               "Develop Python automation for software testing\n"
               "Only use anonymized customer data.\nRequirements:\nPython")
-    assert _role_list_preview(source) == ''
+    assert _role_list_preview(source).endswith('Only use anonymized customer data.')
     assert not _role_list_preview('Requirements:\nReview job requirements documents\nDevelop Python skills')
 
 
@@ -77,7 +78,6 @@ def test_reported_bug_duties_without_a_following_heading():
     'Report bugs found during',
     'Report bugs found during execution...',
     'Report bugs found during execution of',
-    'Only use anonymized customer data.',
     'Equal opportunity employer and welcoming workplace.',
     'Learn more about the benefits of working here.',
 ])
@@ -106,8 +106,8 @@ def test_saved_nvidia_duties_fit_a_source_faithful_preview():
     assert all(_role_list_duty(duty) for duty in duties)
     preview = _role_list_preview(source)
     selected = preview.split(" · ")
-    assert 2 <= len(selected) <= 5 and len(preview) <= 500
-    assert selected == duties[-len(selected):]
+    assert len(preview) > 500
+    assert selected == duties
     assert duties[3] in selected and duties[4] in selected
     assert "Scripting skills in Python" in _description_requirements(source)["required"]
     assert "All applicants welcome" not in preview
@@ -123,7 +123,6 @@ def test_preview_keeps_all_duties_when_they_fit():
     "Perform regression tests with",
     "Perform tests in different scopes…",
     "Perform tests in different scopes:",
-    "Only use anonymized customer data.",
     "Perform at your best and enjoy our benefits.",
     "You must have experience performing regression tests.",
     "Equal opportunity employer and welcoming workplace.",
@@ -154,7 +153,7 @@ def test_scoped_duties_are_never_selected_without_their_context(separated):
     ]
     source = "Responsibilities:\n\n" + "\n\n".join(context + extra)
     assert len(" · ".join(context + extra)) > 500
-    assert not _role_list_preview(source)
+    assert _role_list_preview(source) == ' · '.join(context + extra)
     job = JobPosting("Engineer", "Example", "Israel", "https://example.test/job", description=source)
     assert not _source_role_preview(job)
     assert not _summarize_role(job)
@@ -188,7 +187,7 @@ def _long_duty_list(context, final):
 def test_over_budget_list_does_not_drop_a_prohibition_in_a_second_sentence():
     restriction = "Operate release tooling in staging environments. Production deployment is forbidden."
     source = _long_duty_list(restriction, "Deploy release tooling for internal engineering teams.")
-    assert not _role_list_preview(source)
+    assert restriction in _role_list_preview(source)
     job = JobPosting("Engineer", "Example", "Israel", "https://example.test/job", description=source)
     assert not _source_role_preview(job) and not _summarize_role(job)
 
@@ -201,7 +200,8 @@ def test_over_budget_list_does_not_drop_a_prohibition_in_a_second_sentence():
 ])
 def test_over_budget_list_does_not_orphan_a_referring_duty(referent, dependent):
     assert _role_list_preview("Responsibilities:\n" + referent + "\n" + dependent) == f"{referent} · {dependent}"
-    assert not _role_list_preview(_long_duty_list(referent, dependent))
+    preview = _role_list_preview(_long_duty_list(referent, dependent))
+    assert referent in preview and dependent in preview
 
 
 @pytest.mark.parametrize("technical_duty", [
@@ -229,8 +229,17 @@ def test_detail_page_displays_workday_list_and_requirements(tmp_path):
     assert 'Perform tests in different scopes' in html
     assert 'Current B.Sc. student' in html
     assert 'Scripting skills in Python' in html
-    summary = html.split('class="role-summary">', 1)[1].split("</p>", 1)[0]
+    summary = html.split('class="role-duties-preview">', 1)[1].split("</span>", 1)[0]
     assert "Current B.Sc. student" not in summary and "Scripting skills in Python" not in summary
+    duties = description.split("What you'll be doing:\n\n", 1)[1].split("\nWhat we need to see:", 1)[0].splitlines()
+    assert all(duty in html_lib.unescape(html) for duty in duties)
+    assert 'View all responsibilities' in html
+    assert '<details class="role-duties">' in html
+    expanded = html_lib.unescape(html.split('<details class="role-duties">', 1)[1].split('</details>', 1)[0])
+    full_list = expanded.split('<ul>', 1)[1].split('</ul>', 1)[0]
+    assert [full_list.index(duty) for duty in duties] == sorted(full_list.index(duty) for duty in duties)
+    assert 'Current B.Sc. student' not in full_list and 'Scripting skills in Python' not in full_list
+    assert '<details class="content-section collapsible-section" id="resume-match">' in html
     assert 'All applicants welcome' not in html
     assert 'Find People on LinkedIn' in html
     assert repo.get_by_id(job_id).description == description
