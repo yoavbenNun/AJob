@@ -49,21 +49,19 @@ def test_recommendation_metrics_separate_location_and_prerequisites_without_pers
     monkeypatch.setenv("CANDIDATE_PROFILE_JSON", "synthetic")
     monkeypatch.setattr(main, "load_safe_profile_json", lambda _: SimpleNamespace(
         to_resume_profile=lambda: SimpleNamespace(location="private candidate address")))
-    monkeypatch.setattr(main, "OpenStreetMapDrivingProvider", lambda: None)
+    routing = Mock(side_effect=AssertionError("Cloud recommendations must not route"))
+    monkeypatch.setattr(main, "OpenStreetMapDrivingProvider", routing)
     match = lambda status: SimpleNamespace(eligible=status != "ineligible", eligibility_status=status,
         strengths=(), eligibility_reasons=(), score=70)
     monkeypatch.setattr(main, "match_resume_to_job", Mock(side_effect=[
         match("ineligible"), match("potentially_eligible"), match("student_eligible")]))
-    monkeypatch.setattr(main, "evaluate_commute", Mock(side_effect=[
-        SimpleNamespace(eligible=True, reason="", status="suitable"),
-        SimpleNamespace(eligible=False, reason="", status="unknown"),
-        SimpleNamespace(eligible=True, reason="", status="suitable")]))
-    jobs = [JobPosting("Private title", "Private employer", "Israel", f"https://example.test/{i}")
-            for i in range(3)]
+    jobs = [JobPosting("Private title", "Private employer", location, f"https://example.test/{i}")
+            for i, location in enumerate(("Israel", "Not specified", "Eilat"))]
     recommendations = main._cloud_recommendations(SimpleNamespace(new_jobs=jobs))
     output = capsys.readouterr().out
     metrics = json.loads(output)
-    assert len(recommendations) == 1
+    routing.assert_not_called()
+    assert [item.location for item in recommendations] == ["Eilat"]
     assert metrics["considered"] == 3 and metrics["candidate_ineligible"] == 1
     assert metrics["location_blocked"] == metrics["location_unknown"] == 1
     assert metrics["recommended"] == 1

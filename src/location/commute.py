@@ -1,4 +1,4 @@
-"""Driving-commute eligibility kept separate from professional fit scoring."""
+"""Job location eligibility and optional driving estimates."""
 
 from __future__ import annotations
 
@@ -11,15 +11,14 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
-# Country names are matched as complete labels, not substrings, so an unknown
-# city-only location remains eligible for routing/manual review.
+# Match whole words and phrases. Unrecognized labels require manual review.
 _FOREIGN_COUNTRY_LABELS = frozenset(
     {
         "australia", "austria", "belgium", "brazil", "canada", "china",
         "czech republic", "denmark", "finland", "france", "germany", "india",
         "ireland", "italy", "japan", "mexico", "netherlands", "norway", "poland",
         "portugal", "romania", "singapore", "south korea", "spain", "sweden",
-        "switzerland", "taiwan", "uk", "united kingdom", "united states", "usa",
+        "serbia", "slovakia", "malaysia", "vietnam", "switzerland", "taiwan", "uk", "united kingdom", "united states", "usa", "prc",
     }
 )
 _FOREIGN_CITY_LABELS = frozenset(
@@ -31,9 +30,12 @@ _ISRAEL_LOCATION_LABELS = frozenset(
         "petah tikva", "rishon lezion", "rehovot", "raanana", "ra anana",
         "kfar saba", "netanya", "beer sheva", "beersheba", "yokneam",
         "caesarea", "hod hasharon", "ramat gan", "bnei brak",
+        "eilat", "safed", "tzfat", "tiberias", "nahariya", "akko",
+        "kiryat shmona", "kiryat shemona", "dimona", "arad", "karmiel",
         "kiryat gat", "yavne", "holon", "ashdod", "modiin", "modi in",
         "rosh haayin", "rosh ha ayin", "nes ziona",
         "ישראל", "תל אביב", "חיפה", "ירושלים", "הרצליה",
+        "אילת", "צפת", "טבריה", "נהריה", "עכו", "קריית שמונה",
         "קריית גת", "יבנה", "חולון", "אשדוד", "מודיעין", "ראש העין", "נס ציונה",
     }
 )
@@ -54,46 +56,53 @@ class DrivingTimeProvider(Protocol):
     def driving_minutes(self, origin: str, destination: str) -> int | None: ...
 
 
+def classify_job_location(destination: str) -> CommuteResult:
+    """Prefer a verified Israeli option; keep unresolved alternatives reviewable."""
+    destinations = _location_options(destination)
+    if any(_is_unrestricted_remote(value) for value in destinations):
+        return CommuteResult("remote", True, None, "Remote work is available from Israel.")
+    if any(_is_israeli_destination(value) for value in destinations):
+        return CommuteResult("israel", True, None, "An Israeli job location is available.")
+    if destinations and all(
+        _is_clearly_outside_israel(value) and not _has_location_label(value, _ISRAEL_LOCATION_LABELS)
+        for value in destinations
+    ):
+        return CommuteResult("outside_israel", False, None, "Job location is outside Israel.")
+    return CommuteResult("unknown", False, None, "Job location needs manual review.")
+
+
 def evaluate_commute(
     origin: str,
     destination: str,
     provider: DrivingTimeProvider | None,
 ) -> CommuteResult:
-    """Classify a commute using the agreed 90/120 minute driving bands."""
-    destination = destination.strip()
-    destinations = tuple(
-        value.strip() for value in destination.split(";") if value.strip()
-    ) or (destination,)
-    if not destination or destination.casefold() == "not specified":
-        return CommuteResult("unknown", False, None, "Job location is unknown; manual review required.")
-    if all(_is_clearly_outside_israel(value) for value in destinations):
-        return CommuteResult("outside_israel", False, None, f"Job location is outside Israel: {destination}.")
-    if _is_remote(destination):
-        return CommuteResult("remote", True, None, "Remote role; no commute required.")
-    if not origin.strip():
-        return CommuteResult("unknown", False, None, "Resume location was not found; manual review required.")
-    if provider is None:
-        return CommuteResult("unknown", False, None, "Driving-time provider is unavailable; manual review required.")
-    try:
-        estimates = [
-            provider.driving_minutes(origin, value)
-            for value in destinations
-            if not _is_clearly_outside_israel(value)
-        ]
-        verified = [value for value in estimates if value is not None]
-        minutes = min(verified) if verified else None
-    except (OSError, ValueError, TimeoutError, KeyError, IndexError, TypeError):
-        minutes = None
-    if minutes is None:
-        return CommuteResult(
-            "unknown", False, None,
-            "Driving time could not be verified; manual review required.", provider.name,
-        )
-    if minutes <= 90:
-        return CommuteResult("suitable", True, minutes, "Driving time is within 90 minutes.", provider.name)
-    if minutes <= 120:
-        return CommuteResult("borderline", True, minutes, "Driving time is 91-120 minutes; commute is borderline.", provider.name)
-    return CommuteResult("too_far", False, minutes, "Driving time exceeds 120 minutes.", provider.name)
+    """Add an optional driving estimate without changing location eligibility."""
+    location = classify_job_location(destination)
+    if location.status != "israel" or not origin.strip() or provider is None:
+        return location
+
+    estimates = []
+    for value in _location_options(destination):
+        if not _is_israeli_destination(value):
+            continue
+        try:
+            minutes = provider.driving_minutes(origin, value)
+        except (OSError, ValueError, KeyError, IndexError, TypeError):
+            continue
+        if minutes is not None:
+            estimates.append(minutes)
+    return CommuteResult(
+        location.status, location.eligible, min(estimates) if estimates else None,
+        location.reason, provider.name,
+    )
+
+
+def _location_options(destination: str) -> tuple[str, ...]:
+    return tuple(value.strip() for value in re.split(r";|\s+/\s+", destination) if value.strip())
+
+
+def _is_israeli_destination(location: str) -> bool:
+    return _has_location_label(location, _ISRAEL_LOCATION_LABELS) and not _is_clearly_outside_israel(location)
 
 
 def resolve_job_destination(location: str, description: str) -> str:
@@ -118,16 +127,7 @@ def resolve_job_destination(location: str, description: str) -> str:
 
 def is_israel_or_remote_location(location: str) -> bool:
     """Return whether a location is explicitly in Israel or safely remote."""
-    location = location.strip()
-    if not location or location.casefold() == "not specified":
-        return False
-    if _is_unrestricted_remote(location):
-        return True
-    normalized = " ".join(re.sub(r"[^\w]+", " ", location.casefold()).split())
-    return any(
-        re.search(rf"(?<!\w){re.escape(label)}(?!\w)", normalized)
-        for label in _ISRAEL_LOCATION_LABELS
-    )
+    return classify_job_location(location).eligible
 
 
 class OpenStreetMapDrivingProvider:
@@ -186,13 +186,6 @@ class OpenStreetMapDrivingProvider:
             return json.loads(response.read().decode("utf-8"))
 
 
-def _is_remote(location: str) -> bool:
-    lowered = " ".join(location.casefold().split())
-    if lowered in {"remote", "fully remote", "worldwide remote", "remote worldwide"}:
-        return True
-    return bool(re.fullmatch(r"remote\s*[,(-]\s*israel\s*\)?", lowered))
-
-
 def _is_unrestricted_remote(location: str) -> bool:
     """Accept only remote labels that explicitly permit Israel or worldwide work."""
     lowered = " ".join(location.casefold().split())
@@ -202,8 +195,13 @@ def _is_unrestricted_remote(location: str) -> bool:
 
 
 def _is_clearly_outside_israel(location: str) -> bool:
-    normalized = " ".join(re.sub(r"[^\w]+", " ", location.casefold()).split())
-    return any(
-        re.search(rf"(?<!\w){re.escape(label)}(?!\w)", normalized)
-        for label in _FOREIGN_COUNTRY_LABELS | _FOREIGN_CITY_LABELS
+    return (
+        _has_location_label(location, _FOREIGN_COUNTRY_LABELS | _FOREIGN_CITY_LABELS)
+        or bool(re.fullmatch(r"(?:US|U\.S\.?)\s+remote|remote[ ,(\-]+(?:US|U\.S\.?)(?:\s+only)?\)?",
+                             location.strip(), re.IGNORECASE))
     )
+
+
+def _has_location_label(location: str, labels: frozenset[str]) -> bool:
+    normalized = " " + " ".join(re.sub(r"[^\w]+", " ", location.casefold()).split()) + " "
+    return any(f" {label} " in normalized for label in labels)

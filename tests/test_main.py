@@ -89,7 +89,7 @@ def _database_with_jobs(path: Path) -> tuple[JobRepository, int]:
         JobPosting(
             "Python Software Intern",
             "Example",
-            "Remote",
+            "Worldwide remote",
             "https://example.com/jobs/1",
             description="Build Python services with FastAPI and PostgreSQL.",
             requirements="Python, FastAPI, PostgreSQL, Git",
@@ -99,7 +99,7 @@ def _database_with_jobs(path: Path) -> tuple[JobRepository, int]:
         JobPosting(
             "Frontend Intern",
             "Other",
-            "Remote",
+            "Worldwide remote",
             "https://example.com/jobs/2",
             description="Build React applications with TypeScript.",
             requirements="React, TypeScript, CSS",
@@ -169,7 +169,7 @@ def test_match_command_rejects_unapproved_legacy_job(tmp_path: Path, capsys) -> 
         JobPosting(
             "Legacy Role",
             "Example",
-            "Remote",
+            "Worldwide remote",
             "https://example.com/jobs/legacy",
             is_relevant=False,
         )
@@ -234,6 +234,11 @@ def test_match_command_keeps_unverified_location_for_manual_review(tmp_path: Pat
         )
     )
 
+    repository.save(JobPosting(
+        "Software Intern", "Example", "Not specified",
+        "https://example.com/jobs/unknown", requirements="Python",
+    ))
+
     exit_code = main([
         "match", str(resume), "--database", str(database), "--json",
         "--skip-commute-check",
@@ -241,8 +246,8 @@ def test_match_command_keeps_unverified_location_for_manual_review(tmp_path: Pat
     payload = json.loads(capsys.readouterr().out)
 
     assert exit_code == 0
-    assert payload["matches"] == []
-    assert payload["manual_review"][0]["job"]["location"] == "Tel Aviv, Israel"
+    assert payload["matches"][0]["job"]["location"] == "Tel Aviv, Israel"
+    assert payload["manual_review"][0]["job"]["location"] == "Not specified"
 
 
 def test_match_command_does_not_recommend_applied_job(tmp_path: Path, capsys) -> None:
@@ -276,7 +281,7 @@ def test_list_and_status_commands_manage_job_lifecycle(tmp_path: Path, capsys) -
             "id": job_id,
             "title": "Python Software Intern",
             "company": "Example",
-            "location": "Remote",
+            "location": "Worldwide remote",
             "job_url": "https://example.com/jobs/1",
             "status": "applied",
         }

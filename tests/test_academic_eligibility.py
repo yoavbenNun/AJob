@@ -140,7 +140,6 @@ def test_cloud_reduced_profile_and_email_share_the_corrected_eligibility(monkeyp
     profile = SafeCandidateProfile('Israel', ('Python',), (), ('Python',),
                                    "Bachelor's Software Engineering, in progress, third-year, expected 2027")
     monkeypatch.setenv('CANDIDATE_PROFILE_JSON', profile.to_json())
-    monkeypatch.setattr('src.main.evaluate_commute', lambda *_: SimpleNamespace(eligible=True, reason='Synthetic'))
     jobs = [JobPosting('Software Intern', 'Synthetic', 'Israel', f'https://example.test/{i}',
                         description=text) for i, text in enumerate([
                             "Currently pursuing a master's degree. Python.",

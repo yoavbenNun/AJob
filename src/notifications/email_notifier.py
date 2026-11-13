@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from email.message import EmailMessage
 from typing import Callable, Mapping
 
+from src.location.commute import classify_job_location, resolve_job_destination
+
 
 @dataclass(frozen=True, slots=True)
 class EmailJobRecommendation:
@@ -96,7 +98,12 @@ def compose_scan_summary(
         recommendations = tuple(item for item in recommendations
                                 if item.eligible and item.eligibility_status != 'ineligible'
                                 and item.job_url not in dismissed_urls)
-    notified_count = len(new_jobs) if recommendations is None else sum(
+    else:
+        location_verified_jobs = tuple(
+            job for job in new_jobs
+            if classify_job_location(resolve_job_destination(job.location, job.description)).eligible
+        )
+    notified_count = len(location_verified_jobs) if recommendations is None else sum(
         item.eligibility_status == 'student_eligible' for item in recommendations)
     message["Subject"] = f"AJob: {notified_count} new matching job(s)"
     possible_count = sum(item.eligibility_status == 'potentially_eligible' for item in (recommendations or ()))
@@ -115,12 +122,12 @@ def compose_scan_summary(
             ]
             if entries:
                 groups.append(heading + '\n' + '\n'.join(entries))
-        details = '\n\n'.join(groups) or "No new jobs passed both resume and commute eligibility checks."
+        details = '\n\n'.join(groups) or "No new jobs passed both resume and location eligibility checks."
     else:
         details = "\n".join(
             f"- {job.title} at {job.company}\n  {job.location}\n  {job.job_url}"
-            for job in new_jobs
-        ) or "No new matching jobs were discovered."
+            for job in location_verified_jobs
+        ) or "No new jobs have a verified eligible location."
     eligibility_summary = (f"Possible matches requiring review: {possible_count}\n"
                            if recommendations is not None else
                            "Eligibility not assessed; discovered roles require review.\n")

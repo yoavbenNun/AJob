@@ -159,5 +159,24 @@ def test_ranked_email_does_not_fall_back_to_unfiltered_jobs() -> None:
     message = compose_scan_summary(settings, summary, ())
 
     assert message["Subject"] == "AJob: 0 new matching job(s)"
-    assert "No new jobs passed both resume and commute" in message.get_content()
+    assert "No new jobs passed both resume and location" in message.get_content()
     assert "Foreign Intern" not in message.get_content()
+
+
+
+def test_unranked_summary_excludes_foreign_and_unverified_locations() -> None:
+    settings = load_smtp_settings(ENV)
+    summary = Summary(new_jobs=tuple(
+        JobPosting(title, "Example", location, f"https://example.test/jobs/{index}")
+        for index, (title, location) in enumerate((
+            ("Domestic intern", "Eilat"),
+            ("Unverified intern", "Not specified"),
+            ("Foreign intern", "Warsaw, Poland"),
+        ))
+    ))
+    message = compose_scan_summary(settings, summary)
+    assert message["Subject"] == "AJob: 1 new matching job(s)"
+    body = message.get_content()
+    assert "Domestic intern" in body
+    assert "Unverified intern" not in body
+    assert "Foreign intern" not in body
