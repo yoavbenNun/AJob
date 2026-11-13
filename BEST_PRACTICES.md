@@ -1,5 +1,9 @@
 # Project Best Practices
 
+- Reclassify stored professional relevance separately from lifecycle status
+  and recommendation delivery. No outbox row is not evidence that a historic
+  posting was never mailed; recovery shortlists must not create deliveries.
+
 - Amazon's Israel search treats student and intern differently. Keep both
   bounded queries, deduplicate by requisition ID, and reuse a stored URL
   before persistence so rediscovery cannot reset status or enqueue mail.

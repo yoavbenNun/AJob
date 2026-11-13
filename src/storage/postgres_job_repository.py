@@ -194,6 +194,19 @@ class PostgresJobRepository:
             "SELECT * FROM job_postings ORDER BY discovered_at DESC, id DESC"
         )
 
+    def relevance_batch(self, after_id: int, limit: int) -> list[JobPosting]:
+        return self._query_jobs("SELECT * FROM job_postings WHERE id > %s ORDER BY id LIMIT %s",
+                                (after_id, limit))
+
+    def apply_relevance_if_unchanged(self, job: JobPosting, relevant: bool) -> bool:
+        with self._connect() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE job_postings SET is_relevant=%s WHERE id=%s AND is_relevant=%s "
+                "AND title=%s AND company=%s AND description=%s AND requirements=%s",
+                (relevant, job.id, job.is_relevant, job.title, job.company, job.description, job.requirements),
+            )
+            return cursor.rowcount == 1
+
     def list_by_status(self, status: str) -> list[JobPosting]:
         _validate_status(status)
         return self._query_jobs(

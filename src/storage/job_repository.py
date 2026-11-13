@@ -158,6 +158,22 @@ class JobRepository:
             ).fetchall()
         return [_job_from_row(row) for row in rows]
 
+    def relevance_batch(self, after_id: int, limit: int) -> list[JobPosting]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM job_postings WHERE id > ? ORDER BY id LIMIT ?", (after_id, limit)
+            ).fetchall()
+        return [_job_from_row(row) for row in rows]
+
+    def apply_relevance_if_unchanged(self, job: JobPosting, relevant: bool) -> bool:
+        with self._connect() as connection:
+            return connection.execute(
+                "UPDATE job_postings SET is_relevant=? WHERE id=? AND is_relevant=? "
+                "AND title=? AND company=? AND description=? AND requirements=?",
+                (int(relevant), job.id, int(job.is_relevant), job.title, job.company,
+                 job.description, job.requirements),
+            ).rowcount == 1
+
     def list_by_status(self, status: str) -> list[JobPosting]:
         """Return postings with one lifecycle status, newest first."""
         _validate_status(status)

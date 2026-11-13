@@ -57,6 +57,25 @@ def test_reclassify_missing_database_does_not_create_it(tmp_path: Path, capsys, 
     assert not database.exists()
 
 
+def test_reclassify_postgres_requires_approval_before_connecting(capsys, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "unused-test-value")
+    assert main(["reclassify", "--apply"]) == 1
+    assert "--approve-postgres-apply" in capsys.readouterr().err
+
+
+def test_relevance_apply_skips_stale_classification(tmp_path):
+    repo = JobRepository(tmp_path / "jobs.db")
+    repo.initialize()
+    job = JobPosting("Software Student", "Example", "Israel", "https://example.com/job",
+                     description="Develop Python services.", is_relevant=False)
+    job_id = repo.save(job)
+    snapshot = repo.get_by_id(job_id)
+    job.description = "Perform manual tests."
+    repo.save(job)
+    assert not repo.apply_relevance_if_unchanged(snapshot, True)
+    assert not repo.get_by_id(job_id).is_relevant
+
+
 def test_reclassify_preview_does_not_normalize_legacy_urls(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("DATABASE_URL", raising=False)
     database = tmp_path / "jobs.db"
@@ -64,6 +83,7 @@ def test_reclassify_preview_does_not_normalize_legacy_urls(tmp_path: Path, monke
     repository.initialize()
     job_id = repository.save(JobPosting(
         "Software Intern", "Example", "Israel", "https://example.com/jobs/legacy",
+        description="Build and maintain Python backend services.",
         is_relevant=False, status="applied",
     ))
     legacy_url = "https://example.com/jobs/legacy?utm_source=old"
@@ -80,6 +100,58 @@ def test_reclassify_preview_does_not_normalize_legacy_urls(tmp_path: Path, monke
     assert updated.is_relevant is True
     assert updated.job_url == legacy_url
     assert updated.status == "applied"
+
+
+def test_reclassify_apple_recovery_is_bounded_and_never_replays(tmp_path, capsys, monkeypatch):
+    from src.resume.safe_profile import SafeCandidateProfile
+    from src.storage.scan_store import ScanStore
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    profile = SafeCandidateProfile("Rishon LeZion", ("Python",), (), (), "Bachelor's (in progress)")
+    monkeypatch.setenv("CANDIDATE_PROFILE_JSON", profile.to_json())
+    database = tmp_path / "jobs.db"
+    repo = JobRepository(database)
+    repo.initialize()
+    store = ScanStore(repo)
+    store.migrate()
+    fixtures = [
+        ("Software Engineering Student", "Haifa, Israel", "new", False),
+        ("Software Engineering Student", "London, UK", "new", False),
+        ("Software Engineering Student", "Israel", "ignored", False),
+        ("Software Engineering Student", "Israel", "applied", False),
+        ("Senior Software Engineer", "Israel", "new", False),
+        ("Software Engineering Intern", "Israel", "new", True),
+    ]
+    try:
+        for n, (title, location, status, relevant) in enumerate(fixtures, 21):
+            job = JobPosting(title, "Apple", location, f"https://jobs.apple.com/en-il/details/{n}/student",
+                             description="Develop software tools and write automated tests.\n"
+                                         "Minimum Qualifications\nCurrently pursuing a degree in Software Engineering.\n"
+                                         "Must have completed at least 3 semesters.",
+                             is_relevant=relevant, status=status)
+            if n == 21:
+                store.execute("INSERT INTO sqlite_sequence(name,seq) VALUES ('job_postings',20)")
+            assert store.save_discovery(job, "historical")
+        before = [tuple(row) for row in store.execute("SELECT * FROM notification_outbox ORDER BY job_id")]
+        args = ["reclassify", "--database", str(database)]
+        assert main(args + ["--recovery-preview"]) == 0
+        output = capsys.readouterr().out
+        shortlist = output.split("Manual recovery shortlist", 1)[1]
+        assert "details/21/student" in shortlist and "potentially_eligible" in shortlist
+        assert all(f"details/{i}/student" not in shortlist for i in range(22, 27))
+        assert "1 -> 5 relevant" in output and not repo.get_by_id(21).is_relevant
+        assert main(args + ["--limit", "1", "--apply"]) == 0
+        assert "Next batch: --after-id 21" in capsys.readouterr().out
+        assert repo.get_by_id(21).is_relevant and not repo.get_by_id(22).is_relevant
+        assert main(args + ["--after-id", "21", "--apply"]) == 0
+        assert [repo.get_by_id(i).status for i in range(21, 27)] == [row[2] for row in fixtures]
+        assert sum(job.is_relevant for job in repo.list_all()) == 5
+        assert main(args + ["--apply"]) == 0
+        assert "0 relevance changes" in capsys.readouterr().out
+        assert not store.save_discovery(repo.get_by_id(21), "next")
+        assert [tuple(row) for row in store.execute("SELECT * FROM notification_outbox ORDER BY job_id")] == before
+    finally:
+        store.close()
 
 
 def _database_with_jobs(path: Path) -> tuple[JobRepository, int]:

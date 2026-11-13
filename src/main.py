@@ -28,6 +28,8 @@ from src.resume.resume_parser import parse_resume
 from src.resume.safe_profile import build_safe_profile, load_safe_profile_json
 from src.resume.tailored_resume import build_tailoring_proposal, create_resume_artifacts
 from src.storage.repository_factory import create_job_repository
+from src.job_content import description_problem
+from src.urls import canonical_url
 
 try:
     from psycopg import Error as PostgresError
@@ -115,12 +117,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     list_parser.add_argument("--json", action="store_true", help="Print stable JSON output")
     reclassify_parser = subparsers.add_parser(
-        "reclassify", help="Preview current relevance rules against all stored jobs"
+        "reclassify", help="Preview current professional relevance rules for a bounded batch"
     )
     reclassify_parser.add_argument("--database", type=Path, default=Path("data/jobs.db"))
-    reclassify_parser.add_argument(
+    reclassify_mode = reclassify_parser.add_mutually_exclusive_group()
+    reclassify_mode.add_argument(
         "--apply", action="store_true", help="Save relevance changes; preserve details and lifecycle statuses"
     )
+    reclassify_mode.add_argument("--recovery-preview", action="store_true",
+                                 help="Preview newly relevant roles for manual review; never enqueue mail")
+    reclassify_parser.add_argument("--after-id", type=int, default=0)
+    reclassify_parser.add_argument("--limit", type=int, default=250)
+    reclassify_parser.add_argument("--approve-postgres-apply", action="store_true",
+                                 help="Explicitly approve relevance-only changes to DATABASE_URL")
     status_parser = subparsers.add_parser("status", help="Set a stored job's lifecycle status")
     status_parser.add_argument("job_id", type=int, help="Stored job ID")
     status_parser.add_argument("status", choices=JOB_STATUSES, help="New lifecycle status")
@@ -382,23 +391,59 @@ def _run_list(args: argparse.Namespace) -> int:
 
 def _run_reclassify(args: argparse.Namespace) -> int:
     try:
+        if args.after_id < 0 or not 1 <= args.limit <= 1000:
+            raise ValueError("Use --after-id >= 0 and --limit between 1 and 1000.")
+        if args.apply and os.getenv("DATABASE_URL") and not args.approve_postgres_apply:
+            raise ValueError("PostgreSQL apply requires --approve-postgres-apply after review.")
+        profile = None
+        if args.recovery_preview:
+            encoded = os.getenv("CANDIDATE_PROFILE_JSON", "").strip()
+            if not encoded:
+                raise ValueError("Recovery preview requires CANDIDATE_PROFILE_JSON.")
+            profile = load_safe_profile_json(encoded).to_resume_profile()
         if not os.getenv("DATABASE_URL") and not args.database.is_file():
             raise FileNotFoundError(f"Job database not found: {args.database}")
         repository = create_job_repository(args.database)
-        jobs = repository.list_all()
+        jobs = repository.relevance_batch(args.after_id, args.limit + 1)
+        has_more = len(jobs) > args.limit
+        jobs = jobs[:args.limit]
         changed = 0
-        relevant = 0
+        stale = 0
+        unverifiable = 0
+        before = sum(job.is_relevant for job in jobs)
+        relevant = before
+        review = {}
         for job in jobs:
+            if description_problem(job.description, job.requirements):
+                unverifiable += 1
+                continue
             decision = classify_job(job)
-            relevant += int(decision.relevant)
             if decision.relevant == job.is_relevant:
                 continue
+            if args.apply and not repository.apply_relevance_if_unchanged(job, decision.relevant):
+                stale += 1
+                continue
             changed += 1
+            relevant += 1 if decision.relevant else -1
             print(f"{job.id}. {job.title}: {job.is_relevant} -> {decision.relevant} ({decision.reason})")
-            if args.apply:
-                repository.update_relevance(job.id, decision.relevant)
+            if profile and decision.relevant and job.status in {"new", "reviewed"}:
+                location = classify_job_location(resolve_job_destination(job.location, job.description))
+                match = match_resume_to_job(profile, job)
+                url = canonical_url(job.job_url)
+                if url and location.eligible and match.eligible:
+                    review.setdefault(url, (job.id, job.title, match.eligibility_status))
         mode = "Applied" if args.apply else "Dry run"
-        print(f"{mode}: {len(jobs)} jobs checked, {relevant} relevant, {changed} relevance changes.")
+        print(f"{mode}: {len(jobs)} jobs checked, {before} -> {relevant} relevant, {changed} relevance changes.")
+        if profile:
+            print("Manual recovery shortlist (notification history not inferred; nothing queued):")
+            for url, (job_id, title, eligibility) in review.items():
+                print(f"{job_id}. {title} [{eligibility}] {url}")
+        if stale:
+            print(f"{stale} concurrently changed row(s) skipped; rerun this batch.")
+        if unverifiable:
+            print(f"{unverifiable} row(s) left unchanged because captured details were unavailable.")
+        if has_more:
+            print(f"Next batch: --after-id {jobs[-1].id}")
         if not args.apply:
             print("Use --apply to save relevance changes. Job details and lifecycle statuses are preserved.")
         return 0
