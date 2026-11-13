@@ -1,5 +1,9 @@
 # Project Best Practices
 
+- Apple Israel listing cards have separate title and location fields plus
+  duplicate detail links. Read the title anchor inside its card and retain
+  the office suffix in the role ID when combining bounded search results.
+
 - Historical relevance recovery must compare the reviewed source snapshot and
   lifecycle status before writing. Relevance is not personal eligibility, and
   existing pending notification records remain independent of recovery.
