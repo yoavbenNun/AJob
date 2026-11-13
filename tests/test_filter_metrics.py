@@ -42,6 +42,38 @@ def test_worker_reports_each_filter_stage_without_reclassifying_missing_content(
     assert events[-1] == ("error", "JobDetailUnavailable")
 
 
+def test_google_ii_unavailable_detail_does_not_persist_or_reclassify(monkeypatch):
+    job = JobPosting('Software Engineer II', 'Google', 'Haifa, Israel',
+                     'https://www.google.com/about/careers/applications/jobs/results/123-role')
+    monkeypatch.setattr(scan.os, 'setsid', lambda: None, raising=False)
+    monkeypatch.setattr(scan, 'CareersScraper', lambda *_: SimpleNamespace(
+        scan_company=lambda _: SimpleNamespace(error=None, jobs=[job])))
+    monkeypatch.setattr(scan, '_enrich_job', lambda *_: 'JobDetailUnavailable')
+    events = []
+    scan.source_worker(Company('Google', 'https://www.google.com/about/careers/'), 1000, 1, True,
+                       SimpleNamespace(send=events.append, close=lambda: None))
+    assert not any(event[0] == 'job' for event in events)
+    assert events[-1] == ('error', 'JobDetailUnavailable')
+
+
+def test_google_ii_enrichment_requires_and_accepts_early_qualifications(monkeypatch):
+    job = JobPosting('Software Engineer II', 'Google', 'Haifa, Israel',
+                     'https://www.google.com/about/careers/applications/jobs/results/123-role')
+    monkeypatch.setattr(scan.os, 'setsid', lambda: None, raising=False)
+    monkeypatch.setattr(scan, 'CareersScraper', lambda *_: SimpleNamespace(
+        scan_company=lambda _: SimpleNamespace(error=None, jobs=[job])))
+    def enrich(browser, target, timeout):
+        target.description = ('place\nHaifa, Israel\nbar_chart\nEarly\nApply\n'
+                              'Minimum qualifications:\n1 year of experience with software development.\n'
+                              'Preferred qualifications:\nMaster degree.')
+    monkeypatch.setattr(scan, '_enrich_job', enrich)
+    events = []
+    scan.source_worker(Company('Google', 'https://www.google.com/about/careers/'), 1000, 1, True,
+                       SimpleNamespace(send=events.append, close=lambda: None))
+    assert [event[1] for event in events if event[0] == 'job'] == [True]
+    assert events[-1] == ('done',)
+
+
 def test_recommendation_metrics_separate_location_and_prerequisites_without_personal_data(monkeypatch, capsys):
     import json
     from unittest.mock import Mock
