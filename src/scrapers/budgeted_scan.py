@@ -11,6 +11,7 @@ import time
 from urllib.parse import urlsplit
 
 from src.filtering.job_filter import classify_job, prefilter_job
+from src.scrapers.amazon import amazon_job_id, amazon_url_index, supported as supports_amazon
 from src.scrapers.careers_scraper import CareersScraper, _enrich_job
 from src.scrapers.greenhouse import is_greenhouse_board
 from src.scrapers.failure_diagnostics import source_failure
@@ -84,10 +85,10 @@ def source_worker(company, timeout_ms, max_pages, headless, pipe):
             pipe.send(('collection', result.collection_metrics))
         # Fetch time includes HTTP, browser rendering and feed decoding. CPU
         # filtering is measured separately; no claim of pure wire-level timing.
-        if result.error:
+        if result.error and not (supports_amazon(company) and result.jobs):
             pipe.send(("error", "SourceFetchError", getattr(result, 'failure_details', {})))
             return
-        if getattr(result, 'closure_snapshot', None):
+        if not result.error and getattr(result, 'closure_snapshot', None):
             pipe.send(('closure_snapshot', result.closure_snapshot))
         pipe.send(("found", len(result.jobs)))
         detail_failures = 0
@@ -133,7 +134,9 @@ def source_worker(company, timeout_ms, max_pages, headless, pipe):
             urlsplit(company.careers_url).hostname == 'careers.meliopayments.com'
             and getattr(result, 'collection_metrics', {}).get('invalid_listing', 0) > 0
         )
-        if melio_incomplete:
+        if result.error:
+            pipe.send(("error", result.error, result.failure_details))
+        elif melio_incomplete:
             pipe.send(('error', 'MelioIncompleteFeed'))
         else:
             pipe.send(("error", "JobDetailUnavailable") if detail_failures else ("done",))
@@ -175,6 +178,7 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
     started = time.monotonic()
     deadline = started + scan_seconds
     known = store.known_urls()  # one snapshot avoids thousands of no-op DB updates
+    amazon_urls = amazon_url_index(known) if any(supports_amazon(company) for company in enabled) else {}
     ctx = multiprocessing.get_context("spawn")
     completed = 0
     try:
@@ -233,6 +237,9 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
                         metrics['filtering']['invalid_description_retained'] += 1
                     elif event[0] == "job":
                         _, accepted, job = event
+                        identity = amazon_job_id(job.job_url) if supports_amazon(company) else None
+                        if identity and job.job_url not in known:
+                            job.job_url = amazon_urls.get(identity, job.job_url)
                         alias = legacy_workday_url(job.source, job.job_url)
                         if job.job_url not in known and alias in known:
                             job.job_url = alias
@@ -247,6 +254,8 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
                             else:
                                 metrics['existing_jobs_seen'] += 1
                             known.add(job.job_url)
+                            if identity:
+                                amazon_urls.setdefault(identity, job.job_url)
                             summary.jobs_saved += 1
                         elif job.job_url in known:
                             store.reject_known(job.job_url)
