@@ -37,7 +37,8 @@ companies:
     allowed_job_hosts:
       - www.amazon.jobs
   - name: Apple
-    # Official Israel-wide search. Early-career relevance remains enforced by
+    # Official Israel-wide search plus a bounded student query in the Apple adapter.
+    # Early-career relevance remains enforced by
     # the shared filters after discovery.
     careers_url: https://jobs.apple.com/en-il/search?location=israel-ISR
     enabled: true

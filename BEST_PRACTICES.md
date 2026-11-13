@@ -1,5 +1,9 @@
 # Project Best Practices
 
+- Apple Israel listing cards have separate title and location fields plus
+  duplicate detail links. Read the title anchor inside its card and retain
+  the office suffix in the role ID when combining bounded search results.
+
 - Amazon's Israel search treats student and intern differently. Keep both
   bounded queries, deduplicate by requisition ID, and reuse a stored URL
   before persistence so rediscovery cannot reset status or enqueue mail.
