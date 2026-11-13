@@ -7,7 +7,7 @@ import os
 import sqlite3
 import sys
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, parse_qsl
 from collections.abc import Sequence
 from dataclasses import asdict
 
@@ -462,6 +462,19 @@ def _recovery_target(database_url: str, database_path: Path) -> str:
     if not database_url:
         return f"sqlite:{database_path.resolve()}"
     parsed = urlsplit(database_url)
+    # A libpq URI's query parameters can override its authority and database.
+    # Reject all options except transport and connection settings that cannot
+    # redirect the connection to a different database, user, host or schema.
+    allowed = {'sslmode', 'sslrootcert', 'sslcert', 'sslkey', 'connect_timeout',
+               'application_name', 'channel_binding', 'gssencmode'}
+    if any(key not in allowed for key, _ in parse_qsl(parsed.query, keep_blank_values=True)):
+        raise ValueError('PostgreSQL URL contains unsupported connection options.')
+    if (parsed.scheme not in {'postgres', 'postgresql'} or not parsed.username
+            or not parsed.hostname or not parsed.path.strip('/')
+            or ',' in parsed.hostname or any(os.getenv(key) for key in
+                ('PGSERVICE', 'PGSERVICEFILE', 'PGHOSTADDR', 'PGOPTIONS'))
+            or (parsed.port is None and os.getenv('PGPORT'))):
+        raise ValueError('PostgreSQL connection target is ambiguous.')
     return f"postgres:{parsed.username}@{parsed.hostname}:{parsed.port or 5432}{parsed.path}"
 
 

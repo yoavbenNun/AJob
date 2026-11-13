@@ -118,6 +118,42 @@ def test_digest_binds_database_target_and_current_data(repo):
     assert preview(repo, [job.id], target=first)[1] != preview(repo, [job.id], target=second)[1]
 
 
+@pytest.mark.parametrize('url', ['https://[invalid', 'https:///jobs/no-host'])
+def test_invalid_job_url_is_reported_and_other_jobs_are_reviewed(repo, url):
+    bad, good = posting(url='bad'), posting(url='good')
+    repo.save(bad); repo.save(good)
+    with repo._connect() as connection:
+        connection.execute('UPDATE job_postings SET job_url = ? WHERE id = ?', (url, bad.id))
+    entries, _, snapshots = preview(repo, [bad.id, good.id], target='test')
+    assert entries[0]['url_valid'] is False and entries[0]['candidate'] is False
+    assert entries[1]['url_valid'] is True and entries[1]['candidate'] is True
+    assert apply(repo, entries, snapshots) == [(good.id, True)]
+    assert repo.get_by_id(bad.id).job_url == url
+    assert not repo.get_by_id(bad.id).is_relevant
+
+
+@pytest.mark.parametrize('database', ['reviewed', 'unreviewed'])
+def test_rejects_connection_string_database_override(repo, database):
+    with pytest.raises(ValueError, match='unsupported connection options'):
+        _recovery_target(f'postgresql://qa@localhost/postgres?dbname={database}', repo.database_path)
+
+
+def test_pooler_tls_options_remain_compatible_and_credentials_hidden(repo, monkeypatch):
+    for key in ('PGSERVICE', 'PGSERVICEFILE', 'PGHOSTADDR', 'PGOPTIONS', 'PGPORT'):
+        monkeypatch.delenv(key, raising=False)
+    one = _recovery_target('postgresql://scanner.project@pooler.example:5432/reviewed?sslmode=require', repo.database_path)
+    two = _recovery_target('postgresql://scanner.project@pooler.example:5432/unreviewed?sslmode=require', repo.database_path)
+    assert one != two
+    assert 'sslmode' not in one
+    assert preview(repo, [repo.save(posting())], target=one)[1] != preview(repo, [1], target=two)[1]
+
+
+def test_ambiguous_libpq_environment_fails_closed(repo, monkeypatch):
+    monkeypatch.setenv('PGPORT', '9999')
+    with pytest.raises(ValueError, match='ambiguous'):
+        _recovery_target('postgresql://qa@localhost/postgres', repo.database_path)
+
+
 def test_partial_failure_reports_committed_ids(repo, monkeypatch):
     first, second = posting(url='1'), posting(url='2')
     repo.save(first); repo.save(second)
