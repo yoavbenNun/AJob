@@ -30,6 +30,11 @@ This file records durable lessons discovered while building AJob. Read it before
 making changes and update it when a new failure mode or
 reusable lesson appears.
 
+- Captured Lever headers can join a location directly to a department name;
+  recognize only a structurally verified posting header, never a city mentioned
+  in general prose. Keep missing graduation or completed-semester evidence
+  reviewable rather than assuming eligibility.
+
 - Test mobile note editing against visualViewport changes as well as layout
   resizes; virtual keyboards and pinch zoom can otherwise hide the editor.
   Use synthetic data and distinguish WebKit engine tests from physical Safari.
