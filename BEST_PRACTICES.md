@@ -283,8 +283,9 @@ reusable lesson appears.
   (Applied, New, Reviewed, others), then insertion ID descending. `discovered_at`
   is refreshed by upserts and must not determine discovery order. Isolate
   match failures per posting so one malformed job cannot disable the filter.
-- Keep commute eligibility separate from professional fit. Never recommend a job
-  when its location or route cannot be verified; mark it for manual review.
+- Classify job geography independently of routing. A confirmed Israeli location
+  stays eligible at any driving distance and during routing outages. Keep unknown
+  locations reviewable, and do not replay historical notifications after a policy change.
 - Keep foreign discoveries in storage for auditability, but default the dashboard
   to explicit Israel and safe-remote locations. Provide an opt-in all-locations
   view instead of deleting historical rows.

@@ -13,6 +13,7 @@ from src.config_loader import load_companies
 from src.filtering.job_filter import classify_job
 from src.location.commute import (
     OpenStreetMapDrivingProvider,
+    classify_job_location,
     evaluate_commute,
     resolve_job_destination,
 )
@@ -100,7 +101,7 @@ def build_parser() -> argparse.ArgumentParser:
     match_parser.add_argument(
         "--skip-commute-check",
         action="store_true",
-        help="Disable driving eligibility (results require manual location review)",
+        help="Skip optional driving estimates",
     )
     match_parser.add_argument(
         "--limit", type=int, default=10, help="Maximum matches shown in all-job mode"
@@ -493,7 +494,6 @@ def _cloud_recommendations(summary) -> tuple[EmailJobRecommendation, ...] | None
         print(json.dumps(dict(event="recommendation_metrics", status="profile_unavailable")), flush=True)
         return None
     profile = load_safe_profile_json(encoded).to_resume_profile()
-    provider = OpenStreetMapDrivingProvider()
     recommendations = []
     metrics = dict(event="recommendation_metrics", status="complete", considered=0,
                    candidate_ineligible=0, location_blocked=0, location_unknown=0,
@@ -502,17 +502,17 @@ def _cloud_recommendations(summary) -> tuple[EmailJobRecommendation, ...] | None
     for job in summary.new_jobs:
         result = match_resume_to_job(profile, job)
         destination = resolve_job_destination(job.location, job.description)
-        commute = evaluate_commute(profile.location, destination, provider)
+        location = classify_job_location(destination)
         reasons = list(result.strengths[:1])
-        if commute.reason:
-            reasons.append(commute.reason)
-        overall_eligible = result.eligible and commute.eligible
+        if location.reason:
+            reasons.append(location.reason)
+        overall_eligible = result.eligible and location.eligible
         metrics["considered"] += 1
         states = metrics["eligibility_by_status"]
         states[result.eligibility_status] = states.get(result.eligibility_status, 0) + 1
         metrics["candidate_ineligible"] += int(not result.eligible)
-        metrics["location_blocked"] += int(not commute.eligible)
-        metrics["location_unknown"] += int(not commute.eligible and getattr(commute, "status", "unknown") == "unknown")
+        metrics["location_blocked"] += int(not location.eligible)
+        metrics["location_unknown"] += int(not location.eligible and location.status == "unknown")
         if not overall_eligible:
             continue
         recommendations.append(

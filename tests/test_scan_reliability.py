@@ -28,7 +28,7 @@ def settings():
 
 
 def job():
-    return JobPosting('Intern', 'Example', 'Remote', 'https://example.test/jobs/1')
+    return JobPosting('Intern', 'Example', 'Worldwide remote', 'https://example.test/jobs/1')
 
 
 def test_atomic_discovery_and_status_preservation(store):

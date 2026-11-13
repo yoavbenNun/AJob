@@ -93,7 +93,7 @@ def store(repository):
 
 
 def job(number=1):
-    return JobPosting('Intern', 'Synthetic', 'Remote', f'https://example.test/jobs/{number}')
+    return JobPosting('Intern', 'Synthetic', 'Worldwide remote', f'https://example.test/jobs/{number}')
 
 
 SETTINGS = SmtpSettings('localhost', 25, '', '', 'from@example.test', 'to@example.test', False)

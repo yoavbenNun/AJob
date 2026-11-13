@@ -123,8 +123,6 @@ def test_cloud_recommendations_keep_uncertain_roles_but_exclude_palo(monkeypatch
 
     from src.resume.safe_profile import build_safe_profile
     monkeypatch.setenv('CANDIDATE_PROFILE_JSON', build_safe_profile(STUDENT).to_json())
-    monkeypatch.setattr(main, 'OpenStreetMapDrivingProvider', lambda: None)
-    monkeypatch.setattr(main, 'evaluate_commute', lambda *_: SimpleNamespace(eligible=True, reason='Synthetic commute.'))
     summary = SimpleNamespace(new_jobs=(posting(PALO_TITLE, PALO_REQUIREMENTS),
                                         posting('Junior Software Engineer', 'Python.'),
                                         posting('Student Software Engineer', 'Python.')))

@@ -1,3 +1,5 @@
+import pytest
+
 from src.location.commute import (
     evaluate_commute,
     is_israel_or_remote_location,
@@ -22,17 +24,31 @@ class DestinationProvider:
         return {"Tel Aviv, Israel": 35, "Haifa, Israel": 95}[destination]
 
 
-def test_commute_boundaries() -> None:
-    assert evaluate_commute("A, Israel", "B, Israel", FakeProvider(90)).status == "suitable"
-    assert evaluate_commute("A, Israel", "B, Israel", FakeProvider(91)).status == "borderline"
-    assert evaluate_commute("A, Israel", "B, Israel", FakeProvider(120)).eligible
-    assert not evaluate_commute("A, Israel", "B, Israel", FakeProvider(121)).eligible
+@pytest.mark.parametrize("destination", [
+    "Tel Aviv", "Haifa", "Jerusalem", "Rehovot", "Eilat", "Israel, Petah-Tikva",
+    "Tel Aviv, Israel / London, UK",
+])
+def test_israeli_locations_remain_eligible_over_two_hours(destination) -> None:
+    result = evaluate_commute("A, Israel", destination, FakeProvider(181))
+    assert result.status == "israel"
+    assert result.eligible and result.minutes == 181
 
 
-def test_remote_is_eligible_without_provider() -> None:
+@pytest.mark.parametrize("error", [TimeoutError, OSError, ValueError])
+def test_israeli_locations_remain_eligible_when_routing_fails(error) -> None:
+    class FailedProvider(FakeProvider):
+        def driving_minutes(self, origin, destination):
+            raise error("synthetic routing failure")
+
+    result = evaluate_commute("A, Israel", "Haifa", FailedProvider(None))
+    assert result.status == "israel"
+    assert result.eligible and result.minutes is None
+
+
+def test_unqualified_remote_location_requires_review() -> None:
     result = evaluate_commute("Rishon Lezion, Israel", "Remote", None)
-    assert result.status == "remote"
-    assert result.eligible
+    assert result.status == "unknown"
+    assert not result.eligible
 
 
 def test_country_limited_remote_role_is_not_treated_as_global_remote() -> None:
@@ -52,7 +68,7 @@ def test_multiple_israel_locations_use_shortest_drive() -> None:
         "Rishon Lezion, Israel", "Tel Aviv, Israel; Haifa, Israel", DestinationProvider()
     )
     assert result.minutes == 35
-    assert result.status == "suitable"
+    assert result.status == "israel"
 
 
 def test_foreign_location_is_rejected_without_routing() -> None:
@@ -71,23 +87,26 @@ def test_china_and_beijing_locations_are_rejected_without_routing() -> None:
 def test_common_foreign_country_labels_are_rejected_without_routing() -> None:
     for destination in (
         "Berlin, Germany", "Germany - Hybrid", "Germany.",
-        "Toronto, Canada", "Remote (United Kingdom)",
+        "Toronto, Canada", "Remote (United Kingdom)", "US Remote", "Remote (US only)",
     ):
         result = evaluate_commute("Rishon Lezion, Israel", destination, None)
         assert result.status == "outside_israel"
         assert not result.eligible
 
 
-def test_israeli_and_unknown_city_only_locations_are_not_rejected() -> None:
-    for destination in ("Tel Aviv, Israel", "Rishon Lezion", "Exampleville"):
-        result = evaluate_commute("Rishon Lezion, Israel", destination, None)
-        assert result.status == "unknown"
+@pytest.mark.parametrize("destination", ["Tel Aviv, Israel", "Rishon Lezion"])
+def test_israel_does_not_require_origin_or_provider(destination) -> None:
+    assert evaluate_commute("", destination, None).eligible
 
 
-def test_unknown_location_requires_manual_review() -> None:
-    result = evaluate_commute("Rishon Lezion, Israel", "Not specified", FakeProvider(20))
+@pytest.mark.parametrize("destination", [
+    "Not specified", "Exampleville", "Warsaw, Poland; Exampleville", "Remote - Europe",
+    "Tel Aviv, Israel and London, UK",
+])
+def test_unknown_location_requires_manual_review_even_with_a_route(destination) -> None:
+    result = evaluate_commute("Rishon Lezion, Israel", destination, FakeProvider(20))
     assert result.status == "unknown"
-    assert not result.eligible
+    assert not result.eligible and result.minutes is None
 
 
 def test_dashboard_location_scope_accepts_only_israel_and_safe_remote() -> None:

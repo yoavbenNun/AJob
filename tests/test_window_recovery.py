@@ -23,7 +23,7 @@ COMPANIES = [Company('Synthetic', 'https://example.test')]
 
 
 def posting(number=1):
-    return JobPosting('Intern', 'Synthetic', 'Remote', f'https://example.test/jobs/{number}')
+    return JobPosting('Intern', 'Synthetic', 'Worldwide remote', f'https://example.test/jobs/{number}')
 
 
 @pytest.fixture

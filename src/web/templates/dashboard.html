@@ -90,7 +90,7 @@
         <div class="status-filter"><span id="status-filter-label">Status</span><details class="status-picker"><summary aria-labelledby="status-filter-label status-selection"><span id="status-selection">{% if selected_statuses %}{% for item in selected_statuses %}{{ item|status_label }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}All active statuses{% endif %}</span></summary><fieldset><legend class="sr-only">Select job statuses</legend>{% for item in statuses %}<label><input type="checkbox" name="status" value="{{ item }}" {% if item in selected_statuses %}checked{% endif %}>{{ item|status_label }}</label>{% endfor %}<p>Choose any, then Apply filters.</p></fieldset></details></div>
         <label>Company<select name="company"><option value="">All companies</option>{% for item in companies %}<option value="{{ item }}" {% if item == selected_company %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
         <label>Jobs<select name="relevance"><option value="relevant" {% if relevance == 'relevant' %}selected{% endif %}>Student + possible matches, 30%+</option><option value="possible" {% if relevance == 'possible' %}selected{% endif %}>Possible Matches — review eligibility</option><option value="all" {% if relevance == 'all' %}selected{% endif %}>All discoveries</option></select></label>
-        <label>Location<select name="location"><option value="israel" {% if location_scope == 'israel' %}selected{% endif %}>Israel + unrestricted remote</option><option value="all" {% if location_scope == 'all' %}selected{% endif %}>All locations</option></select></label>
+        <label>Location<select name="location"><option value="israel" {% if location_scope == 'israel' %}selected{% endif %}>Israel + unrestricted remote</option><option value="review" {% if location_scope == 'review' %}selected{% endif %}>Unknown location</option><option value="all" {% if location_scope == 'all' %}selected{% endif %}>All locations</option></select></label>
         <button type="submit">Apply filters</button>
         </div></details>
       </form>
@@ -99,7 +99,7 @@
         {% for item in selected_statuses %}<span>{{ item|status_label }}</span>{% endfor %}
         {% if selected_company %}<span>{{ selected_company }}</span>{% endif %}
         <span>{% if relevance == 'all' %}All discoveries{% elif relevance == 'possible' %}Possible matches{% else %}Student + possible · 30%+{% endif %}</span>
-        <span>{% if location_scope == 'all' %}All locations{% else %}Israel + remote{% endif %}</span>
+        <span>{% if location_scope == 'all' %}All locations{% elif location_scope == 'review' %}Unknown location — review{% else %}Israel + remote{% endif %}</span>
       </div><a class="filter-reset" href="/">Reset filters</a></div>
       {% if jobs %}
       <div class="job-grid" aria-label="Job results">

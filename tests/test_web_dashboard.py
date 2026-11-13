@@ -630,6 +630,43 @@ def test_dashboard_hides_foreign_jobs_by_default_and_can_show_them(tmp_path) -> 
     assert "Poland Software Intern" in all_locations.text
 
 
+def test_dashboard_exposes_unknown_location_jobs_for_review(tmp_path) -> None:
+    database = tmp_path / "jobs.db"
+    repository = JobRepository(database)
+    repository.initialize()
+    unknown_id = repository.save(JobPosting(
+        "Unlocated Software Intern", "Unknown Company", "Not specified",
+        "https://example.com/jobs/unknown",
+    ))
+    recovered_id = repository.save(JobPosting(
+        "Located Software Intern", "Israel Company", "Not specified",
+        "https://example.com/jobs/recovered",
+        description="place\nJerusalem, Israel\napply",
+    ))
+    foreign_id = repository.save(JobPosting(
+        "Foreign Software Intern", "Foreign Company", "Not specified",
+        "https://example.com/jobs/foreign",
+        description="place\nWarsaw, Poland\napply",
+    ))
+    client = TestClient(create_app(
+        database, resume_directory=tmp_path,
+        outreach_database_path=tmp_path / "outreach.db",
+        application_database_path=tmp_path / "applications.db",
+    ), base_url="http://127.0.0.1")
+
+    default_page = client.get("/")
+    review_page = client.get("/", params={"location": "review"})
+    all_locations = client.get("/", params={"location": "all"})
+
+    assert [job.id for job in default_page.context["jobs"]] == [recovered_id]
+    assert [job.id for job in review_page.context["jobs"]] == [unknown_id]
+    assert review_page.context["companies"] == ["Unknown Company"]
+    assert "Unknown location" in review_page.text
+    assert {job.id for job in all_locations.context["jobs"]} == {
+        unknown_id, recovered_id, foreign_id,
+    }
+
+
 def test_job_detail_calculates_a_local_match_without_exposing_resume_text(tmp_path) -> None:
     client, job_id = _client_with_jobs(tmp_path)
     resume = tmp_path / "resume.txt"
