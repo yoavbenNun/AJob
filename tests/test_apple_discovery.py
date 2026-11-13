@@ -41,9 +41,6 @@ def test_apple_search_union_pagination_and_partial(failure):
             if focused and second and failure == "503":
                 route.fulfill(status=503, body="unavailable")
                 return
-            if focused and second and failure == "scope":
-                route.fulfill(status=302, headers={"Location": company.careers_url + "&page=2"})
-                return
             if focused:
                 html = card(IDS[2], CITIES[2]) if second else (
                     card(IDS[0], CITIES[0]) + card(IDS[1], CITIES[1])
@@ -53,6 +50,8 @@ def test_apple_search_union_pagination_and_partial(failure):
             else:
                 html = card("200000002-1451" if second else "200000001-1451", "Haifa")
             if not second:
+                if focused and failure == "scope":
+                    query.pop("search")
                 query["page"] = ["2"]
                 from urllib.parse import urlencode
                 html += '<a aria-label="Next page" href="?' + urlencode(query, doseq=True) + '">Next</a>'
@@ -64,8 +63,7 @@ def test_apple_search_union_pagination_and_partial(failure):
         requests.clear()
         after = scraper.scan_company(company)
         browser.close()
-    assert requests[:4] == [(False, False), (False, True), (True, False), (True, True)]
-    assert len(requests) == (5 if failure == "scope" else 4)
+    assert requests == [(False, False), (False, True), (True, False), (failure != "scope", True)]
     assert len(before.jobs) == 2
     assert len(after.jobs) == (4 if failure else 5)
     assert after.error == ("AppleDiscoveryIncomplete" if failure else None)
