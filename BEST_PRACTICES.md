@@ -1,5 +1,9 @@
 # Project Best Practices
 
+- Amazon's Israel search treats student and intern differently. Keep both
+  bounded queries, deduplicate by requisition ID, and reuse a stored URL
+  before persistence so rediscovery cannot reset status or enqueue mail.
+
 - Workday HTML cleanup can remove list markers and blank lines; test role previews
   against the stored plain text, and keep adjacent restrictions with their duties.
 - Validate and preserve the entire responsibility list; blank lines do not end

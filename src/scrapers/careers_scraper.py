@@ -16,6 +16,7 @@ from src.filtering.job_filter import classify_job, prefilter_job
 from src.models import Company, JobPosting
 from src.job_content import description_problem, clean_job_text, QUALIFICATION_HEADING
 from src.urls import canonical_url
+from src.scrapers.amazon import amazon_job_id, amazon_url_index, discover as discover_amazon, supported as supports_amazon
 from src.scrapers.greenhouse import fetch_greenhouse_jobs, is_greenhouse_board
 from src.scrapers.official_sources import fetch_jobs as fetch_official_jobs, supported as supports_official_feed
 from src.scrapers.paused_sources import scan_public_feed, supported as supports_public_feed
@@ -38,6 +39,7 @@ class JobWriter(Protocol):
 
     def save(self, job: JobPosting) -> int: ...
     def get_by_url(self, job_url: str) -> JobPosting | None: ...
+    def list_all(self) -> list[JobPosting]: ...
     def update_relevance_by_url(self, job_url: str, is_relevant: bool) -> None: ...
 
 
@@ -126,6 +128,9 @@ class CareersScraper:
         self.max_pages = max_pages
 
     def scan_company(self, company: Company) -> CompanyScanResult:
+        if supports_amazon(company):
+            jobs, partial = discover_amazon(company, self.timeout_ms, self.max_pages)
+            return CompanyScanResult(company, jobs, "AmazonDiscoveryIncomplete" if partial else None)
         if supports_fives(company):
             try:
                 jobs = scan_fives_jobs(company, self.browser, self.timeout_ms)
@@ -348,16 +353,22 @@ def scan_companies(
                 if result.error:
                     summary.failures += 1
                     print(f"  Failed: {result.error}")
-                    continue
+                    if not (supports_amazon(company) and result.jobs):
+                        continue
+                amazon_urls = (amazon_url_index(item.job_url for item in repository.list_all())
+                               if supports_amazon(company) and result.jobs else {})
 
                 summary.jobs_found += len(result.jobs)
                 relevant_for_company = 0
                 detail_failure_reported = False
                 detail_blocked = False
                 for job in result.jobs:
+                    stored_url = amazon_urls.get(amazon_job_id(job.job_url))
+                    if stored_url and stored_url != job.job_url and repository.get_by_url(job.job_url):
+                        stored_url = job.job_url
                     prefilter = prefilter_job(job)
                     if not prefilter.relevant:
-                        repository.update_relevance_by_url(job.job_url, False)
+                        repository.update_relevance_by_url(stored_url or job.job_url, False)
                         print(f"  Skipped: {job.title} - {prefilter.reason}")
                         continue
                     detail_error = 'WorkdayAccessDenied' if detail_blocked else _enrich_job(browser, job, timeout_ms)
@@ -369,11 +380,13 @@ def scan_companies(
                         print('  JobDetailUnavailable: retained for the next scheduled scan')
                     decision = classify_job(job)
                     if not decision.relevant and not invalid_detail:
-                        repository.update_relevance_by_url(job.job_url, False)
+                        repository.update_relevance_by_url(stored_url or job.job_url, False)
                         print(f"  Skipped: {job.title} - {decision.reason}")
                         continue
                     summary.jobs_relevant += 1
                     relevant_for_company += 1
+                    if stored_url:
+                        job.job_url = stored_url
                     existing = repository.get_by_url(job.job_url)
                     alias = legacy_workday_url(job.source, job.job_url)
                     if existing is None and alias:

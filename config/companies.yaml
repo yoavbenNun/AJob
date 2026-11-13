@@ -29,8 +29,7 @@ companies:
     allowed_job_hosts:
       - www.google.com
   - name: Amazon
-    # Official Israel search, scoped to software/student roles. Rendered job
-    # anchors are compatible with the generic scraper.
+    # Primary Israel search; the Amazon adapter also searches software intern.
     careers_url: https://www.amazon.jobs/en/search?base_query=software%20student&country=ISR
     enabled: true
     job_url_patterns:
