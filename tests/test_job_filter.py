@@ -8,6 +8,62 @@ def make_job(title: str) -> JobPosting:
     return JobPosting("" if title is None else title, "Example", "Remote", "https://example/jobs/1")
 
 
+def google_early_ii():
+    return JobPosting(
+        'Software Engineer II, Search AI Answers Quality', 'Google', 'Haifa, Israel',
+        'https://www.google.com/about/careers/applications/jobs/results/'
+        '111957608612405958-software-engineer-ii-search-ai-answers-quality',
+        description=('Google\nplace\nHaifa, Israel\nbar_chart\nEarly\nApply\n'
+                     'Minimum qualifications:\n'
+                     'Bachelor’s degree or equivalent practical experience.\n'
+                     '1 year of experience with software development in one or more programming languages.\n'
+                     '1 year of experience with data structures and algorithms.\n'
+                     '1 year of experience implementing core ML concepts.\n'
+                     'Preferred qualifications:\nMaster’s degree in Computer Science.\n'
+                     'About the job\nDevelop software.'),
+    )
+
+
+def test_google_early_engineer_ii_reaches_details_and_is_professionally_relevant():
+    job = google_early_ii()
+    assert prefilter_job(job).relevant
+    assert classify_job(job).relevant
+    # This is a professional filter decision, not candidate qualification.
+    assert 'early-career' in classify_job(job).reason
+
+
+def test_google_ii_professional_relevance_does_not_imply_student_eligibility():
+    from src.matching.eligibility import assess_student_eligibility
+    from src.resume.resume_parser import parse_resume_text
+    job = google_early_ii()
+    candidate = parse_resume_text('Developer\nSKILLS\nPython\nEDUCATION\nB.Sc. Software Engineering student')
+    assert assess_student_eligibility(candidate, job)[0] == 'potentially_eligible'
+
+
+@pytest.mark.parametrize('change', [
+    lambda j: setattr(j, 'description', ''),
+    lambda j: setattr(j, 'description', j.description.replace('bar_chart\nEarly', 'bar_chart\nMid')),
+    lambda j: setattr(j, 'description', j.description.replace('1 year of experience with software development', '5 years of experience with software development')),
+    lambda j: setattr(j, 'description', j.description.replace('Preferred qualifications:', '5 years of professional experience.\nPreferred qualifications:')),
+    lambda j: setattr(j, 'description', j.description.replace('Preferred qualifications:', '10 or more years of professional experience.\nPreferred qualifications:')),
+    lambda j: setattr(j, 'description', j.description.replace('Preferred qualifications:', 'At least five (5) years of professional experience.\nPreferred qualifications:')),
+    lambda j: setattr(j, 'description', j.description.replace('1 year of experience with software development in one or more programming languages.', '1 year of experience with software development is not required.')),
+    lambda j: setattr(j, 'job_url', 'https://example.com/jobs/123'),
+    lambda j: setattr(j, 'title', 'Senior Software Engineer II'),
+    lambda j: setattr(j, 'title', 'Software Engineer III'),
+])
+def test_engineer_ii_requires_verified_evidence_and_keeps_senior_exclusions(change):
+    job = google_early_ii()
+    change(job)
+    assert not classify_job(job).relevant
+
+
+def test_google_ii_preferred_experience_does_not_override_minimum():
+    job = google_early_ii()
+    job.description = job.description.replace('Master’s degree', '5 years experience preferred. Master’s degree')
+    assert classify_job(job).relevant
+
+
 @pytest.mark.parametrize("title", [
     "Student Software Engineer", "Software Developer Intern", "Backend Student",
     "Embedded Software Student", "C/C++ Student", "Python Developer Student",

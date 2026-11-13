@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from src.models import JobPosting
 from src.matching.eligibility import student_acceptance_evidence
@@ -93,6 +94,10 @@ def classify_job(job: JobPosting) -> FilterDecision:
 
     title = _normalize(job.title)
     details = _normalize(f"{job.description} {job.requirements}")
+    if needs_google_early_evidence(job):
+        if _google_early_qualifications(job.description):
+            return FilterDecision(True, "Google early-career label and minimum software experience confirmed")
+        return FilterDecision(False, "Google Engineer II requires verified early-career evidence")
     software_title = any(_contains_phrase(title, term) for term in SOFTWARE_TERMS)
     hardware_focused_title = any(
         _contains_phrase(title, term) for term in HARDWARE_FOCUS_TERMS
@@ -206,11 +211,39 @@ def prefilter_job(job: JobPosting) -> FilterDecision:
         _contains_phrase(title, term) for term in EARLY_CAREER_TERMS
     ):
         return FilterDecision(False, "title is not software-oriented")
-    if any(_contains_phrase(title, term) for term in SENIOR_TERMS) or re.search(
-        r"\b(?:ii|iii|iv)\b", title
-    ):
+    if (any(_contains_phrase(title, term) for term in SENIOR_TERMS)
+            or re.search(r"\b(?:iii|iv)\b", title)
+            or (re.search(r"\bii\b", title) and not needs_google_early_evidence(job))):
         return FilterDecision(False, "title contains a senior-level marker")
     return FilterDecision(True, "software-oriented candidate")
+
+
+def needs_google_early_evidence(job: JobPosting) -> bool:
+    """Only allow enrichment of Google Software Engineer II listings."""
+    try:
+        url = urlsplit(job.job_url)
+        return bool(url.scheme == 'https' and url.netloc.lower() == 'www.google.com'
+                    and re.fullmatch(r'/about/careers/applications/jobs/results/\d+(?:-[^/]*)?/?', url.path)
+                    and re.search(r'\bsoftware engineer ii\b', _normalize(job.title)))
+    except ValueError:
+        return False
+
+
+def _google_early_qualifications(description: str) -> bool:
+    # Google emits this label in the listing header, separate from job prose.
+    if not re.search(r'(?im)^\s*bar_chart\s*\n\s*early\s*$', description):
+        return False
+    section = re.search(r'(?is)\bminimum qualifications\s*:\s*(.*?)(?:preferred qualifications\s*:|about the job|responsibilities\s*:|$)', description)
+    if not section:
+        return False
+    minimum = section[1]
+    clauses = re.split(r'[.;\n]', minimum)
+    if not any(re.search(r'\b1\s+year\s+of\s+experience\s+with\s+software\s+development\b', clause, re.I)
+               and not re.search(r'\b(?:not|never|no|without|preferred|optional)\b', clause, re.I)
+               for clause in clauses):
+        return False
+    # A separate mandatory multi-year requirement cannot be overridden by a label.
+    return not re.search(r'\b(?:(?:[2-9]|[1-9]\d+)(?:\s*(?:-|to)\s*\d+)?|(?:two|three|four|five|six|seven|eight|nine|ten)(?:\s*\(\s*\d+\s*\))?)\s*(?:\+|or\s+more)?\s*years?\b', minimum, re.I)
 
 
 def _normalize(value: str) -> str:
