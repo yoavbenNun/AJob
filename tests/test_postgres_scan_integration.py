@@ -96,6 +96,22 @@ def job(number=1):
     return JobPosting('Intern', 'Synthetic', 'Worldwide remote', f'https://example.test/jobs/{number}')
 
 
+def test_historical_recovery_compare_and_swap_postgres(repository, store):
+    from src.storage.relevance_recovery import preview, apply
+    posting = JobPosting('Software Engineering Student', 'Synthetic', 'Israel',
+                         'https://example.test/jobs/recovery', is_relevant=False, status='reviewed')
+    store.save_discovery(posting, 'old')
+    entries, _, snapshots = preview(repository, [posting.id], target='test')
+    repository.update_status(posting.id, 'ignored')
+    assert apply(repository, entries, snapshots) == [(posting.id, False)]
+    assert not repository.get_by_id(posting.id).is_relevant
+    repository.update_status(posting.id, 'reviewed')
+    entries, _, snapshots = preview(repository, [posting.id], target='test')
+    assert apply(repository, entries, snapshots) == [(posting.id, True)]
+    assert repository.get_by_id(posting.id).status == 'reviewed'
+    assert store.execute('SELECT count(*) AS n FROM notification_outbox').fetchone()['n'] == 1
+
+
 SETTINGS = SmtpSettings('localhost', 25, '', '', 'from@example.test', 'to@example.test', False)
 
 

@@ -218,6 +218,18 @@ class JobRepository:
                 (int(is_relevant), job_id),
             )
 
+    def recover_relevance_if_unchanged(self, job: JobPosting) -> bool:
+        """Promote one reviewed snapshot without touching lifecycle or history."""
+        with self._connect() as connection:
+            result = connection.execute(
+                "UPDATE job_postings SET is_relevant = 1 WHERE id = ? AND is_relevant = 0 "
+                "AND status = ? AND status IN ('new', 'reviewed') AND job_url = ? "
+                "AND title = ? AND company = ? AND location = ? AND description = ? AND requirements = ? AND source = ?",
+                (job.id, job.status, job.job_url, job.title, job.company, job.location,
+                 job.description, job.requirements, job.source),
+            )
+            return result.rowcount == 1
+
     def update_status(self, job_id: int, status: str, *, expected_status: str | None = None) -> JobPosting | None:
         """Set a posting's lifecycle status and return it, if it exists."""
         _validate_status(status)

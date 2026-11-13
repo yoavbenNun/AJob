@@ -1,5 +1,9 @@
 # Project Best Practices
 
+- Historical relevance recovery must compare the reviewed source snapshot and
+  lifecycle status before writing. Relevance is not personal eligibility, and
+  existing pending notification records remain independent of recovery.
+
 - Amazon's Israel search treats student and intern differently. Keep both
   bounded queries, deduplicate by requisition ID, and reuse a stored URL
   before persistence so rediscovery cannot reset status or enqueue mail.

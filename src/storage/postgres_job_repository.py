@@ -247,6 +247,18 @@ class PostgresJobRepository:
                 (is_relevant, job_id),
             )
 
+    def recover_relevance_if_unchanged(self, job: JobPosting) -> bool:
+        """Promote one reviewed snapshot without touching lifecycle or history."""
+        with self._connect() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE job_postings SET is_relevant = TRUE WHERE id = %s AND is_relevant = FALSE "
+                "AND status = %s AND status IN ('new', 'reviewed') AND job_url = %s "
+                "AND title = %s AND company = %s AND location = %s AND description = %s AND requirements = %s AND source = %s",
+                (job.id, job.status, job.job_url, job.title, job.company, job.location,
+                 job.description, job.requirements, job.source),
+            )
+            return cursor.rowcount == 1
+
     def update_status(self, job_id: int, status: str, *, expected_status: str | None = None) -> JobPosting | None:
         _validate_status(status)
         with self._connect() as connection, connection.cursor() as cursor:
