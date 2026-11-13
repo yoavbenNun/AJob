@@ -123,6 +123,11 @@ def match_resume_to_job(resume: ResumeProfile, job: JobPosting) -> MatchResult:
     if education_disqualifiers:
         eligibility_status = 'ineligible'
         eligibility_reasons = education_disqualifiers + eligibility_reasons
+    elif (not _candidate_education_level(resume.education, resume.summary)
+          and _required_education_level(job.title, clean_job_text(job.requirements))):
+        if eligibility_status != 'ineligible':
+            eligibility_status = 'potentially_eligible'
+            eligibility_reasons += ('Required education is not documented; confirm eligibility.',)
     disqualifiers = eligibility_reasons if eligibility_status == 'ineligible' else ()
     eligible = eligibility_status != 'ineligible'
     if not eligible:
@@ -226,6 +231,20 @@ def _education_component(
 ) -> tuple[ScoreComponent, tuple[str, ...]]:
     candidate_level = _candidate_education_level(education, summary)
     required_level = _required_education_level(job_title, requirements)
+    if candidate_level and required_level > candidate_level:
+        requirement = {1: "bachelor's", 2: "master's", 3: "PhD"}[required_level]
+        return (ScoreComponent(0, EDUCATION_POINTS,
+                               f"job appears to require {requirement} education not shown on the resume"),
+                (f"Education mismatch: job appears to require a {requirement} degree.",))
+    required_fields = _required_education_fields(requirements)
+    candidate_fields = _education_fields(education)
+    if required_fields and candidate_fields and not set(required_fields).intersection(candidate_fields):
+        return (
+            ScoreComponent(0, EDUCATION_POINTS,
+                           "resume degree field does not match the posting's closed field requirement"),
+            ("Education field mismatch: job requires "
+             f"{', '.join(required_fields)}; resume shows {', '.join(candidate_fields)}.",),
+        )
     if required_level > candidate_level:
         names = {1: "bachelor's", 2: "master's", 3: "PhD"}
         requirement = names[required_level]
@@ -235,21 +254,7 @@ def _education_component(
                 EDUCATION_POINTS,
                 f"job appears to require {requirement} education not shown on the resume",
             ),
-            (f"Education mismatch: job appears to require a {requirement} degree.",),
-        )
-    required_fields = _required_education_fields(requirements)
-    candidate_fields = _education_fields(education)
-    if required_fields and candidate_fields and not set(required_fields).intersection(candidate_fields):
-        return (
-            ScoreComponent(
-                0,
-                EDUCATION_POINTS,
-                "resume degree field does not match the posting's closed field requirement",
-            ),
-            (
-                "Education field mismatch: job requires "
-                f"{', '.join(required_fields)}; resume shows {', '.join(candidate_fields)}.",
-            ),
+            (),
         )
     if education.strip():
         return (

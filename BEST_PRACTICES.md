@@ -4,6 +4,12 @@
   duplicate detail links. Read the title anchor inside its card and retain
   the office suffix in the role ID when combining bounded search results.
 
+- Historical relevance recovery must compare the reviewed source snapshot and
+  lifecycle status before writing. Relevance is not personal eligibility, and
+  existing pending notification records remain independent of recovery.
+- PostgreSQL URI query options can override the database or host; bind approvals
+  to the effective target or reject overriding and ambiguous connection options.
+
 - Amazon's Israel search treats student and intern differently. Keep both
   bounded queries, deduplicate by requisition ID, and reuse a stored URL
   before persistence so rediscovery cannot reset status or enqueue mail.

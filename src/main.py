@@ -1,11 +1,13 @@
 """Command-line entry point for AJob."""
 
 import argparse
+import hmac
 import json
 import os
 import sqlite3
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit, parse_qsl
 from collections.abc import Sequence
 from dataclasses import asdict
 
@@ -28,6 +30,8 @@ from src.resume.resume_parser import parse_resume
 from src.resume.safe_profile import build_safe_profile, load_safe_profile_json
 from src.resume.tailored_resume import build_tailoring_proposal, create_resume_artifacts
 from src.storage.repository_factory import create_job_repository
+from src.storage.relevance_recovery import preview as preview_recovery, apply as apply_recovery
+from src.storage.relevance_recovery import RecoveryApplyError
 
 try:
     from psycopg import Error as PostgresError
@@ -121,6 +125,16 @@ def build_parser() -> argparse.ArgumentParser:
     reclassify_parser.add_argument(
         "--apply", action="store_true", help="Save relevance changes; preserve details and lifecycle statuses"
     )
+    recovery_parser = subparsers.add_parser(
+        "recover-relevance", help="Review selected historical jobs without creating notifications")
+    recovery_parser.add_argument("--database", type=Path, default=Path("data/jobs.db"))
+    recovery_parser.add_argument("--target", choices=("sqlite", "postgres"), required=True,
+                                 help="Explicitly select which database backend to use")
+    recovery_parser.add_argument("--job-id", type=int, action="append", required=True,
+                                 help="Explicit stored job ID; repeat up to 100 times")
+    recovery_parser.add_argument("--resume", type=Path, help="Optional resume for eligibility assessment")
+    recovery_parser.add_argument("--apply", action="store_true", help="Apply the previously reviewed plan")
+    recovery_parser.add_argument("--approve", help="Exact approval digest produced by the dry run")
     status_parser = subparsers.add_parser("status", help="Set a stored job's lifecycle status")
     status_parser.add_argument("job_id", type=int, help="Stored job ID")
     status_parser.add_argument("status", choices=JOB_STATUSES, help="New lifecycle status")
@@ -264,6 +278,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_status(args)
     if args.command == "reclassify":
         return _run_reclassify(args)
+    if args.command == "recover-relevance":
+        return _run_recover_relevance(args)
     if args.command == "tailor-resume":
         return _run_tailor_resume(args)
     return 1
@@ -405,6 +421,61 @@ def _run_reclassify(args: argparse.Namespace) -> int:
     except (FileNotFoundError, OSError, ValueError, RuntimeError, sqlite3.Error, PostgresError) as error:
         print(f"Reclassification failed: {error}", file=sys.stderr)
         return 1
+
+
+def _run_recover_relevance(args: argparse.Namespace) -> int:
+    try:
+        database_url = os.getenv("DATABASE_URL", "").strip()
+        if args.target == "sqlite" and database_url:
+            raise ValueError("DATABASE_URL is set; refusing to select PostgreSQL for a SQLite target.")
+        if args.target == "postgres" and not database_url:
+            raise ValueError("PostgreSQL target requires DATABASE_URL.")
+        if args.target == "sqlite" and not args.database.is_file():
+            raise FileNotFoundError(f"Job database not found: {args.database}")
+        if bool(args.apply) != bool(args.approve):
+            raise ValueError("Use --apply and the reviewed --approve digest together.")
+        repository = create_job_repository(args.database)
+        resume = parse_resume(args.resume) if args.resume else None
+        target = _recovery_target(database_url, args.database)
+        entries, digest, snapshots = preview_recovery(repository, args.job_id, resume, target=target)
+        print(json.dumps({'jobs': entries, 'approval_digest': digest}, ensure_ascii=False, indent=2))
+        if args.apply:
+            if not args.approve.isascii() or not hmac.compare_digest(args.approve, digest):
+                raise ValueError("The approved plan changed; review a new dry run.")
+            results = apply_recovery(repository, entries, snapshots)
+            print(json.dumps({'updated_ids': [i for i, changed in results if changed],
+                              'changed_since_preview': [i for i, changed in results if not changed]}))
+        else:
+            print("Dry run only. Notifications were not changed; pending notifications may still send.")
+        return 0
+    except RecoveryApplyError as error:
+        print(json.dumps({'updated_ids': [i for i, changed in error.results if changed],
+                          'changed_since_preview': [i for i, changed in error.results if not changed]}))
+        print(str(error), file=sys.stderr)
+        return 1
+    except (FileNotFoundError, OSError, ValueError, RuntimeError, sqlite3.Error, PostgresError) as error:
+        print(f"Recovery failed: {error}", file=sys.stderr)
+        return 1
+
+
+def _recovery_target(database_url: str, database_path: Path) -> str:
+    if not database_url:
+        return f"sqlite:{database_path.resolve()}"
+    parsed = urlsplit(database_url)
+    # A libpq URI's query parameters can override its authority and database.
+    # Reject all options except transport and connection settings that cannot
+    # redirect the connection to a different database, user, host or schema.
+    allowed = {'sslmode', 'sslrootcert', 'sslcert', 'sslkey', 'connect_timeout',
+               'application_name', 'channel_binding', 'gssencmode'}
+    if any(key not in allowed for key, _ in parse_qsl(parsed.query, keep_blank_values=True)):
+        raise ValueError('PostgreSQL URL contains unsupported connection options.')
+    if (parsed.scheme not in {'postgres', 'postgresql'} or not parsed.username
+            or not parsed.hostname or not parsed.path.strip('/')
+            or ',' in parsed.hostname or any(os.getenv(key) for key in
+                ('PGSERVICE', 'PGSERVICEFILE', 'PGHOSTADDR', 'PGOPTIONS'))
+            or (parsed.port is None and os.getenv('PGPORT'))):
+        raise ValueError('PostgreSQL connection target is ambiguous.')
+    return f"postgres:{parsed.username}@{parsed.hostname}:{parsed.port or 5432}{parsed.path}"
 
 
 def _run_status(args: argparse.Namespace) -> int:
