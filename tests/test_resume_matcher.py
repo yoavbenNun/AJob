@@ -267,7 +267,9 @@ Built a portal for university PhD students.
         requirements="Python",
     )
 
-    assert match_resume_to_job(resume, job).eligible is False
+    result = match_resume_to_job(resume, job)
+    assert result.eligibility_status == 'potentially_eligible'
+    assert result.breakdown.education.points == 0
 
 
 def test_masters_candidate_qualifies_for_masters_or_phd_title() -> None:
