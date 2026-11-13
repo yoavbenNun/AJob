@@ -110,6 +110,16 @@ def resolve_job_destination(location: str, description: str) -> str:
     if location.strip() and location.casefold() != "not specified":
         return location.strip()
     lines = [" ".join(line.split()) for line in description.splitlines() if line.strip()]
+    # Lever's captured Mobileye header can concatenate the location and
+    # department with no whitespace. Require the complete listing header and
+    # adjacent apply control; a mention of Israel in prose is not a location.
+    for index, line in enumerate(lines[:12]):
+        header = re.fullmatch(
+            r"([A-Za-z][A-Za-z .'-]{1,60},\s*Israel)R&D\s*[–-]\s*Software\s*/Student\s*/On-Site",
+            line, flags=re.IGNORECASE,
+        )
+        if header and index + 1 < len(lines) and lines[index + 1].casefold() == "apply for this job":
+            return header.group(1)
     for index, line in enumerate(lines):
         if line.casefold() != "place":
             continue

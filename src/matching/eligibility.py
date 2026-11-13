@@ -136,7 +136,7 @@ def _remaining_studies(clause: str, resume: ResumeProfile, today: date):
     requirement = re.search(
         r'\b(\d+|one|two|three|four|five|six)\s+(?:(?:full|academic)\s+)?'
         r'(years?|semesters?|terms?)\s+(?:of\s+(?:studies|study|your degree)\s+)?'
-        r'(?:remaining|left|(?:until|before|to)\s+(?:your\s+)?graduation)\b',
+        r'(?:remaining|left|(?:until|till|before|to)\s+(?:your\s+)?graduation)\b',
         clause,
     )
     if not requirement:
@@ -176,6 +176,19 @@ def _remaining_studies(clause: str, resume: ResumeProfile, today: date):
     if earliest < required:
         return False, f'{count} years until graduation required; graduation year alone cannot establish eligibility.'
     return None
+
+
+def _completed_semesters(clause: str, resume: ResumeProfile):
+    required = re.search(r'\bcompleted\s+(?:at least\s+)?(\d+)\s+(?:academic\s+)?semesters?\b', clause)
+    if not required:
+        return None
+    candidate = _normalize(resume.education + '\n' + resume.summary)
+    for statement in re.split(r'[\n;.]', candidate):
+        completed = re.search(r'\bcompleted\s+(?:at least\s+)?(\d+)\s+(?:academic\s+)?semesters?\b', statement)
+        if (completed and not re.search(r"\b(?:not|never|will|would|expect|expected|expects|future|yet)\b|n['’]t", statement)
+                and int(completed[1]) >= int(required[1])):
+            return None
+    return f'At least {required[1]} completed semesters required; completion is not verified.'
 
 
 def assess_student_eligibility(resume: ResumeProfile, job: JobPosting) -> tuple[str, tuple[str, ...]]:
@@ -222,6 +235,9 @@ def assess_student_eligibility(resume: ResumeProfile, job: JobPosting) -> tuple[
             if remaining:
                 rejected, reason = remaining
                 (conflicts if rejected else doubts).append(reason)
+            completed_semesters = _completed_semesters(clause, resume) if hard else None
+            if completed_semesters:
+                doubts.append(completed_semesters)
             if studying and not optional and re.search(STUDENT_EXCLUSION + r'|\bgraduates only\b|\bmust have graduated\b', clause):
                 if student_evidence:
                     doubts.append('Conflicting student acceptance and graduation requirements; confirm eligibility.')

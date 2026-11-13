@@ -1,6 +1,7 @@
 from src.matching.resume_matcher import match_resume, match_resume_to_job
 from src.models import JobPosting
 from src.resume.resume_parser import parse_resume_text
+from src.matching.eligibility import assess_student_eligibility
 
 
 RESUME_TEXT = """Dana Developer
@@ -19,6 +20,27 @@ Job Search Agent
 EDUCATION
 B.Sc. Computer Science
 """
+
+
+def test_mobileye_till_graduation_is_reviewed_when_date_unknown():
+    resume = parse_resume_text("Dana Developer\nEDUCATION\nThird-year B.Sc. student in Software Engineering")
+    job = JobPosting("Test Automation Developer - Student", "Mobileye", "Jerusalem, Israel",
+                     "https://example.com/job", description="Student position.\nRequirements\nAt least 2 years till graduation.")
+    status, reasons = assess_student_eligibility(resume, job)
+    assert status == "potentially_eligible"
+    assert any("graduation date is not documented" in reason for reason in reasons)
+
+
+def test_completed_semesters_require_actual_evidence():
+    job = JobPosting("Software Engineering Student", "Apple", "Jerusalem, Israel",
+                     "https://example.com/job", requirements="Students who have completed at least 3 semesters.")
+    unknown = parse_resume_text("Dana Developer\nEDUCATION\nThird-year B.Sc. student in Computer Engineering")
+    confirmed = parse_resume_text("Dana Developer\nEDUCATION\nB.Sc. student in Computer Engineering; completed 4 semesters")
+    assert assess_student_eligibility(unknown, job)[0] == "potentially_eligible"
+    assert assess_student_eligibility(confirmed, job)[0] == "student_eligible"
+    for statement in ("not completed 4 semesters", "will have completed 4 semesters", "completed 4 semesters yet"):
+        candidate = parse_resume_text("Dana Developer\nEDUCATION\nB.Sc. student in Computer Engineering; " + statement)
+        assert assess_student_eligibility(candidate, job)[0] == "potentially_eligible"
 
 
 def test_matcher_returns_explainable_full_score_for_supported_job() -> None:

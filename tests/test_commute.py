@@ -1,6 +1,7 @@
 import pytest
 
 from src.location.commute import (
+    classify_job_location,
     evaluate_commute,
     is_israel_or_remote_location,
     resolve_job_destination,
@@ -127,3 +128,15 @@ def test_dashboard_location_scope_accepts_only_israel_and_safe_remote() -> None:
 def test_detail_location_fallback_reads_google_place_marker() -> None:
     description = "Role title\nplace\nWarsaw, Poland\n; Kraków, Poland\nbar_chart\nIntern"
     assert resolve_job_destination("Not specified", description) == "Warsaw, Poland; Kraków, Poland"
+
+
+def test_mobileye_captured_header_resolves_location_without_assuming_prose():
+    description = ("Test Automation Developer- Student Position\n"
+                   "Jerusalem, IsraelR&D – Software /Student /On-Site\n"
+                   "APPLY FOR THIS JOB\nDevelop test software.")
+    destination = resolve_job_destination("Not specified", description)
+    assert destination == "Jerusalem, Israel"
+    assert classify_job_location(destination).eligible
+    assert resolve_job_destination("Not specified", description.replace("APPLY FOR THIS JOB", "About our team")) == "Not specified"
+    assert resolve_job_destination("Not specified", "Our team in Jerusalem, Israel supports this position.") == "Not specified"
+    assert resolve_job_destination("London, UK", description) == "London, UK"
