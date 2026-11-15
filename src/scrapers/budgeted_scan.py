@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 
 from src.filtering.job_filter import classify_job, prefilter_job, needs_google_early_evidence
 from src.scrapers.amazon import amazon_job_id, amazon_url_index, supported as supports_amazon
-from src.scrapers import apple
+from src.scrapers import apple, google
 from src.scrapers.careers_scraper import CareersScraper, _enrich_job
 from src.scrapers.greenhouse import is_greenhouse_board
 from src.scrapers.failure_diagnostics import source_failure
@@ -86,7 +86,8 @@ def source_worker(company, timeout_ms, max_pages, headless, pipe):
             pipe.send(('collection', result.collection_metrics))
         # Fetch time includes HTTP, browser rendering and feed decoding. CPU
         # filtering is measured separately; no claim of pure wire-level timing.
-        if result.error and not ((supports_amazon(company) or apple.supported(company)) and result.jobs):
+        if result.error and not ((supports_amazon(company) or apple.supported(company)
+                                  or google.supported(company)) and result.jobs):
             pipe.send(("error", "SourceFetchError", getattr(result, 'failure_details', {})))
             return
         if not result.error and getattr(result, 'closure_snapshot', None):
@@ -185,6 +186,7 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
     known = store.known_urls()  # one snapshot avoids thousands of no-op DB updates
     amazon_urls = amazon_url_index(known) if any(supports_amazon(company) for company in enabled) else {}
     apple_urls = apple.url_index(known) if any(apple.supported(company) for company in enabled) else {}
+    google_urls = google.url_index(known) if any(google.supported(company) for company in enabled) else {}
     ctx = multiprocessing.get_context("spawn")
     completed = 0
     try:
@@ -249,6 +251,9 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
                         apple_identity = apple.job_id(job.job_url) if apple.supported(company) else None
                         if apple_identity and job.job_url not in known:
                             job.job_url = apple_urls.get(apple_identity, job.job_url)
+                        google_identity = google.job_id(job.job_url) if google.supported(company) else None
+                        if google_identity and job.job_url not in known:
+                            job.job_url = google_urls.get(google_identity, job.job_url)
                         alias = legacy_workday_url(job.source, job.job_url)
                         if job.job_url not in known and alias in known:
                             job.job_url = alias

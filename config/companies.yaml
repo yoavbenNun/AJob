@@ -22,6 +22,7 @@ companies:
     allowed_job_hosts:
       - apply.careers.microsoft.com
   - name: Google
+    # Keep this query; the Google adapter also runs the Israel Early/Intern search.
     careers_url: https://www.google.com/about/careers/applications/jobs/results/?q=software%20intern
     enabled: true
     job_url_patterns:

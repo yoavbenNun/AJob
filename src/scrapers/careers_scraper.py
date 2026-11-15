@@ -16,7 +16,7 @@ from src.filtering.job_filter import classify_job, prefilter_job, needs_google_e
 from src.models import Company, JobPosting
 from src.job_content import description_problem, clean_job_text, QUALIFICATION_HEADING
 from src.urls import canonical_url
-from src.scrapers import apple
+from src.scrapers import apple, google
 from src.scrapers.amazon import amazon_job_id, amazon_url_index, discover as discover_amazon, supported as supports_amazon
 from src.scrapers.greenhouse import fetch_greenhouse_jobs, is_greenhouse_board
 from src.scrapers.official_sources import fetch_jobs as fetch_official_jobs, supported as supports_official_feed
@@ -129,6 +129,19 @@ class CareersScraper:
         self.max_pages = max_pages
 
     def scan_company(self, company: Company) -> CompanyScanResult:
+        if google.supported(company):
+            jobs = {}
+            failure = None
+            for url in (company.careers_url, google.ISRAEL_EARLY):
+                result = self._scan_rendered(replace(company, careers_url=url), google_listing=True)
+                if result.error:
+                    failure = result
+                for job in result.jobs:
+                    job.source = company.careers_url
+                    jobs.setdefault(google.job_id(job.job_url), job)
+            return CompanyScanResult(company, list(jobs.values()),
+                                     "GoogleDiscoveryIncomplete" if failure else None,
+                                     failure_details=failure.failure_details if failure else {})
         if apple.supported(company):
             jobs = {}
             failure = None
@@ -186,10 +199,13 @@ class CareersScraper:
             return self._scan_workday(company)
         return self._scan_rendered(company)
 
-    def _scan_rendered(self, company: Company, *, apple_listing: bool = False) -> CompanyScanResult:
+    def _scan_rendered(self, company: Company, *, apple_listing: bool = False,
+                       google_listing: bool = False) -> CompanyScanResult:
         page = self.browser.new_page()
+        scoped_listing = apple_listing or google_listing
         jobs_by_url: dict[str, JobPosting] = {}
         apple_seen = set()
+        google_seen = set()
         apple_incomplete = False
         try:
             response = page.goto(
@@ -197,27 +213,37 @@ class CareersScraper:
                 wait_until="domcontentloaded",
                 timeout=self.timeout_ms,
             )
-            if apple_listing:
+            if scoped_listing:
                 if response is None or not response.ok:
-                    raise ValueError("Apple listing request failed")
+                    raise ValueError("Scoped listing request failed")
                 page.set_default_timeout(self.timeout_ms)
+            if apple_listing:
                 page.locator(".job-list-item h3 a[href], .no-results").first.wait_for(
                     state="attached", timeout=self.timeout_ms)
             else:
                 page.wait_for_timeout(1_500)
             for page_number in range(self.max_pages):
-                if apple_listing:
+                if scoped_listing:
                     expected = urlsplit(company.careers_url)
                     actual = urlsplit(page.url)
                     query = parse_qs(actual.query)
                     if ((actual.scheme, actual.netloc, actual.path) !=
                             (expected.scheme, expected.netloc, expected.path)
-                            or any(query.get(key) != value for key, value in parse_qs(expected.query).items())):
-                        raise ValueError("Apple pagination changed search scope")
+                            or any(sorted(query.get(key, [])) != sorted(value)
+                                   for key, value in parse_qs(expected.query).items())):
+                        raise ValueError("Pagination changed search scope")
                 links = apple.read_links(page) if apple_listing else _read_links(page)
                 if apple_listing and not links and not (page_number == 0 and page.locator(".no-results").count()):
                     raise ValueError("Apple listing page has no recognized cards")
                 extracted = extract_jobs_from_links(company, links)
+                if google_listing:
+                    identities = {identity for job in extracted if (identity := google.job_id(job.job_url))}
+                    if not identities - google_seen:
+                        if (page_number == 0 and not identities
+                                and page.get_by_text(re.compile(r"^(?:0 jobs matched|no jobs found)\.?$", re.I)).count()):
+                            break
+                        raise ValueError("Google listing did not yield new role identities")
+                    google_seen.update(identities)
                 if apple_listing and links:
                     identities = {identity for link in links if (identity := apple.job_id(link["href"]))}
                     if not identities - apple_seen:
@@ -227,10 +253,12 @@ class CareersScraper:
                 for job in extracted:
                     if apple_listing and not apple.job_id(job.job_url):
                         continue
+                    if google_listing and not google.job_id(job.job_url):
+                        continue
                     jobs_by_url.setdefault(job.job_url, job)
                 if page_number + 1 >= self.max_pages:
                     break
-                if not (_go_to_next_page(page, strict=True) if apple_listing else _go_to_next_page(page)):
+                if not (_go_to_next_page(page, strict=True) if scoped_listing else _go_to_next_page(page)):
                     break
                 page.wait_for_timeout(1_000)
             return CompanyScanResult(
@@ -241,11 +269,11 @@ class CareersScraper:
         except PlaywrightTimeoutError as error:
             return CompanyScanResult(
                 company=company,
-                jobs=list(jobs_by_url.values()) if apple_listing else [],
+                jobs=list(jobs_by_url.values()) if scoped_listing else [],
                 error=f"Timed out after {self.timeout_ms} ms", failure_details=source_failure(error),
             )
         except Exception as error:  # A single broken site must not stop the scan.
-            return CompanyScanResult(company=company, jobs=list(jobs_by_url.values()) if apple_listing else [],
+            return CompanyScanResult(company=company, jobs=list(jobs_by_url.values()) if scoped_listing else [],
                                      error=type(error).__name__, failure_details=source_failure(error))
         finally:
             page.close()
@@ -404,12 +432,14 @@ def scan_companies(
                 if result.error:
                     summary.failures += 1
                     print(f"  Failed: {result.error}")
-                    if not ((supports_amazon(company) or apple.supported(company)) and result.jobs):
+                    if not ((supports_amazon(company) or apple.supported(company) or google.supported(company)) and result.jobs):
                         continue
                 amazon_urls = (amazon_url_index(item.job_url for item in repository.list_all())
                                if supports_amazon(company) and result.jobs else {})
                 apple_urls = (apple.url_index(item.job_url for item in repository.list_all())
                               if apple.supported(company) and result.jobs else {})
+                google_urls = (google.url_index(item.job_url for item in repository.list_all())
+                               if google.supported(company) and result.jobs else {})
 
                 summary.jobs_found += len(result.jobs)
                 relevant_for_company = 0
@@ -417,7 +447,8 @@ def scan_companies(
                 detail_blocked = False
                 for job in result.jobs:
                     stored_url = (amazon_urls.get(amazon_job_id(job.job_url))
-                                  or apple_urls.get(apple.job_id(job.job_url)))
+                                  or apple_urls.get(apple.job_id(job.job_url))
+                                  or google_urls.get(google.job_id(job.job_url)))
                     if stored_url and stored_url != job.job_url and repository.get_by_url(job.job_url):
                         stored_url = job.job_url
                     prefilter = prefilter_job(job)
