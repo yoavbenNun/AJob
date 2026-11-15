@@ -105,7 +105,8 @@ def compose_scan_summary(
         )
     notified_count = len(location_verified_jobs) if recommendations is None else sum(
         item.eligibility_status == 'student_eligible' for item in recommendations)
-    message["Subject"] = f"AJob: {notified_count} new matching job(s)"
+    message["Subject"] = (f"AJob: {notified_count} new matching job(s)" if recommendations is not None
+                          else f"AJob: {notified_count} new role(s) for review")
     possible_count = sum(item.eligibility_status == 'potentially_eligible' for item in (recommendations or ()))
     if possible_count:
         message.replace_header('Subject', f'{message["Subject"]}; {possible_count} possible match(es)')

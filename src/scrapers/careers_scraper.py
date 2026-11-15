@@ -12,7 +12,7 @@ import time
 
 from playwright.sync_api import Browser, Page, TimeoutError as PlaywrightTimeoutError
 
-from src.filtering.job_filter import classify_job, prefilter_job
+from src.filtering.job_filter import classify_job, prefilter_job, needs_google_early_evidence
 from src.models import Company, JobPosting
 from src.job_content import description_problem, clean_job_text, QUALIFICATION_HEADING
 from src.urls import canonical_url
@@ -431,7 +431,9 @@ def scan_companies(
                     if invalid_detail and not detail_failure_reported:
                         summary.failures += 1
                         detail_failure_reported = True
-                        print('  JobDetailUnavailable: retained for the next scheduled scan')
+                        print('  JobDetailUnavailable: retry on the next scheduled scan')
+                    if invalid_detail and needs_google_early_evidence(job):
+                        continue
                     decision = classify_job(job)
                     if not decision.relevant and not invalid_detail:
                         repository.update_relevance_by_url(stored_url or job.job_url, False)

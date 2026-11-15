@@ -1,5 +1,11 @@
 # Project Best Practices
 
+- Provider career-level labels must be verified in the posting's structured
+  header and checked against mandatory requirements before overriding title
+  heuristics; missing detail must not alter an existing job's classification.
+- Unranked scan emails describe roles for review, not personal matches; retry
+  already-frozen notification batches without rewriting their history.
+
 - Apple Israel listing cards have separate title and location fields plus
   duplicate detail links. Read the title anchor inside its card and retain
   the office suffix in the role ID when combining bounded search results.

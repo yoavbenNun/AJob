@@ -10,7 +10,7 @@ import subprocess
 import time
 from urllib.parse import urlsplit
 
-from src.filtering.job_filter import classify_job, prefilter_job
+from src.filtering.job_filter import classify_job, prefilter_job, needs_google_early_evidence
 from src.scrapers.amazon import amazon_job_id, amazon_url_index, supported as supports_amazon
 from src.scrapers import apple
 from src.scrapers.careers_scraper import CareersScraper, _enrich_job
@@ -115,6 +115,10 @@ def source_worker(company, timeout_ms, max_pages, headless, pipe):
                 invalid_detail = detail_error or description_problem(job.description, job.requirements)
                 if invalid_detail:
                     detail_failures += 1
+                    if needs_google_early_evidence(job):
+                        # Do not persist or reclassify a role whose level depends
+                        # on details that could not be verified.
+                        continue
                     # This is a retained discovery, not a rejected job.
                     pipe.send(("invalid_description",))
                 if invalid_detail:

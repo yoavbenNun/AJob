@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from src.models import JobPosting
 from src.matching.eligibility import student_acceptance_evidence
@@ -93,6 +94,10 @@ def classify_job(job: JobPosting) -> FilterDecision:
 
     title = _normalize(job.title)
     details = _normalize(f"{job.description} {job.requirements}")
+    if needs_google_early_evidence(job):
+        if _google_early_qualifications(job.description, job.title):
+            return FilterDecision(True, "Google early-career label and minimum software experience confirmed")
+        return FilterDecision(False, "Google Engineer II requires verified early-career evidence")
     software_title = any(_contains_phrase(title, term) for term in SOFTWARE_TERMS)
     hardware_focused_title = any(
         _contains_phrase(title, term) for term in HARDWARE_FOCUS_TERMS
@@ -206,11 +211,96 @@ def prefilter_job(job: JobPosting) -> FilterDecision:
         _contains_phrase(title, term) for term in EARLY_CAREER_TERMS
     ):
         return FilterDecision(False, "title is not software-oriented")
-    if any(_contains_phrase(title, term) for term in SENIOR_TERMS) or re.search(
-        r"\b(?:ii|iii|iv)\b", title
-    ):
+    if (any(_contains_phrase(title, term) for term in SENIOR_TERMS)
+            or re.search(r"\b(?:iii|iv)\b", title)
+            or (re.search(r"\bii\b", title) and not needs_google_early_evidence(job))):
         return FilterDecision(False, "title contains a senior-level marker")
     return FilterDecision(True, "software-oriented candidate")
+
+
+def needs_google_early_evidence(job: JobPosting) -> bool:
+    """Only allow enrichment of Google Software Engineer II listings."""
+    try:
+        url = urlsplit(job.job_url)
+        return bool(url.scheme == 'https' and url.netloc.lower() == 'www.google.com'
+                    and re.fullmatch(r'/about/careers/applications/jobs/results/\d+(?:-[^/]*)?/?', url.path)
+                    and re.search(r'\bsoftware engineer ii\b', _normalize(job.title)))
+    except ValueError:
+        return False
+
+
+def _google_early_qualifications(description: str, title: str) -> bool:
+    # The first Apply control ends the structured listing header. Do not let
+    # later body text supply a missing or contradictory career-level label.
+    lines = [line.strip() for line in description.splitlines() if line.strip()]
+    def title_key(value):
+        return ' '.join(re.sub(r'[^\w]+', ' ', value.casefold()).split())
+    title_indices = [i for i, line in enumerate(lines) if title_key(line) == title_key(title)]
+    if len(title_indices) != 1:
+        return False
+    start = title_indices[0]
+    apply_index = next((i for i, line in enumerate(lines[start + 1:], start + 1)
+                        if line.casefold() == 'apply'), None)
+    if apply_index is None:
+        return False
+    header = [line.casefold() for line in lines[start:apply_index]]
+    levels = [i for i, line in enumerate(header) if line == 'bar_chart']
+    if (len(levels) != 1 or levels[0] + 1 >= len(header)
+            or header[levels[0] + 1] != 'early'
+            or 'place' not in header[:levels[0]]):
+        return False
+    body = '\n'.join(lines[apply_index + 1:])
+    section = re.search(r'(?is)\bminimum qualifications\s*:\s*(.*?)(?:preferred qualifications\s*:|about the job|responsibilities\s*:|$)', body)
+    if not section:
+        return False
+    minimum = section[1]
+    clauses = re.split(r'(?<!\d)\.(?!\d)|;|\n', minimum)
+    if not any(re.search(r'\b1\s+year\s+of\s+experience\s+with\s+software\s+development\b', clause, re.I)
+               and not re.search(r'\b(?:not|never|no|without|preferred|optional)\b', clause, re.I)
+               for clause in clauses):
+        return False
+    return not any(_exceeds_early_experience(clause) for clause in clauses)
+
+
+def _exceeds_early_experience(clause: str) -> bool:
+    """Fail closed on mandatory experience longer than one year."""
+    clause = clause.casefold()
+    if (re.search(r'\b(?:preferred|optional|advantage|nice to have)\b', clause)
+            and not re.search(r'\b(?:required|minimum|must|at least)\b', clause)):
+        return False
+    if re.search(r'\b(?:more than|over|exceeding)\s+(?:1|one)\s*(?:year|yr)\b', clause):
+        return True
+    if re.search(r'\b(?:one|two|three|four|five|\d+)\s+and\s+a\s+half\s+(?:years?|yrs?)\b', clause):
+        return True
+    numbers = {'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+               'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
+               'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14,
+               'fifteen': 15, 'sixteen': 16, 'seventeen': 17, 'eighteen': 18,
+               'nineteen': 19, 'twenty': 20, 'thirty': 30, 'forty': 40,
+               'fifty': 50, 'sixty': 60, 'seventy': 70, 'eighty': 80, 'ninety': 90}
+    words = '|'.join(numbers)
+    pattern = (rf'\b(\d+(?:\.\d+)?|(?:{words})(?:[- ](?:one|two|three|four|five|six|seven|eight|nine))?)'
+               rf'(?:\s*\(\s*(?:\d+|{words})\s*\))?(?:\s*(?:\+|or\s+more))?\s*'
+               rf'(years?|yrs?\.?|months?|mos?\.?)\b')
+    durations = []
+    parsed_units = set()
+    for match in re.finditer(pattern, clause):
+        value, unit = match.groups()
+        if value[0].isdigit():
+            count = float(value)
+        else:
+            count = sum(numbers[part] for part in re.split(r'[- ]', value))
+        durations.append((count, unit))
+        parsed_units.add(match.start(2))
+    if re.search(r'\b(?:several|multiple|many)\s+(?:years?|yrs?|months?|mos?)\b', clause):
+        return True
+    if (re.search(r'\bexperience\b', clause) and any(
+            match.start() not in parsed_units
+            for match in re.finditer(r'\b(?:years?|yrs?|months?|mos?)\b', clause))):
+        return True
+    years = [n for n, unit in durations if unit.startswith(('y',))]
+    months = [n for n, unit in durations if unit.startswith('m')]
+    return any(n > 1 for n in years) or any(n > 12 for n in months) or bool(years and months and max(years) >= 1 and max(months) > 0)
 
 
 def _normalize(value: str) -> str:
