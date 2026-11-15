@@ -13,7 +13,7 @@ def google_early_ii():
         'Software Engineer II, Search AI Answers Quality', 'Google', 'Haifa, Israel',
         'https://www.google.com/about/careers/applications/jobs/results/'
         '111957608612405958-software-engineer-ii-search-ai-answers-quality',
-        description=('Google\nplace\nHaifa, Israel\nbar_chart\nEarly\nApply\n'
+        description=('Software Engineer II, Search AI Answers Quality\nGoogle\nplace\nHaifa, Israel\nbar_chart\nEarly\nApply\n'
                      'Minimum qualifications:\n'
                      'Bachelor’s degree or equivalent practical experience.\n'
                      '1 year of experience with software development in one or more programming languages.\n'
@@ -47,6 +47,15 @@ def test_google_ii_professional_relevance_does_not_imply_student_eligibility():
     lambda j: setattr(j, 'description', j.description.replace('Preferred qualifications:', '5 years of professional experience.\nPreferred qualifications:')),
     lambda j: setattr(j, 'description', j.description.replace('Preferred qualifications:', '10 or more years of professional experience.\nPreferred qualifications:')),
     lambda j: setattr(j, 'description', j.description.replace('Preferred qualifications:', 'At least five (5) years of professional experience.\nPreferred qualifications:')),
+    lambda j: setattr(j, 'description', j.description.replace('Preferred qualifications:', 'Minimum 5 yrs of professional software engineering experience.\nPreferred qualifications:')),
+    lambda j: setattr(j, 'description', j.description.replace('Preferred qualifications:', 'A minimum of 24 months of professional software engineering experience is required.\nPreferred qualifications:')),
+    lambda j: setattr(j, 'description', j.description.replace('Preferred qualifications:', 'At least twenty-four months of software experience required.\nPreferred qualifications:')),
+    lambda j: setattr(j, 'description', j.description.replace('Preferred qualifications:', 'More than 1 year of professional experience required.\nPreferred qualifications:')),
+    lambda j: setattr(j, 'description', j.description.replace('Preferred qualifications:', 'At least two and a half years of experience.\nPreferred qualifications:')),
+    lambda j: setattr(j, 'description', j.description.replace('Preferred qualifications:', 'Minimum 5 (five) years of experience.\nPreferred qualifications:')),
+    lambda j: setattr(j, 'description', 'Other role\nplace\nIsrael\nbar_chart\nEarly\nApply\n' + j.description.replace('bar_chart\nEarly', 'bar_chart\nMid')),
+    lambda j: setattr(j, 'description', j.description.replace('bar_chart\nEarly', 'bar_chart\nMid').replace('About the job', 'About the job\nbar_chart\nEarly')),
+    lambda j: setattr(j, 'description', j.description.replace('bar_chart\nEarly', 'bar_chart\nEarly\nbar_chart\nMid')),
     lambda j: setattr(j, 'description', j.description.replace('1 year of experience with software development in one or more programming languages.', '1 year of experience with software development is not required.')),
     lambda j: setattr(j, 'job_url', 'https://example.com/jobs/123'),
     lambda j: setattr(j, 'title', 'Senior Software Engineer II'),
@@ -61,6 +70,8 @@ def test_engineer_ii_requires_verified_evidence_and_keeps_senior_exclusions(chan
 def test_google_ii_preferred_experience_does_not_override_minimum():
     job = google_early_ii()
     job.description = job.description.replace('Master’s degree', '5 years experience preferred. Master’s degree')
+    assert classify_job(job).relevant
+    job.description = job.description.replace('Preferred qualifications:', '5 yrs of experience preferred.\nPreferred qualifications:')
     assert classify_job(job).relevant
 
 

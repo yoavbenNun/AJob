@@ -49,7 +49,7 @@ def test_compose_scan_summary_has_expected_headers_and_counts() -> None:
 
     assert message["From"] == ENV["SMTP_FROM"]
     assert message["To"] == ENV["SMTP_TO"]
-    assert message["Subject"] == "AJob: 0 new matching job(s)"
+    assert message["Subject"] == "AJob: 0 new role(s) for review"
     assert "Relevant roles saved: 3" in message.get_content()
     assert ENV["SMTP_PASSWORD"] not in message.as_string()
 
@@ -85,7 +85,7 @@ def test_send_scan_summary_uses_tls_authentication_and_mocked_smtp() -> None:
         ("connect", "smtp.example.test", 587, 30),
         "starttls",
         ("login", "agent@example.test", "not-a-real-secret"),
-        ("message", "AJob: 0 new matching job(s)"),
+        ("message", "AJob: 0 new role(s) for review"),
     ]
 
 
@@ -125,7 +125,8 @@ def test_compose_scan_summary_lists_new_jobs() -> None:
     message = compose_scan_summary(settings, summary)
     content = message.get_content()
 
-    assert message["Subject"] == "AJob: 1 new matching job(s)"
+    assert message["Subject"] == "AJob: 1 new role(s) for review"
+    assert "Eligibility not assessed" in content
     assert "Software Intern at Example" in content
     assert "https://example.test/jobs/1" in content
 
@@ -175,7 +176,7 @@ def test_unranked_summary_excludes_foreign_and_unverified_locations() -> None:
         ))
     ))
     message = compose_scan_summary(settings, summary)
-    assert message["Subject"] == "AJob: 1 new matching job(s)"
+    assert message["Subject"] == "AJob: 1 new role(s) for review"
     body = message.get_content()
     assert "Domestic intern" in body
     assert "Unverified intern" not in body

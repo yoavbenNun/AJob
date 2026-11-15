@@ -63,7 +63,7 @@ def test_google_ii_enrichment_requires_and_accepts_early_qualifications(monkeypa
     monkeypatch.setattr(scan, 'CareersScraper', lambda *_: SimpleNamespace(
         scan_company=lambda _: SimpleNamespace(error=None, jobs=[job])))
     def enrich(browser, target, timeout):
-        target.description = ('place\nHaifa, Israel\nbar_chart\nEarly\nApply\n'
+        target.description = ('Software Engineer II\nplace\nHaifa, Israel\nbar_chart\nEarly\nApply\n'
                               'Minimum qualifications:\n1 year of experience with software development.\n'
                               'Preferred qualifications:\nMaster degree.')
     monkeypatch.setattr(scan, '_enrich_job', enrich)

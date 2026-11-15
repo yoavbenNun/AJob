@@ -193,4 +193,4 @@ def test_legacy_composer_excludes_dismissed_recommendations(delivery):
     for recommendations in (None, (recommendation,)):
         message = compose_scan_summary(settings, summary, recommendations)
         assert job.job_url not in message.get_content()
-        assert '0 new matching' in message['Subject']
+        assert ('0 new matching' if recommendations is not None else '0 new role(s) for review') in message['Subject']
