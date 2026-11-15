@@ -11,8 +11,8 @@ from src.scrapers.careers_scraper import CareersScraper, _enrich_job
 from test_job_filter import google_early_ii
 
 
-@pytest.mark.parametrize("fail", [False, True])
-def test_google_israel_search_preserves_paginated_global_roles_and_runs_existing_filter(fail):
+@pytest.mark.parametrize("failure", [None, "navigation", "page_creation", "page_cleanup"])
+def test_google_israel_search_preserves_paginated_global_roles_and_runs_existing_filter(failure):
     company = next(c for c in load_companies("config/companies.yaml") if c.name == "Google")
     target = google_early_ii()
     calls = []
@@ -35,7 +35,7 @@ def test_google_israel_search_preserves_paginated_global_roles_and_runs_existing
             if "location" in query:
                 assert query["location"] == ["Israel"]
                 assert set(query["target_level"]) == {"EARLY", "INTERN_AND_APPRENTICE"}
-                if fail:
+                if failure == "navigation":
                     route.fulfill(status=503)
                     return
                 body = f'<a href="{target.job_url}"></a><a href="{google.SEARCH}100-renamed?location=Israel"></a>'
@@ -47,16 +47,38 @@ def test_google_israel_search_preserves_paginated_global_roles_and_runs_existing
             route.fulfill(content_type="text/html", body=body)
 
         context.route("**/*", serve)
-        scraper = CareersScraper(context, timeout_ms=2000)
+        created = []
+
+        class SimulatedBrowser:
+            def new_page(self):
+                if failure == "page_creation" and created:
+                    raise RuntimeError("simulated page creation failure")
+                page = context.new_page()
+                created.append(page)
+                if failure == "page_cleanup" and len(created) == 2:
+                    close = page.close
+
+                    def fail_close():
+                        close()
+                        raise RuntimeError("simulated page cleanup failure")
+
+                    page.close = fail_close
+                return page
+
+        scraper = CareersScraper(SimulatedBrowser(), timeout_ms=2000)
         result = scraper.scan_company(company)
         jobs = {google.job_id(job.job_url): job for job in result.jobs}
-        assert len(calls) == 3
+        assert len(calls) == (2 if failure == "page_creation" else 3)
+        assert all(page.is_closed() for page in created)
         assert list(jobs)[:2] == ["100", "101"]
         assert jobs["100"].job_url.endswith("100-software-engineering-intern?q=software+intern")
-        assert len(result.jobs) == (2 if fail else 3)
-        assert result.error == ("GoogleDiscoveryIncomplete" if fail else None)
+        assert len(result.jobs) == (2 if failure in {"navigation", "page_creation"} else 3)
+        assert result.error == ("GoogleDiscoveryIncomplete" if failure else None)
+        if failure in {"page_creation", "page_cleanup"}:
+            assert result.failure_details["stage"] == failure
+            assert result.failure_details["exception_type"] == "RuntimeError"
         assert result.closure_snapshot is None
-        if not fail:
+        if failure is None:
             job = jobs[google.job_id(target.job_url)]
             assert prefilter_job(job).relevant
             assert _enrich_job(context, job, 2000) is None

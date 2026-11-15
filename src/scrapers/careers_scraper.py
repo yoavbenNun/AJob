@@ -201,13 +201,17 @@ class CareersScraper:
 
     def _scan_rendered(self, company: Company, *, apple_listing: bool = False,
                        google_listing: bool = False) -> CompanyScanResult:
-        page = self.browser.new_page()
+        page = None
+        result = None
+        stage = "page_creation"
         scoped_listing = apple_listing or google_listing
         jobs_by_url: dict[str, JobPosting] = {}
         apple_seen = set()
         google_seen = set()
         apple_incomplete = False
         try:
+            page = self.browser.new_page()
+            stage = "fetch"
             response = page.goto(
                 company.careers_url,
                 wait_until="domcontentloaded",
@@ -261,22 +265,31 @@ class CareersScraper:
                 if not (_go_to_next_page(page, strict=True) if scoped_listing else _go_to_next_page(page)):
                     break
                 page.wait_for_timeout(1_000)
-            return CompanyScanResult(
+            result = CompanyScanResult(
                 company=company,
                 jobs=list(jobs_by_url.values()),
                 error="AppleInvalidListingCard" if apple_incomplete else None,
             )
         except PlaywrightTimeoutError as error:
-            return CompanyScanResult(
+            result = CompanyScanResult(
                 company=company,
                 jobs=list(jobs_by_url.values()) if scoped_listing else [],
-                error=f"Timed out after {self.timeout_ms} ms", failure_details=source_failure(error),
+                error=f"Timed out after {self.timeout_ms} ms", failure_details=source_failure(error, stage),
             )
         except Exception as error:  # A single broken site must not stop the scan.
-            return CompanyScanResult(company=company, jobs=list(jobs_by_url.values()) if scoped_listing else [],
-                                     error=type(error).__name__, failure_details=source_failure(error))
+            result = CompanyScanResult(company=company, jobs=list(jobs_by_url.values()) if scoped_listing else [],
+                                       error=type(error).__name__, failure_details=source_failure(error, stage))
         finally:
-            page.close()
+            if page is not None:
+                try:
+                    page.close()
+                except Exception as error:
+                    if not google_listing:
+                        raise
+                    if result is not None and not result.error:
+                        result.error = type(error).__name__
+                        result.failure_details = source_failure(error, "page_cleanup")
+        return result
 
     def _scan_workday(self, company: Company) -> CompanyScanResult:
         """Read Workday's public careers JSON endpoint for configured tenants."""
