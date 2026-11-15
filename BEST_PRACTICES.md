@@ -1,5 +1,12 @@
 # Project Best Practices
 
+- Google search context travels in detail URLs. Union bounded discovery
+  searches by the numeric posting ID and reuse stored URL aliases without
+  treating the search filters as evidence of employer level or eligibility.
+- Treat page creation and cleanup as fallible parts of each Google query;
+  either failure must preserve already collected listings and mark coverage incomplete.
+  Preserve the first query diagnostic when a later query also fails.
+
 - Provider career-level labels must be verified in the posting's structured
   header and checked against mandatory requirements before overriding title
   heuristics; missing detail must not alter an existing job's classification.
