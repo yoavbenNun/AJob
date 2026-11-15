@@ -11,7 +11,9 @@ from src.scrapers.careers_scraper import CareersScraper, _enrich_job
 from test_job_filter import google_early_ii
 
 
-@pytest.mark.parametrize("failure", [None, "navigation", "page_creation", "page_cleanup"])
+@pytest.mark.parametrize("failure", [
+    None, "navigation", "page_creation", "page_cleanup", "cross_search", "same_page",
+])
 def test_google_israel_search_preserves_paginated_global_roles_and_runs_existing_filter(failure):
     company = next(c for c in load_companies("config/companies.yaml") if c.name == "Google")
     target = google_early_ii()
@@ -35,11 +37,14 @@ def test_google_israel_search_preserves_paginated_global_roles_and_runs_existing
             if "location" in query:
                 assert query["location"] == ["Israel"]
                 assert set(query["target_level"]) == {"EARLY", "INTERN_AND_APPRENTICE"}
-                if failure == "navigation":
+                if failure in {"navigation", "same_page"}:
                     route.fulfill(status=503)
                     return
                 body = f'<a href="{target.job_url}"></a><a href="{google.SEARCH}100-renamed?location=Israel"></a>'
             elif query.get("page") == ["2"]:
+                if failure == "cross_search":
+                    route.fulfill(status=503)
+                    return
                 body = f'<a href="{google.SEARCH}101-software-engineering-student"></a>'
             else:
                 body = (f'<a href="{google.SEARCH}100-software-engineering-intern?q=software+intern"></a>'
@@ -55,7 +60,7 @@ def test_google_israel_search_preserves_paginated_global_roles_and_runs_existing
                     raise RuntimeError("simulated page creation failure")
                 page = context.new_page()
                 created.append(page)
-                if failure == "page_cleanup" and len(created) == 2:
+                if failure in {"page_cleanup", "cross_search", "same_page"} and len(created) == 2:
                     close = page.close
 
                     def fail_close():
@@ -70,13 +75,17 @@ def test_google_israel_search_preserves_paginated_global_roles_and_runs_existing
         jobs = {google.job_id(job.job_url): job for job in result.jobs}
         assert len(calls) == (2 if failure == "page_creation" else 3)
         assert all(page.is_closed() for page in created)
-        assert list(jobs)[:2] == ["100", "101"]
+        expected = ["100"] if failure == "cross_search" else ["100", "101"]
+        if failure in {None, "page_cleanup", "cross_search"}:
+            expected.append(google.job_id(target.job_url))
+        assert [google.job_id(job.job_url) for job in result.jobs] == expected
         assert jobs["100"].job_url.endswith("100-software-engineering-intern?q=software+intern")
-        assert len(result.jobs) == (2 if failure in {"navigation", "page_creation"} else 3)
         assert result.error == ("GoogleDiscoveryIncomplete" if failure else None)
         if failure in {"page_creation", "page_cleanup"}:
             assert result.failure_details["stage"] == failure
             assert result.failure_details["exception_type"] == "RuntimeError"
+        elif failure:
+            assert result.failure_details["stage"] == "fetch"
         assert result.closure_snapshot is None
         if failure is None:
             job = jobs[google.job_id(target.job_url)]

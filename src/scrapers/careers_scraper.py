@@ -134,7 +134,7 @@ class CareersScraper:
             failure = None
             for url in (company.careers_url, google.ISRAEL_EARLY):
                 result = self._scan_rendered(replace(company, careers_url=url), google_listing=True)
-                if result.error:
+                if result.error and failure is None:
                     failure = result
                 for job in result.jobs:
                     job.source = company.careers_url
