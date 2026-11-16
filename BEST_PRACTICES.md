@@ -1,5 +1,9 @@
 # Project Best Practices
 
+- Treat a backslash between adjacent bachelor and master degree labels as a
+  source-specific alternative; unrelated path separators cannot change a
+  mandatory postgraduate requirement.
+
 - Google search context travels in detail URLs. Union bounded discovery
   searches by the numeric posting ID and reuse stored URL aliases without
   treating the search filters as evidence of employer level or eligibility.
