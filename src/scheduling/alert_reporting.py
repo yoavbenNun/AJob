@@ -59,7 +59,7 @@ def failure_events(store, rows):
         if row.get('outcome') in {'FULL', 'SCHEDULED', 'RUNNING'}:
             continue
         if row.get('alert_scope') == 'historical_scan_failure':
-            continue  # Preserve existing seven-day history policy, not window state.
+            continue  # Historical warning scope does not change the window outcome.
         if row.get('outcome') not in {'PARTIAL_RECOVERABLE', 'FINAL_FAILURE', 'UNKNOWN'}:
             raise RuntimeError('Unknown alert outcome')
         event = {key: row[key] for key in (

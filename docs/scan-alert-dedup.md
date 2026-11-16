@@ -13,6 +13,12 @@ unresolved operational window for seven days. GitHub failure notifications follo
 workflow failure, not whether its annotation describes a new incident. Repeated
 wake-ups therefore repeated an old failure even without scanning or sending mail.
 
+The report now ages finalized scan-only incidents to warning scope 24 hours
+after the window deadline, provided delivery was sent and no lease is expired.
+This applies to both exit paths without enabling receipt deduplication. If no
+workflow reports during those 24 hours, an expired scan-only incident may first
+appear as a warning; unfinished delivery and unknown health still fail closed.
+
 The opt-in reporting path separates:
 
 1. Business window: FULL/PARTIAL_RECOVERABLE/FINAL_FAILURE/UNKNOWN remain unchanged.
@@ -93,8 +99,8 @@ After separate approval, an operator must:
 Do not manually pre-confirm historical receipts or run a Production scan to test.
 If disabled again (variable0/unset), legacy strict exit semantics return immediately.
 Retain optional tables, receipts and all original incident/window history; rollback
-does not delete data or replay email. At seven days the existing historical
-scan-only aging policy still applies; this feature does not change or erase it.
+does not delete data or replay email. The 24-hour scan-only aging policy still
+applies with the receipt mechanism on or off.
 
 ## Acceptance checks
 

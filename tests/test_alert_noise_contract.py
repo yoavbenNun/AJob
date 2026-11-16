@@ -43,7 +43,7 @@ def test_42789814970_old_pair_is_not_the_cause_of_a_fresh_failure(database, monk
 def test_acknowledgement_changes_reporting_exit_not_incident_or_mail(database, monkeypatch):
     _, store = database
     rows = historical_pair() + [
-        expired("2026-11-07T08:17:00+02:00", "2026-11-07T08:17:00+00:00")
+        expired("2026-11-10T08:17:00+02:00", "2026-11-10T08:17:00+00:00")
     ]
     original = deepcopy(rows)
     assert check(store, rows, 101) == 1

@@ -33,11 +33,11 @@ def test_historical_outcome_is_not_rewritten_and_does_not_fail_current_success(s
 
 
 @pytest.mark.parametrize('age,historical', [
-    (timedelta(days=6, hours=23, minutes=59), False),
-    (timedelta(days=7), True),
+    (timedelta(hours=23, minutes=59), False),
+    (timedelta(days=1), True),
     (timedelta(days=40), True),
 ])
-def test_seven_day_alert_period_uses_deadline(age, historical):
+def test_one_day_alert_period_uses_deadline(age, historical):
     row = incident(deadline=(REFERENCE - age).isoformat())
     assert (row['alert_scope'] == 'historical_scan_failure') is historical
     assert report_exit_code([row]) == int(not historical)
@@ -66,6 +66,17 @@ def test_fresh_failure_still_fails_beside_historical_incident():
     assert report_exit_code([dict(outcome='FINAL_FAILURE')]) == 1
 
 
+def test_november_15_full_windows_do_not_fail_on_prior_expired_scans():
+    reference = datetime(2026, 11, 15, 20, tzinfo=timezone.utc)
+    rows = [dict(outcome='FULL') for _ in range(3)]
+    for day, hour in ((9, 8), (10, 11), (14, 16)):
+        old = incident(deadline=datetime(2026, 11, day, hour, 17, tzinfo=timezone.utc).isoformat())
+        old['alert_scope'] = window_alert_scope(old, reference)
+        rows.append(old)
+    assert report_exit_code(rows) == 0
+    assert all(row['outcome'] == 'FINAL_FAILURE' for row in rows[3:])
+
+
 @pytest.fixture
 def environment(tmp_path):
     repo = JobRepository(tmp_path / 'jobs.db')
@@ -90,7 +101,7 @@ def expire_incident(environment):
                       (clock().isoformat(),))
     finally:
         store.close()
-    clock.advance(days=10)
+    clock.advance(days=2)
     return sent
 
 
@@ -105,7 +116,7 @@ def test_new_full_window_succeeds_without_replaying_or_relabeling_old_scan(envir
         return DurableSummary(status='full')
     assert scheduled_tick(COMPANIES, repo, SETTINGS, clock=clock, scanner=full,
                           sender=lambda _, msg: sent.append(msg)) == 0
-    assert len(calls) == 1 and calls[0].startswith('2026-07-11')
+    assert len(calls) == 1 and calls[0].startswith('2026-07-03')
     assert len(sent) == 2  # One old summary and one new summary; no replay.
     store = WindowStore(repo, clock)
     try:
@@ -177,6 +188,8 @@ def test_cli_historical_report_remains_read_only_and_visible(environment, monkey
     monkeypatch.setattr(window_store, 'WindowStore', lambda repository: WindowStore(repository, clock))
     before = repo.database_path.read_bytes()
     assert main.main(['scan-report', '--database', str(repo.database_path), '--check']) == int(orphan_state is not None)
+    monkeypatch.delenv('AJOB_SCAN_ALERT_DEDUP', raising=False)
+    assert main.main(['scan-report', '--database', str(repo.database_path), '--check', '--alert-check']) == int(orphan_state is not None)
     output = capsys.readouterr().out
     assert 'FINAL_FAILURE' in output and 'historical_scan_failure' in output
     assert repo.database_path.read_bytes() == before
