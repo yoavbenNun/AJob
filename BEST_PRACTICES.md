@@ -22,6 +22,8 @@
 - Apple detail assets can stall DOMContentLoaded after the posting is usable.
   Wait for navigation commit and verify the role number, heading and populated
   detail sections within the original timeout before replacing listing evidence.
+- A listing snippet is not verified detail. Carry enrichment validity through
+  the worker event and SQL upsert; do not infer it from nonempty text.
 
 - Historical relevance recovery must compare the reviewed source snapshot and
   lifecycle status before writing. Relevance is not personal eligibility, and

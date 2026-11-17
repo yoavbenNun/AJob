@@ -150,7 +150,7 @@ class PostgresJobRepository:
                 "UPDATE job_postings SET job_url = %s WHERE id = %s", updates
             )
 
-    def save(self, job: JobPosting) -> int:
+    def save(self, job: JobPosting, *, detail_verified: bool = True) -> int:
         if job.discovered_at is None:
             raise ValueError("Job posting must have a discovery timestamp.")
         normalized_url = canonical_url(job.job_url)
@@ -167,20 +167,22 @@ class PostgresJobRepository:
                 ON CONFLICT(job_url) DO UPDATE SET
                     title = EXCLUDED.title,
                     company = EXCLUDED.company,
-                    location = EXCLUDED.location,
+                    location = CASE WHEN %s THEN EXCLUDED.location ELSE job_postings.location END,
                     description = CASE WHEN %s THEN EXCLUDED.description ELSE job_postings.description END,
                     requirements = CASE WHEN %s THEN EXCLUDED.requirements ELSE job_postings.requirements END,
                     source = EXCLUDED.source,
                     discovered_at = EXCLUDED.discovered_at,
-                    is_relevant = EXCLUDED.is_relevant
+                    is_relevant = CASE WHEN %s THEN EXCLUDED.is_relevant ELSE job_postings.is_relevant END
                 RETURNING id
                 """,
                 (
                     job.title, job.company, job.location, job.job_url,
-                    job.description, job.requirements, job.source,
+                    job.description if detail_verified else "", job.requirements if detail_verified else "", job.source,
                     job.discovered_at, job.is_relevant, job.status,
-                    description_problem(job.description) is None,
-                    description_problem(job.description, job.requirements) is None,
+                    detail_verified,
+                    detail_verified and description_problem(job.description) is None,
+                    detail_verified and description_problem(job.description, job.requirements) is None,
+                    detail_verified,
                 ),
             )
             row = cursor.fetchone()

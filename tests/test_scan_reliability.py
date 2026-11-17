@@ -44,6 +44,47 @@ def test_atomic_discovery_and_status_preservation(store):
     assert len(store.prepare_batch('slot')) == 1
 
 
+def unverified_worker(company, timeout, pages, headless, pipe):
+    for url in ("https://example.test/jobs/1", "https://example.test/jobs/2"):
+        pipe.send(("job", True, JobPosting("Software Engineering Student", company.name, "Herzliya",
+                                          url, description="Herzliya"), False))
+    pipe.send(("error", "JobDetailUnavailable"))
+    pipe.close()
+
+
+def test_failed_detail_retains_verified_evidence_and_stores_only_new_listing_metadata(store):
+    company = Company("Example", "https://example.test/jobs")
+    original = job()
+    original.description = "Develop backend software."
+    original.requirements = "Python required."
+    original.status = "ignored"
+    original.is_relevant = False
+    assert store.save_discovery(original, "old")
+    previous_outbox = dict(store.execute("SELECT * FROM notification_outbox WHERE job_id=?",
+                                        (original.id,)).fetchone())
+    run = store.start_run("refresh")
+    summary = scan_with_budgets([company], store, run, "refresh", worker=unverified_worker)
+    assert summary.jobs_relevant == 0 and summary.jobs_saved == 2 and summary.failures == 1
+    retained = store.repository.get_by_id(original.id)
+    assert (retained.description, retained.requirements, retained.status, retained.is_relevant) == (
+        original.description, original.requirements, "ignored", False)
+    assert retained.location == original.location
+    assert dict(store.execute("SELECT * FROM notification_outbox WHERE job_id=?",
+                              (original.id,)).fetchone()) == previous_outbox
+    assert len(summary.new_jobs) == 1 and summary.new_jobs[0].description == ""
+    fresh = store.repository.get_by_url("https://example.test/jobs/2")
+    assert fresh.location == "Herzliya"
+    assert fresh.description == fresh.requirements == ""
+    payload = json.loads(store.execute("SELECT snapshot FROM notification_outbox WHERE job_id=?",
+                                       (fresh.id,)).fetchone()["snapshot"])
+    assert payload["description"] == payload["requirements"] == ""
+    fresh.description = "Build and maintain services."
+    fresh.requirements = "Python."
+    assert not store.save_discovery(fresh, "verified")
+    assert store.repository.get_by_id(fresh.id).description == fresh.description
+    assert len(store.execute("SELECT * FROM notification_outbox").fetchall()) == 2
+
+
 def test_interruption_after_save_recovers_in_next_slot(store, settings):
     run = store.start_run('old')
     store.save_discovery(job(), 'old')

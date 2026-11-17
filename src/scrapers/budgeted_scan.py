@@ -96,6 +96,7 @@ def source_worker(company, timeout_ms, max_pages, headless, pipe):
         detail_failures = 0
         detail_blocked = False
         for job in result.jobs:
+            invalid_detail = None
             pipe.send(("phase", "processing"))
             started = time.monotonic()
             preliminary = prefilter_job(job)
@@ -132,7 +133,7 @@ def source_worker(company, timeout_ms, max_pages, headless, pipe):
                 pipe.send(("timing", "processing_seconds", time.monotonic() - started))
             else:
                 accepted = False
-            pipe.send(("job", accepted, job))
+            pipe.send(("job", accepted, job, not invalid_detail))
         # A partially invalid Melio feed can still contain usable discoveries.
         # Deliver those events first, but leave this source retryable instead of
         # marking incomplete coverage as a successful scan.
@@ -244,7 +245,8 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
                     elif event[0] == 'invalid_description':
                         metrics['filtering']['invalid_description_retained'] += 1
                     elif event[0] == "job":
-                        _, accepted, job = event
+                        _, accepted, job, *detail_state = event
+                        detail_verified = not detail_state or detail_state[0]
                         identity = amazon_job_id(job.job_url) if supports_amazon(company) else None
                         if identity and job.job_url not in known:
                             job.job_url = amazon_urls.get(identity, job.job_url)
@@ -261,8 +263,10 @@ def scan_with_budgets(companies, store, run_id, slot, *, source_seconds=300,
                         before = store.statements
                         if accepted:
                             job.is_relevant = True
-                            summary.jobs_relevant += 1
-                            if store.save_discovery(job, slot):
+                            summary.jobs_relevant += int(detail_verified)
+                            inserted = (store.save_discovery(job, slot) if detail_verified
+                                        else store.save_discovery(job, slot, detail_verified=False))
+                            if inserted:
                                 summary.new_jobs.append(job)
                                 metrics['new_jobs_saved'] += 1
                             else:

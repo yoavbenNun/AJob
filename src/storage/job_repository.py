@@ -101,7 +101,7 @@ class JobRepository:
                 (error[:500], slot_key),
             )
 
-    def save(self, job: JobPosting) -> int:
+    def save(self, job: JobPosting, *, detail_verified: bool = True) -> int:
         """Insert or update a posting by URL and return its database ID."""
         if job.discovered_at is None:
             raise ValueError("Job posting must have a discovery timestamp.")
@@ -120,26 +120,28 @@ class JobRepository:
                 ON CONFLICT(job_url) DO UPDATE SET
                     title = excluded.title,
                     company = excluded.company,
-                    location = excluded.location,
+                    location = CASE WHEN ? THEN excluded.location ELSE job_postings.location END,
                     description = CASE WHEN ? THEN excluded.description ELSE job_postings.description END,
                     requirements = CASE WHEN ? THEN excluded.requirements ELSE job_postings.requirements END,
                     source = excluded.source,
                     discovered_at = excluded.discovered_at,
-                    is_relevant = excluded.is_relevant
+                    is_relevant = CASE WHEN ? THEN excluded.is_relevant ELSE job_postings.is_relevant END
                 """,
                 (
                     job.title,
                     job.company,
                     job.location,
                     job.job_url,
-                    job.description,
-                    job.requirements,
+                    job.description if detail_verified else "",
+                    job.requirements if detail_verified else "",
                     job.source,
                     job.discovered_at.isoformat(),
                     int(job.is_relevant),
                     job.status,
-                    description_problem(job.description) is None,
-                    description_problem(job.description, job.requirements) is None,
+                    detail_verified,
+                    detail_verified and description_problem(job.description) is None,
+                    detail_verified and description_problem(job.description, job.requirements) is None,
+                    detail_verified,
                 ),
             )
             row = connection.execute(

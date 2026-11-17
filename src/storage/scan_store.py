@@ -129,10 +129,12 @@ class ScanStore:
     def validate_write(self):
         """Overridden by the scheduled scanner to fence an expired owner."""
 
-    def save_discovery(self, job, slot):
+    def save_discovery(self, job, slot, *, detail_verified=True):
         job.job_url = canonical_url(job.job_url)
         if not job.job_url or job.discovered_at is None:
             raise ValueError("Discovery requires canonical URL and timestamp")
+        if not detail_verified:
+            job.description = job.requirements = ""
         values = (job.title, job.company, job.location, job.job_url, job.description,
                   job.requirements, job.source, job.discovered_at.isoformat(),
                   job.is_relevant if self.postgres else int(job.is_relevant), job.status)
@@ -147,13 +149,14 @@ class ScanStore:
                 payload["discovered_at"] = job.discovered_at.isoformat()
                 self.execute("INSERT INTO notification_outbox(job_id,origin_slot,snapshot) VALUES (?,?,?)", (job.id, slot, json.dumps(payload)))
             else:
-                valid = description_problem(job.description, job.requirements) is None
-                self.execute("""UPDATE job_postings SET title=?,company=?,location=?,
+                valid = detail_verified and description_problem(job.description, job.requirements) is None
+                self.execute("""UPDATE job_postings SET title=?,company=?,location=CASE WHEN ? THEN ? ELSE location END,
                     description=CASE WHEN ? THEN ? ELSE description END,
                     requirements=CASE WHEN ? THEN ? ELSE requirements END,
-                    source=?,discovered_at=?,is_relevant=? WHERE job_url=?""",
-                    values[:3] + (description_problem(job.description) is None, job.description,
-                                  valid, job.requirements) + values[6:9] + (job.job_url,))
+                    source=?,discovered_at=?,is_relevant=CASE WHEN ? THEN ? ELSE is_relevant END WHERE job_url=?""",
+                    values[:2] + (detail_verified, job.location,
+                                  detail_verified and description_problem(job.description) is None, job.description,
+                                  valid, job.requirements) + values[6:8] + (detail_verified, values[8], job.job_url))
                 job.id = int(self.execute("SELECT id FROM job_postings WHERE job_url=?", (job.job_url,)).fetchone()["id"])
         return bool(inserted)
 

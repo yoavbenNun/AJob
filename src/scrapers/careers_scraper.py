@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, urljoin, urlsplit
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 import json
+import logging
 import re
 import time
 
@@ -38,7 +39,7 @@ WORKDAY_SEARCH_TERMS = (
 class JobWriter(Protocol):
     """Minimal persistence boundary needed by scan orchestration."""
 
-    def save(self, job: JobPosting) -> int: ...
+    def save(self, job: JobPosting, *, detail_verified: bool = True) -> int: ...
     def get_by_url(self, job_url: str) -> JobPosting | None: ...
     def list_all(self) -> list[JobPosting]: ...
     def update_relevance_by_url(self, job_url: str, is_relevant: bool) -> None: ...
@@ -483,8 +484,9 @@ def scan_companies(
                         repository.update_relevance_by_url(stored_url or job.job_url, False)
                         print(f"  Skipped: {job.title} - {decision.reason}")
                         continue
-                    summary.jobs_relevant += 1
-                    relevant_for_company += 1
+                    if not invalid_detail:
+                        summary.jobs_relevant += 1
+                        relevant_for_company += 1
                     if stored_url:
                         job.job_url = stored_url
                     existing = repository.get_by_url(job.job_url)
@@ -493,7 +495,11 @@ def scan_companies(
                         existing = repository.get_by_url(alias)
                         if existing is not None:
                             job.job_url = existing.job_url
-                    repository.save(job)
+                    if invalid_detail:
+                        job.description = job.requirements = ""
+                        repository.save(job, detail_verified=False)
+                    else:
+                        repository.save(job)
                     if existing is None:
                         summary.new_jobs.append(job)
                     summary.jobs_saved += 1
@@ -638,9 +644,12 @@ def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> str | Non
         # The official feed already supplies full content and precise location.
         # Custom careers sites may return an anti-bot page that would overwrite it.
         return
-    page = browser.new_page()
+    is_apple = apple.job_id(job.job_url) is not None
+    page = None if is_apple else browser.new_page()
     try:
-        if apple.job_id(job.job_url):
+        if page is None:
+            page = browser.new_page()
+        if is_apple:
             text, status = apple.read_detail(page, job, timeout_ms)
         else:
             response = page.goto(job.job_url, wait_until="domcontentloaded", timeout=timeout_ms)
@@ -658,11 +667,19 @@ def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> str | Non
             detail_location = extract_detail_location(normalized)
             if detail_location:
                 job.location = detail_location
-    except Exception:
+    except Exception as error:
         # Card data is still useful when an individual detail page is unavailable.
+        if is_apple:
+            logging.getLogger(__name__).warning("Apple detail unavailable: %s", type(error).__name__)
         return 'JobDetailUnavailable'
     finally:
-        page.close()
+        if page is not None:
+            try:
+                page.close()
+            except Exception as error:
+                if not is_apple:
+                    raise
+                logging.getLogger(__name__).warning("Apple detail cleanup failed: %s", type(error).__name__)
 
 
 def extract_requirements(description: str) -> str:

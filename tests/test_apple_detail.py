@@ -12,7 +12,8 @@ TITLE = "Software Engineering Student"
 
 
 @pytest.mark.parametrize("scenario", ["usable", "wrong_title", "wrong_id", "empty_requirements",
-                                      "loading_requirements", "empty_description", "http_error"])
+                                      "loading_requirements", "please_wait", "mixed_postings",
+                                      "empty_description", "http_error"])
 def test_apple_detail_waits_for_verified_content_without_domcontentloaded(scenario):
     title = "Other Role" if scenario == "wrong_title" else TITLE
     role = "200676939-6109" if scenario == "wrong_id" else "200676939-0865"
@@ -20,6 +21,10 @@ def test_apple_detail_waits_for_verified_content_without_domcontentloaded(scenar
     qualifications = "" if scenario == "empty_requirements" else "<p>Currently pursuing a degree.</p>"
     if scenario == "loading_requirements":
         qualifications = "<p>Loading qualifications…</p>"
+    if scenario == "please_wait":
+        qualifications = "<p>Please wait...</p>"
+    if scenario == "mixed_postings":
+        qualifications = '<p>Role Number:</p><p>200676939-6109</p><p>Other posting requirements.</p>'
     html = f"""<head><script defer src="/stalled.js"></script></head><main>
         <h1>{title}</h1><p>Role Number:</p><p>{role}</p>
         <h2>Description</h2><p>{desc}</p>
@@ -58,3 +63,27 @@ def test_apple_detail_waits_for_verified_content_without_domcontentloaded(scenar
             assert job.description == "Retained listing evidence" and job.requirements == "Prior requirements"
         assert context.pages == []
         browser.close()
+
+
+@pytest.mark.parametrize("primary", [TimeoutError, KeyboardInterrupt])
+def test_apple_cleanup_does_not_mask_primary_failure_or_cancellation(primary, caplog):
+    class Page:
+        def goto(self, *args, **kwargs):
+            raise primary()
+
+        def close(self):
+            raise RuntimeError()
+
+    class Browser:
+        def new_page(self):
+            return Page()
+
+    job = JobPosting(TITLE, "Apple", "Herzliya", URL, description="Original")
+    if primary is KeyboardInterrupt:
+        with pytest.raises(KeyboardInterrupt):
+            _enrich_job(Browser(), job, 1000)
+    else:
+        assert _enrich_job(Browser(), job, 1000) == "JobDetailUnavailable"
+        assert "Apple detail unavailable: TimeoutError" in caplog.text
+    assert "Apple detail cleanup failed: RuntimeError" in caplog.text
+    assert job.description == "Original"
