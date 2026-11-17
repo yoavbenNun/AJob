@@ -147,13 +147,15 @@ def test_detail_fetch_checks_http_and_body_before_overwriting(text, status):
 def test_worker_reports_detail_failure_once_and_keeps_other_discoveries(monkeypatch):
     from src.scrapers import budgeted_scan as scan
     monkeypatch.setattr(scan.os, 'setsid', lambda: None, raising=False)
-    invalid = job(description='Page not found.', requirements='')
+    invalid = job(description='Herzliya', requirements='')
     valid = job(job_url='https://example.test/other')
     class Scraper:
         def __init__(self, *_): pass
         def scan_company(self, _): return SimpleNamespace(error=None, jobs=[invalid, valid])
     monkeypatch.setattr(scan, 'CareersScraper', Scraper)
-    monkeypatch.setattr(scan, '_enrich_job', lambda *args: None)
+    monkeypatch.setattr(scan, '_enrich_job', lambda browser, posting, timeout: (
+        'JobDetailUnavailable' if posting is invalid else None
+    ))
     class Pipe:
         def __init__(self): self.events = []
         def send(self, event): self.events.append(event)
@@ -161,5 +163,6 @@ def test_worker_reports_detail_failure_once_and_keeps_other_discoveries(monkeypa
     pipe = Pipe()
     scan.source_worker(Company('Example', 'https://example.test/jobs'), 1000, 1, True, pipe)
     assert len([event for event in pipe.events if event[0] == 'job']) == 2
+    assert [event[3] for event in pipe.events if event[0] == 'job'] == [False, True]
     assert pipe.events[-1] == ('error', 'JobDetailUnavailable')
     assert sum(event[0] == 'error' for event in pipe.events) == 1
