@@ -108,6 +108,7 @@ def classify_job(job: JobPosting) -> FilterDecision:
     if not software_title or hardware_focused_title or process_quality_title:
         responsibility_text = re.split(
             r"minimum qualifications|basic qualifications|preferred qualifications|"
+            r"^[ \t]*experience[ \t]+required[ \t]*(?::|$)|"
             r"^\s*:?\s*(?:(?:job|minimum|basic|preferred|required)\s+)?"
             r"(?:requirements(?:\s+and\s+qualifications)?|qualifications(?:\s+and\s+requirements)?)"
             r"\s*(?::|$)|\brequirements\s*:",

@@ -249,6 +249,20 @@ def test_full_stack_mentions_without_positive_development_duties_are_not_relevan
     assert not classify_job(job).relevant
 
 
+def test_experience_required_section_does_not_supply_development_duties():
+    job = make_job('Engineering Student')
+    job.description = ('Responsibilities:\nResolve customer support tickets.\n'
+                       'Experience Required:\nBuilding full-stack applications with React.')
+    assert not classify_job(job).relevant
+
+
+def test_full_stack_responsibility_before_experience_required_is_preserved():
+    job = make_job('Engineering Student')
+    job.description = ('Responsibilities:\nBuild full stack applications for image inspection.\n'
+                       'Experience Required:\nReact knowledge.')
+    assert classify_job(job).relevant
+
+
 def test_student_infrastructure_role_with_script_and_pipeline_work_is_relevant() -> None:
     job = make_job("AI Infrastructure Engineer Intern")
     job.description = (
