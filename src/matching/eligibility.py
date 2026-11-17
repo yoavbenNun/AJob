@@ -66,17 +66,18 @@ def _academic_restrictions(clause, resume, job, *, hard, optional):
     backslash_match = re.search(
         BACHELORS + r'\s*\\\s*' + MASTERS + r'|' + MASTERS + r'\s*\\\s*' + BACHELORS, clause)
     backslash_alternative = bool(backslash_match)
+    remainder = (clause[:backslash_match.start()] + ' ' + clause[backslash_match.end():]
+                 if backslash_match else clause)
     explicit_master = bool(re.search(
         r'\b(?:must\s+(?:be|have|hold)|required\s+to\s+be|only)\s+(?:(?:a|an)\s+)?'
         + MASTERS + r'\s+(?:students?|degree)\b|'
         + MASTERS + r'\s+(?:students?|degree|program|enrollment|study|studies)\s+(?:(?:is|are)\s+)?(?:required|mandatory|only)\b|'
         + r'\b(?:must|required to)\s+be\s+(?:enrolled|studying)\s+(?:in|at)\s+(?:(?:a|an)\s+)?'
-        + MASTERS + r'\s+(?:program|degree|studies)\b', clause))
+        + MASTERS + r'\s+(?:program|degree|studies)\b', remainder))
     explicit_master = explicit_master or bool(re.search(
         r'\b(?:must\s+be\s+(?:(?:a|an)\s+)?|only\s+)(?:postgraduate|graduate)[ -]students?\b|'
-        r'\b(?:postgraduate|graduate)[ -]students?\s+(?:only|required)\b', clause))
+        r'\b(?:postgraduate|graduate)[ -]students?\s+(?:only|required)\b', remainder))
     if backslash_match and not explicit_master:
-        remainder = clause[:backslash_match.start()] + ' ' + clause[backslash_match.end():]
         if re.search(MASTERS + r'|\b(?:postgraduate|graduate)\b', remainder):
             doubts.append('Additional postgraduate wording needs confirmation.')
     lower_alternative = lower_alternative or (backslash_alternative and not explicit_master)

@@ -89,6 +89,12 @@ def test_backslash_in_unrelated_text_does_not_override_masters_requirement():
     assert match(requirement).eligibility_status == 'ineligible'
 
 
+def test_required_backslash_degree_pair_is_not_masters_only():
+    candidate = replace(STUDENT, education='B.Sc. Computer Engineering student; completed 4 semesters')
+    requirement = 'A B.Sc.\\M.Sc. degree required in Computer Engineering.'
+    assert match(requirement, resume=candidate).eligibility_status == 'potentially_eligible'
+
+
 @pytest.mark.parametrize('requirement', [
     "Must be a master's student currently enrolled in B.Sc.\\M.Sc. Computer Engineering.",
     "Must have a master's degree and be enrolled in B.Sc.\\M.Sc. Computer Engineering.",
