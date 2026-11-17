@@ -599,3 +599,6 @@ reusable lesson appears.
 
 - Production database diagnostics must prove READ ONLY inside the transaction;
   report missing, inaccessible and RLS-hidden metadata as distinct unknowns.
+
+- For generic engineering titles, distinguish responsibility for building
+  full-stack applications from helping customers use or build their own.

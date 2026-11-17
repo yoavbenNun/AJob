@@ -147,6 +147,18 @@ def classify_job(job: JobPosting) -> FilterDecision:
             any(_positive_software_phrase(clause, term) for term in detail_terms)
             for clause in software_clauses
         )
+        develops_software = develops_software or any(
+            _positive_software_phrase(clause, match.group('duty'))
+            and not re.match(r'(?:\s+|\s*:\s*)(?:(?:is|are)\s+)?(?:(?:a|an)\s+)?'
+                             r'(?:required|preferred|experience|qualification|prerequisite|skill)\b',
+                             clause[match.end():])
+            for clause in software_clauses
+            for match in [re.match(
+                r'^(?:[-*•]\s*)?(?:(?:you will(?: be)?|you are expected to|'
+                r'in this role you will|your responsibilities include)\s+)?'
+                r'(?P<duty>(?:build|building|develop|developing)\s+(?:a\s+)?full[- ]stack\s+applications?)\b', clause)]
+            if match
+        )
         if process_quality_title:
             # Preserve genuine coded-test work when the quality title alone no
             # longer suffices. Scope negation to the duty, not supervision or

@@ -212,6 +212,43 @@ def test_generic_student_title_needs_software_responsibilities() -> None:
     assert classify_job(job).relevant is True
 
 
+@pytest.mark.parametrize('duty', [
+    'Build full stack applications for image inspection.',
+    'Develop full-stack applications for production workflows.',
+    'Building full-stack applications for internal users.',
+    'Develop a full-stack application for production workflows.',
+    'You will build full stack applications for internal users.',
+])
+def test_generic_student_full_stack_application_development_is_relevant(duty):
+    job = make_job('Engineering Student')
+    job.description = duty
+    assert classify_job(job).relevant
+
+
+@pytest.mark.parametrize('description', [
+    'Do not build full stack applications; perform manual testing.',
+    'Never develop full-stack applications; review support tickets.',
+    'Support users of full stack applications.',
+    'Help customers build full stack applications.',
+    'Assist customers in building full stack applications.',
+    'Teach customers how to build full stack applications.',
+    'Support clients who are building full stack applications.',
+    'We do not expect you to build full stack applications.',
+    'Do not build full stack applications and help customers build full stack applications.',
+    'Experience required: building full stack applications.',
+    'Required skills: building full stack applications.',
+    'Building full stack applications is a required skill.',
+    'Building full stack applications experience required.',
+    'Building full stack applications: experience required.',
+    'Build full stack applications is a prerequisite.',
+    'Requirements:\nExperience building full stack applications.',
+])
+def test_full_stack_mentions_without_positive_development_duties_are_not_relevant(description):
+    job = make_job('Engineering Student')
+    job.description = description
+    assert not classify_job(job).relevant
+
+
 def test_student_infrastructure_role_with_script_and_pipeline_work_is_relevant() -> None:
     job = make_job("AI Infrastructure Engineer Intern")
     job.description = (
