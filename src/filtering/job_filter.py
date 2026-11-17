@@ -79,6 +79,27 @@ NON_ENGINEERING_ROLE_TERMS = (
     "sales",
 )
 
+# Headings, rather than qualification prose, delimit duty evidence.  Keep
+# unqualified "Experience" ambiguous: it can describe the role itself.
+QUALIFICATION_BOUNDARY = (
+    r"minimum qualifications|basic qualifications|preferred qualifications|"
+    r"^[ \t]*:?[ \t]*(?:"
+    r"(?:(?:job|minimum|basic|preferred|required)[ \t]+)?"
+    r"(?:requirements(?:[ \t]+and[ \t]+qualifications)?|qualifications(?:[ \t]+and[ \t]+requirements)?)|"
+    r"(?:experience|education|skills)[ \t]+(?:required|requirements|qualifications)|"
+    r"(?:required|minimum|basic|preferred)[ \t]+(?:experience|education|skills)"
+    r"(?:[ \t]+(?:requirements|qualifications))?|"
+    r"(?:(?:required|minimum|basic|preferred)[ \t]+)?"
+    r"(?:skills|experience|education|qualifications|requirements)"
+    r"(?:(?:[ \t]+and[ \t]+|[ \t]*[&/][ \t]*)"
+    r"(?:skills|experience|education|qualifications|requirements))+"
+    r"(?:[ \t]+(?:required|requirements))?|"
+    r"what you(?:'|’)ll (?:need|bring)|what you will (?:need|bring)|"
+    r"what we(?:'|’)re looking for|what we are looking for|what we look for|"
+    r"your (?:experience|skills|qualifications|education)"
+    r")[ \t]*(?::|$)|\brequirements\s*:"
+)
+
 
 @dataclass(frozen=True, slots=True)
 class FilterDecision:
@@ -107,12 +128,8 @@ def classify_job(job: JobPosting) -> FilterDecision:
     process_quality_title = _contains_phrase(title, "software quality")
     if not software_title or hardware_focused_title or process_quality_title:
         responsibility_text = re.split(
-            r"minimum qualifications|basic qualifications|preferred qualifications|"
-            r"^[ \t]*experience[ \t]+required[ \t]*(?::|$)|"
-            r"^\s*:?\s*(?:(?:job|minimum|basic|preferred|required)\s+)?"
-            r"(?:requirements(?:\s+and\s+qualifications)?|qualifications(?:\s+and\s+requirements)?)"
-            r"\s*(?::|$)|\brequirements\s*:",
-            job.description, maxsplit=1, flags=re.IGNORECASE | re.MULTILINE,
+            QUALIFICATION_BOUNDARY, job.description, maxsplit=1,
+            flags=re.IGNORECASE | re.MULTILINE,
         )[0]
         responsibilities = _normalize(responsibility_text)
         develops_code = any(

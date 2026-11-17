@@ -256,6 +256,44 @@ def test_experience_required_section_does_not_supply_development_duties():
     assert not classify_job(job).relevant
 
 
+@pytest.mark.parametrize('heading', [
+    'Experience Required', 'Required Experience', 'Experience Requirements',
+    'Required Qualifications', 'Minimum Qualifications', 'Preferred Qualifications',
+    'Requirements', 'Qualifications', 'Requirements and Qualifications',
+    'Required Education', 'Education Requirements', 'Required Skills',
+    "What you'll need", 'What you will need', 'Your Experience',
+    'Required Skills and Experience', 'Qualifications and Experience',
+    'Skills and Experience Required', 'Preferred Skills and Experience',
+    'Required Skills & Experience', "What You’ll Bring", "What We're Looking For",
+    'Requirements & Qualifications', 'Required Skills/Experience',
+    'What we look for', 'Your Qualifications',
+    'Minimum Experience Requirements', 'Education Qualifications',
+])
+@pytest.mark.parametrize('suffix', ['', ':'])
+@pytest.mark.parametrize('case', ['lower', 'upper'])
+def test_qualification_heading_cannot_create_development_responsibility(heading, suffix, case):
+    job = make_job('Engineering Student')
+    job.description = ('Responsibilities:\nResolve customer support tickets.\n'
+                       + getattr(heading, case)() + suffix + '\n'
+                       'Building full-stack applications with React.')
+    assert not classify_job(job).relevant
+
+
+@pytest.mark.parametrize('heading', ['Experience Required', 'Required Experience',
+                                    'Experience Requirements', 'Education Requirements'])
+def test_development_duty_before_qualification_boundary_is_retained(heading):
+    job = make_job('Engineering Student')
+    job.description = ('Responsibilities:\nBuild full stack applications for image inspection.\n'
+                       + heading + ':\nReact experience.')
+    assert classify_job(job).relevant
+
+
+def test_ambiguous_experience_heading_does_not_erase_existing_responsibilities():
+    job = make_job('Engineering Student')
+    job.description = 'Experience\nBuild full stack applications for image inspection.'
+    assert classify_job(job).relevant
+
+
 def test_full_stack_responsibility_before_experience_required_is_preserved():
     job = make_job('Engineering Student')
     job.description = ('Responsibilities:\nBuild full stack applications for image inspection.\n'
