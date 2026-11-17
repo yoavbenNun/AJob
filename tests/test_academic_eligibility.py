@@ -70,6 +70,75 @@ def test_counterexamples_preserve_student_eligibility(requirement):
     assert match(requirement).eligibility_status == 'student_eligible'
 
 
+@pytest.mark.parametrize('separator', ['/', '\\', ' or '])
+def test_apple_bachelor_or_master_alternative_accepts_listed_undergraduate(separator):
+    candidate = replace(STUDENT, education='B.Sc. Computer Engineering student; completed 4 semesters')
+    requirement = (f'Minimum Qualifications\nPursuing a B.Sc.{separator}M.Sc. in Electrical Engineering, '
+                   'Computer Engineering.\nStudents who have completed at least 3 semesters.')
+    job = JobPosting('Software Engineering Student', 'Apple', 'Jerusalem, Israel',
+                     'https://example.test/apple', description=requirement,
+                     requirements=requirement, status='reviewed')
+    before = replace(job)
+    result = match_resume_to_job(candidate, job)
+    assert result.eligibility_status == 'student_eligible'
+    assert job == before
+
+
+def test_backslash_in_unrelated_text_does_not_override_masters_requirement():
+    requirement = "Minimum Qualifications\nMaster's degree required in Computer Science. Path: tools\\scripts."
+    assert match(requirement).eligibility_status == 'ineligible'
+
+
+def test_required_backslash_degree_pair_is_not_masters_only():
+    candidate = replace(STUDENT, education='B.Sc. Computer Engineering student; completed 4 semesters')
+    requirement = 'A B.Sc.\\M.Sc. degree required in Computer Engineering.'
+    assert match(requirement, resume=candidate).eligibility_status == 'potentially_eligible'
+
+
+@pytest.mark.parametrize('requirement', [
+    "Must be a master's student currently enrolled in B.Sc.\\M.Sc. Computer Engineering.",
+    "Must have a master's degree and be enrolled in B.Sc.\\M.Sc. Computer Engineering.",
+    "Currently pursuing B.Sc.\\M.Sc. in Computer Engineering, only master's students accepted.",
+    "Currently pursuing B.Sc.\\M.Sc. in Computer Engineering, master's enrollment mandatory.",
+    "Currently pursuing B.Sc.\\M.Sc. in Computer Engineering, a master's degree is required.",
+    "B.Sc.\\M.Sc. candidates must be enrolled in a master's program.",
+    "B.Sc.\\M.Sc. in computer or electrical engineering, a master's degree is required.",
+    "Currently pursuing B.Sc.\\M.Sc. in Computer Engineering, must be a graduate student.",
+    "B.Sc.\\M.Sc. in Computer Engineering, graduate students only.",
+    "B.Sc.\\M.Sc. in Computer Engineering, only graduate students accepted.",
+])
+def test_explicit_masters_requirement_takes_precedence_over_backslash_alternative(requirement):
+    from src.matching.eligibility import assess_student_eligibility
+    candidate = replace(STUDENT, education='B.Sc. Computer Engineering student; completed 4 semesters')
+    assert match(requirement, resume=candidate).eligibility_status == 'ineligible'
+    job = JobPosting('Software Engineering Student', 'Apple', 'Israel', 'https://example.test/job', requirements=requirement)
+    assert assess_student_eligibility(candidate, job)[0] == 'ineligible'
+
+
+def test_additional_ambiguous_masters_mention_is_reviewable():
+    candidate = replace(STUDENT, education='B.Sc. Computer Engineering student; completed 4 semesters')
+    requirement = "Currently pursuing B.Sc.\\M.Sc. in Computer Engineering, master's program status applies."
+    assert match(requirement, resume=candidate).eligibility_status == 'potentially_eligible'
+
+
+def test_additional_postgraduate_eligibility_wording_is_reviewable():
+    candidate = replace(STUDENT, education='B.Sc. Computer Engineering student; completed 4 semesters')
+    requirement = 'Currently pursuing B.Sc.\\M.Sc. in Computer Engineering, postgraduate eligibility is required.'
+    assert match(requirement, resume=candidate).eligibility_status == 'potentially_eligible'
+
+
+def test_optional_postgraduate_eligibility_does_not_disqualify():
+    candidate = replace(STUDENT, education='B.Sc. Computer Engineering student; completed 4 semesters')
+    requirement = 'Currently pursuing B.Sc.\\M.Sc. in Computer Engineering, postgraduate eligibility preferred.'
+    assert match(requirement, resume=candidate).eligibility_status == 'student_eligible'
+
+
+def test_apple_alternative_does_not_override_closed_major_requirement():
+    requirement = ('Minimum Qualifications\nPursuing a B.Sc.\\M.Sc. in Electrical Engineering, '
+                   'Computer Engineering.\nStudents who have completed at least 3 semesters.')
+    assert match(requirement).eligibility_status == 'ineligible'
+
+
 def test_preferred_heading_does_not_leak_into_required_enrollment():
     result = match("Preferred Qualifications\nPython.\nRequired Qualifications\nCurrently pursuing a master's degree.")
     assert result.eligibility_status == 'ineligible'
