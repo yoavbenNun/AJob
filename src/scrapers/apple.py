@@ -1,6 +1,7 @@
 """Apple Israel listing card extraction and location-specific role identity."""
 
 import re
+import time
 from urllib.parse import urlsplit
 
 
@@ -33,3 +34,44 @@ def read_links(page):
                     context: (location?.innerText || '').replace(/^Location\\s*/i, '').trim()};
         })"""
     )
+
+
+def read_detail(page, job, timeout_ms):
+    """Wait for a complete, matching posting, not unrelated page assets."""
+    identity = job_id(job.job_url)
+    deadline = time.monotonic() + timeout_ms / 1000
+    response = page.goto(job.job_url, wait_until="commit", timeout=timeout_ms)
+    if response is None or not response.ok or job_id(page.url) != identity:
+        raise ValueError("Apple detail navigation did not return the requested posting")
+    remaining = int((deadline - time.monotonic()) * 1000)
+    if remaining <= 0:
+        raise TimeoutError("Apple detail budget exhausted")
+    snapshot = page.wait_for_function(
+        r"""({title, identity}) => {
+            const main = document.querySelector('main');
+            const normalize = text => text.trim().replace(/\s+/g, ' ').toLowerCase();
+            if (!main || !Array.from(main.querySelectorAll('h1')).some(
+                h => normalize(h.innerText) === normalize(title))) return false;
+            const text = main.innerText;
+            const lines = text.split(/\n/).map(line => line.trim()).filter(Boolean);
+            const role = lines.findIndex(line => /^role number:?$/i.test(line));
+            if (role < 0 || lines[role + 1] !== identity) return false;
+            const headings = new Set(Array.from(main.querySelectorAll('h2,h3,h4,h5,h6'),
+                h => normalize(h.innerText).replace(/:$/, '')));
+            const description = lines.findIndex(line => /^description:?$/i.test(line));
+            const minimum = lines.findIndex(line => /^minimum qualifications:?$/i.test(line));
+            if (!headings.has('description') || !headings.has('minimum qualifications')) return false;
+            if (description < 0 || minimum <= description + 1) return false;
+            const hasContent = line => line && /\p{L}.*\p{L}/u.test(line)
+                && !headings.has(normalize(line).replace(/:$/, ''))
+                && !/^(?:submit resume|back to search results|loading\b)/i.test(line);
+            if (!hasContent(lines[description + 1]) || !hasContent(lines[minimum + 1]))
+                return false;
+            return text;
+        }""",
+        arg={"title": job.title, "identity": identity},
+        timeout=remaining,
+    ).json_value()
+    if time.monotonic() >= deadline or job_id(page.url) != identity:
+        raise ValueError("Apple detail changed or exceeded its budget")
+    return snapshot, response.status
