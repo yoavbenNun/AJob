@@ -650,7 +650,8 @@ def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> str | Non
         if page is None:
             page = browser.new_page()
         if is_apple:
-            text, status = apple.read_detail(page, job, timeout_ms)
+            apple_detail, status = apple.read_detail(page, job, timeout_ms)
+            text = apple_detail["description"]
         else:
             response = page.goto(job.job_url, wait_until="domcontentloaded", timeout=timeout_ms)
             page.wait_for_timeout(750)
@@ -663,8 +664,9 @@ def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> str | Non
             return 'JobDetailUnavailable'
         if normalized:
             job.description = normalized[:20_000]
-            job.requirements = extract_requirements(normalized)
-            detail_location = extract_detail_location(normalized)
+            job.requirements = (apple_detail["requirements"][:6_000] if is_apple
+                                else extract_requirements(normalized))
+            detail_location = extract_detail_location(apple_detail["text"] if is_apple else normalized)
             if detail_location:
                 job.location = detail_location
     except Exception as error:

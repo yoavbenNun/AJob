@@ -46,8 +46,12 @@ def test_postgres_repository_rejects_incomplete_connection_urls(database_url: st
         PostgresJobRepository(database_url)
 
 
-@pytest.mark.parametrize('description,valid', [('Develop Python services.', True), ('Page not found.', False)])
-def test_postgres_save_preserves_content_on_invalid_refresh(monkeypatch, description, valid):
+@pytest.mark.parametrize('description,verified,valid', [
+    ('Develop Python services.', True, True),
+    ('Page not found.', True, False),
+    ('Herzliya', False, False),
+])
+def test_postgres_save_preserves_content_on_invalid_refresh(monkeypatch, description, verified, valid):
     from unittest.mock import MagicMock
     from src.models import JobPosting
     connection = MagicMock()
@@ -56,10 +60,16 @@ def test_postgres_save_preserves_content_on_invalid_refresh(monkeypatch, descrip
     repository = PostgresJobRepository('postgresql://db.example/jobs')
     monkeypatch.setattr(repository, '_connect', lambda: connection)
     assert repository.save(JobPosting('Student', 'Example', 'Israel', 'https://example.test/job',
-                                      description=description)) == 7
+                                      description=description, requirements='Degree in progress'),
+                           detail_verified=verified) == 7
     query, values = cursor.execute.call_args.args
     assert query.count('%s') == len(values)
-    assert values[-2:] == (valid, valid)
+    # SQL bindings: location, description, requirements, then relevance.
+    assert values[-4:] == (verified, valid, valid, verified)
+    if not verified:
+        assert values[4:6] == ('', '')
+    assert 'ELSE job_postings.location END' in query
+    assert 'ELSE job_postings.is_relevant END' in query
     assert 'ELSE job_postings.description END' in query
     assert 'ELSE job_postings.requirements END' in query
 

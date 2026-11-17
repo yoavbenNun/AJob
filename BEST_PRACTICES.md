@@ -22,6 +22,9 @@
 - Apple detail assets can stall DOMContentLoaded after the posting is usable.
   Wait for navigation commit and verify the role number, heading and populated
   detail sections within the original timeout before replacing listing evidence.
+- Validate posting ownership against the entire Apple snapshot that will be
+  stored. A second role marker can occur within prose or span DOM nodes; reject
+  ambiguous snapshots instead of truncating them and treating them as verified.
 - A listing snippet is not verified detail. Carry enrichment validity through
   the worker event and SQL upsert; do not infer it from nonempty text.
 

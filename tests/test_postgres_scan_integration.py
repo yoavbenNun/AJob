@@ -96,6 +96,39 @@ def job(number=1):
     return JobPosting('Intern', 'Synthetic', 'Worldwide remote', f'https://example.test/jobs/{number}')
 
 
+def test_unverified_discovery_preserves_postgres_evidence_and_outbox(repository, store):
+    prior = job()
+    prior.description, prior.requirements = 'Develop backend software.', 'Python required.'
+    prior.status, prior.is_relevant = 'ignored', False
+    assert store.save_discovery(prior, 'original')
+
+    def outbox():
+        return store.execute('SELECT * FROM notification_outbox ORDER BY job_id').fetchall()
+
+    original_outbox = outbox()
+    refresh = job()
+    refresh.description, refresh.location = 'Herzliya', 'Herzliya'
+    assert not store.save_discovery(refresh, 'refresh', detail_verified=False)
+    retained = repository.get_by_id(prior.id)
+    assert (retained.description, retained.requirements, retained.location,
+            retained.is_relevant, retained.status) == (
+        prior.description, prior.requirements, prior.location, False, 'ignored')
+    assert outbox() == original_outbox
+
+    fresh = job(2)
+    fresh.description, fresh.requirements, fresh.location = 'Herzliya', 'Unverified', 'Herzliya'
+    assert store.save_discovery(fresh, 'refresh', detail_verified=False)
+    saved = repository.get_by_id(fresh.id)
+    assert (saved.description, saved.requirements, saved.location) == ('', '', 'Herzliya')
+    frozen = outbox()
+    assert len(frozen) == 2
+    fresh.description, fresh.requirements = 'Develop software.', 'C++ required.'
+    assert not store.save_discovery(fresh, 'verified')
+    updated = repository.get_by_id(fresh.id)
+    assert (updated.description, updated.requirements) == (fresh.description, fresh.requirements)
+    assert outbox() == frozen
+
+
 def test_historical_recovery_compare_and_swap_postgres(repository, store):
     from src.storage.relevance_recovery import preview, apply
     posting = JobPosting('Software Engineering Student', 'Synthetic', 'Israel',
