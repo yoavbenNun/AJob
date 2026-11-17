@@ -1,5 +1,9 @@
 # Project Best Practices
 
+- Treat a backslash between adjacent bachelor and master degree labels as a
+  source-specific alternative; unrelated path separators cannot change a
+  mandatory postgraduate requirement.
+
 - A low technical match score is not an eligibility decision. Keep reviewable
   roles visible while preserving explicit disqualifications and status filters.
 
