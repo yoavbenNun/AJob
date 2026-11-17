@@ -85,6 +85,12 @@ def read_detail(page, job, timeout_ms):
                 return false;
             const placeholder = line => /^(?:loading\b|please wait\b)/i.test(line);
             if (lines.slice(description + 1).some(placeholder)) return false;
+            // A prose line matching a later heading is not a safe boundary.
+            // Reject rather than cutting the earlier section at that line.
+            const boundary = line => normalize(line).replace(/:$/, '');
+            const afterDescription = lines.slice(description).map(boundary);
+            if (headings.some(h => h && afterDescription.filter(line => line === h).length > 1))
+                return false;
             const hasContent = line => line && /\p{L}.*\p{L}/u.test(line)
                 && !headings.includes(normalize(line).replace(/:$/, ''))
                 && !/^(?:submit resume|back to search results)/i.test(line);
@@ -92,7 +98,7 @@ def read_detail(page, job, timeout_ms):
                 return false;
             const block = start => {
                 const end = lines.findIndex((line, index) => index > start &&
-                    headings.includes(normalize(line).replace(/:$/, '')));
+                    headings.includes(boundary(line)));
                 return lines.slice(start, end < 0 ? lines.length : end).join('\n');
             };
             const preferred = section('preferred qualifications');

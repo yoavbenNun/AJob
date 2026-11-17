@@ -17,7 +17,8 @@ TITLE = "Software Engineering Student"
     "usable", "inline_header", "preferred", "wrong_title", "wrong_id", "duplicate_id",
     "mixed_postings", "inline_second_id", "embedded_role_marker", "bare_foreign_id",
     "duplicate_description", "duplicate_minimum", "missing_minimum", "missing_description",
-    "multiple_main", "decoy_requirements", "empty_requirements", "loading_requirements", "please_wait",
+    "multiple_main", "decoy_requirements", "ambiguous_boundary", "empty_requirements",
+    "loading_requirements", "please_wait",
     "trailing_placeholder", "empty_description", "http_error", "navigation_timeout",
 ])
 def test_apple_detail_waits_for_verified_content_without_domcontentloaded(scenario):
@@ -39,6 +40,7 @@ def test_apple_detail_waits_for_verified_content_without_domcontentloaded(scenar
         "duplicate_description": "<h2>Description</h2><p>Other responsibilities.</p>",
         "duplicate_minimum": "<h2>Minimum Qualifications</h2><p>Other requirements.</p>",
         "trailing_placeholder": "<p>Please wait...</p>",
+        "ambiguous_boundary": "<p>Benefits</p><p>Additional requirements.</p>",
         "preferred": "<h2>Preferred Qualifications</h2><p>Embedded experience.</p>",
     }
     qualifications += extras.get(scenario, "")
