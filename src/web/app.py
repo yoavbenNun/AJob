@@ -65,7 +65,6 @@ from src.storage.dismissal_repository import DismissalRepository
 
 
 WEB_ROOT = Path(__file__).parent
-MIN_DASHBOARD_MATCH_SCORE = 30
 templates = Jinja2Templates(directory=str(WEB_ROOT / "templates"))
 templates.env.filters["status_label"] = lambda value: "Dismissed" if value == "ignored" else value.capitalize()
 COMPANY_LOGOS = {
@@ -231,7 +230,7 @@ def create_app(
         candidate_eligible_ids = (
             {
                 job_id for job_id, match in job_matches.items()
-                if match.eligible and match.score >= MIN_DASHBOARD_MATCH_SCORE
+                if match.eligible and match.eligibility_status != 'ineligible'
             }
             if active_resume is not None and active_profile is not None
             else None

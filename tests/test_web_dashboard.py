@@ -282,7 +282,7 @@ def test_dashboard_hides_jobs_ineligible_for_active_resume_by_default(tmp_path) 
     )
     assert "Software Engineering Student" not in default_page.text
     assert "Software Engineering PhD Intern" not in default_page.text
-    assert "Junior Software Developer Intern" not in default_page.text
+    assert "Junior Software Developer Intern" in default_page.text
     assert "Software Engineering Student" in all_jobs_page.text
     assert "Software Engineering PhD Intern" in all_jobs_page.text
     assert "Junior Software Developer Intern" in all_jobs_page.text

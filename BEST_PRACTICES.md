@@ -1,5 +1,8 @@
 # Project Best Practices
 
+- A low technical match score is not an eligibility decision. Keep reviewable
+  roles visible while preserving explicit disqualifications and status filters.
+
 - Google search context travels in detail URLs. Union bounded discovery
   searches by the numeric posting ID and reuse stored URL aliases without
   treating the search filters as evidence of employer level or eligibility.
