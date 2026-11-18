@@ -53,7 +53,7 @@ def test_acknowledgement_changes_reporting_exit_not_incident_or_mail(database, m
     assert rows == original and all(row["outcome"] == "FINAL_FAILURE" for row in rows)
     assert report_exit_code(rows) == 1  # Strict business health is still red.
     assert store.execute("SELECT count(*) AS n FROM notification_batches").fetchone()["n"] == 0
-    assert store.execute("SELECT count(*) AS n FROM scan_alert_receipts").fetchone()["n"] == 1
+    assert store.execute("SELECT count(*) AS n FROM scan_alert_receipts").fetchone()["n"] == 3
     monkeypatch.setenv("AJOB_SCAN_ALERT_DEDUP", "0")
     assert check(store, rows, 108) == 1  # Rollback restores legacy reporting.
 
@@ -82,8 +82,9 @@ def test_expiry_ignores_only_scan_history_not_an_unresolved_delivery(database):
     row = incident(deadline=(REFERENCE - timedelta(days=7)).isoformat())
     row["alert_scope"] = window_alert_scope(row, REFERENCE)
     original = deepcopy(row)
-    assert failure_events(store, [row]) == []
-    assert check(store, [row]) == 0
+    assert len(failure_events(store, [row])) == 1
+    assert check(store, [row]) == 1  # Old but never verified as reported.
+    assert check(store, [row], 102) == 0
     row["notification"], row["failure_reason"] = "uncertain", "DeliveryLeaseExpired"
     row["alert_scope"] = window_alert_scope(row, REFERENCE)
     assert row["alert_scope"] == "operational"

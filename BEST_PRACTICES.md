@@ -362,6 +362,9 @@ reusable lesson appears.
   business-step failure. Preserve the current pending observation even if receipt
   verification fails, so cancelled/deleted attempts cannot pin alerts forever.
   Keep window outcomes immutable and gate optional schema/activation separately.
+- In receipt-based alert reporting, age is not acknowledgement: even an aged
+  scan-only incident needs verified reporting evidence before suppression.
+  Keep legacy strict health-check aging separate from that opt-in guarantee.
 
 - Pass an explicit `ssl.create_default_context()` to SMTP STARTTLS before login;
   encryption without certificate and hostname validation does not authenticate

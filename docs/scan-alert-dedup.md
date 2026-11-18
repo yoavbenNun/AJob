@@ -93,8 +93,28 @@ After separate approval, an operator must:
 Do not manually pre-confirm historical receipts or run a Production scan to test.
 If disabled again (variable0/unset), legacy strict exit semantics return immediately.
 Retain optional tables, receipts and all original incident/window history; rollback
-does not delete data or replay email. At seven days the existing historical
-scan-only aging policy still applies; this feature does not change or erase it.
+does not delete data or replay email. The seven-day business reporting scope
+still applies, but opt-in alert reporting requires receipts for aged incidents
+too: age is never proof of a first failure report. Strict/feature-off reporting
+retains its existing seven-day exit policy.
+
+## November 18 stabilization
+
+Run 44323090697 used bb591df on November 18. The 16:17 Israel window was FULL
+on its first attempt with notification sent; all 51 logged source metrics were
+full. Both Reconcile and Publish nevertheless exited 1 with the flag empty,
+because their strict exit included earlier operational incidents.
+
+Both workflow commands already share the gated receipt decision. No new
+workflow mechanism is required. This follow-up removes only the optional
+ledger's age-only exemption, protecting incidents never verified as reported.
+Known identical receipts permit both steps to pass in subsequent healthy/no-work
+runs; current failures, new snapshots, missing receipts and reporting errors fail.
+
+This remains inactive until separately approved schema/role verification and
+flag activation. Merging alone does not stop duplicate Production failures.
+Activation can intentionally re-alert aged incidents without receipts. Pending
+rows cannot be pre-confirmed from SMTP sent status or an unrelated failed run.
 
 ## Acceptance checks
 

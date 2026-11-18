@@ -270,7 +270,7 @@ def test_invalid_activation_context_or_unknown_outcome_fails_closed(database, mo
     assert check(store, [incident(outcome='unexpected')]) == 1
 
 
-def test_archived_history_is_retained_after_seven_days_without_failing_new_report(database):
+def test_archived_history_requires_receipt_without_rewriting_business_outcome(database):
     repository, store = database
     store.clock = lambda: datetime(2026, 10, 31, 10, tzinfo=timezone.utc)
     slot = '2026-10-18T08:17:00+03:00'
@@ -282,7 +282,38 @@ def test_archived_history_is_retained_after_seven_days_without_failing_new_repor
     assert len(rows) == 1 and rows[0]['outcome'] == 'FINAL_FAILURE'
     assert rows[0]['alert_scope'] == 'historical_scan_failure'
     before = json.dumps(rows, sort_keys=True)
-    assert check(store, rows) == 0
+    assert check(store, rows) == 1  # Aging is not a verified first report.
+    assert check(store, rows, 102) == 0
     assert json.dumps(rows, sort_keys=True) == before
     persisted = store.execute('SELECT status,attempts FROM scan_windows WHERE slot_key=?', (slot,)).fetchone()
     assert persisted['status'] == 'partial' and persisted['attempts'] == 2
+
+
+@pytest.mark.parametrize('scope', ['operational', 'historical_scan_failure'])
+def test_nov18_full_window_requires_receipt_for_older_incident(database, scope):
+    _, store = database
+    old = incident(slot='2026-11-16T08:17:00+02:00', alert_scope=scope)
+    current = incident(slot='2026-11-18T16:17:00+02:00', outcome='FULL',
+                       scan='full', scan_attempts=1, failure_reason='', run_id='nov18-owner')
+    rows = [old, current]
+    original = deepcopy(rows)
+    # Both reporting steps in the first workflow stay red without a receipt.
+    assert check(store, rows, 101) == 1
+    assert check(store, rows, 101) == 1
+    # An unavailable API cannot acknowledge a prior report.
+    def unavailable(*args):
+        raise RuntimeError('GitHub unavailable')
+    assert check(store, rows, 102, verifier=unavailable) == 1
+    # Verified reporting allows both steps and duplicate no-work wake-ups to pass.
+    assert check(store, rows, 103) == 0
+    assert check(store, rows, 103) == 0
+    assert check(store, rows, 104) == 0
+    assert check(store, rows, 105, current_failure=True) == 1
+    fresh = incident(slot='2026-11-18T19:17:00+02:00', run_id='new-owner')
+    assert check(store, rows + [fresh], 106) == 1
+    # Reclassifying reporting scope as an incident ages must not cause churn.
+    old['alert_scope'] = ('operational' if scope == 'historical_scan_failure'
+                          else 'historical_scan_failure')
+    assert check(store, rows, 107) == 0
+    old['alert_scope'] = scope
+    assert rows == original
