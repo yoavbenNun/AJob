@@ -645,12 +645,16 @@ def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> str | Non
         # Custom careers sites may return an anti-bot page that would overwrite it.
         return
     is_apple = apple.job_id(job.job_url) is not None
+    diagnostic = dict(stage="page_creation", navigation_completed=False, content_verified=False)
+    detail_started = time.monotonic() if is_apple else None
+    failure_category = None
     page = None if is_apple else browser.new_page()
     try:
         if page is None:
             page = browser.new_page()
         if is_apple:
-            apple_detail, status = apple.read_detail(page, job, timeout_ms)
+            apple_detail, status = apple.read_detail(page, job, timeout_ms, diagnostic=diagnostic)
+            diagnostic["stage"] = "evidence_validation"
             text = apple_detail["description"]
         else:
             response = page.goto(job.job_url, wait_until="domcontentloaded", timeout=timeout_ms)
@@ -661,6 +665,7 @@ def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> str | Non
         normalized = "\n".join(line.strip() for line in text.splitlines() if line.strip())
         problem = description_problem(normalized, status_code=status)
         if problem:
+            failure_category = "invalid_content"
             return 'JobDetailUnavailable'
         if normalized:
             job.description = normalized[:20_000]
@@ -672,16 +677,32 @@ def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> str | Non
     except Exception as error:
         # Card data is still useful when an individual detail page is unavailable.
         if is_apple:
-            logging.getLogger(__name__).warning("Apple detail unavailable: %s", type(error).__name__)
+            failure_category = ("timeout" if isinstance(error, (TimeoutError, PlaywrightTimeoutError))
+                                else "http_error" if diagnostic.get("http_status", 0) and diagnostic["http_status"] >= 400
+                                else "validation_error" if isinstance(error, ValueError) else "unexpected_error")
+            try:
+                logging.getLogger(__name__).warning("Apple detail unavailable: %s", type(error).__name__)
+            except Exception:
+                pass  # Logging must not replace the detail-fetch outcome.
         return 'JobDetailUnavailable'
+    except BaseException:
+        failure_category = "cancelled"
+        raise
     finally:
+        if is_apple and failure_category:
+            apple.report_failure(job.job_url, diagnostic, detail_started, timeout_ms, failure_category)
         if page is not None:
             try:
                 page.close()
             except Exception as error:
                 if not is_apple:
                     raise
-                logging.getLogger(__name__).warning("Apple detail cleanup failed: %s", type(error).__name__)
+                diagnostic["stage"] = "cleanup"
+                apple.report_failure(job.job_url, diagnostic, detail_started, timeout_ms, "cleanup_error")
+                try:
+                    logging.getLogger(__name__).warning("Apple detail cleanup failed: %s", type(error).__name__)
+                except Exception:
+                    pass  # Preserve any result or cancellation already in flight.
 
 
 def extract_requirements(description: str) -> str:
