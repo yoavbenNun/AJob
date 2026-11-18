@@ -108,7 +108,7 @@ def scheduled_tick(companies, repository, settings, *, recommendations=None,
         if historical:
             print(f'::warning::HISTORICAL_SCAN_FAILURE: {historical} expired scan incident(s) '
                   'remain FINAL_FAILURE in window_report; mail was sent, no normal recovery remains, '
-                  'and the seven-day failing-check period has elapsed. Current failures still fail.')
+                  'and the 24-hour failing-check period has elapsed. Current failures still fail.')
         # Legacy mail without a window still requires attention, including after
         # midnight. Neither sent mail nor recovery planning clears a scan failure.
         return exit_code

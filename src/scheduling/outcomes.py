@@ -42,7 +42,7 @@ def report_exit_code(rows):
 def window_alert_scope(row, reference):
     """Age only finalized scan-only incidents; never age unresolved delivery.
 
-    Keep seven days of failing checks after the deadline. An expired scan cannot
+    Keep a full day of failing checks after the deadline. An expired scan cannot
     be replayed by the normal recovery path; its actual outcome remains failed.
     Missing records, active/stale leases, and mail that is not sent stay actionable.
     """
@@ -51,6 +51,6 @@ def window_alert_scope(row, reference):
             and row['notification'] == 'sent'
             and not row.get('lease_expired')
             and row.get('failure_reason') in {'WindowExpired', 'MissedWindow'}
-            and datetime.fromisoformat(row['deadline']) <= reference - timedelta(days=7)):
+            and datetime.fromisoformat(row['deadline']) <= reference - timedelta(days=1)):
         return 'historical_scan_failure'
     return 'operational'

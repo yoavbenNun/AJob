@@ -562,7 +562,7 @@ reusable lesson appears.
   terminal-failure monitor. Retain unresolved historical windows in read-only
   health checks; dispatch acceptance and sent mail do not establish full recovery.
 
-- Separate operational alerts from finalized scan-only history: after seven days
+- Separate operational alerts from finalized scan-only history: after 24 hours
   past deadline, an expired scan with sent mail remains a visible FINAL_FAILURE
   warning without failing unrelated runs. Never age out unfinished delivery,
   unknown records, active/expired leases or recovery that is still actionable.
