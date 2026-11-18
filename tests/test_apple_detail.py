@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 import pytest
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
@@ -21,7 +22,7 @@ TITLE = "Software Engineering Student"
     "loading_requirements", "please_wait",
     "trailing_placeholder", "empty_description", "http_error", "navigation_timeout",
 ])
-def test_apple_detail_waits_for_verified_content_without_domcontentloaded(scenario):
+def test_apple_detail_waits_for_verified_content_without_domcontentloaded(scenario, caplog):
     title = "Other Role" if scenario == "wrong_title" else TITLE
     role = "200676939-6109" if scenario == "wrong_id" else "200676939-0865"
     desc = "Loading..." if scenario == "empty_description" else "Develop low-level software in C++."
@@ -84,6 +85,7 @@ def test_apple_detail_waits_for_verified_content_without_domcontentloaded(scenar
         assert job.job_url == URL and job.status == "ignored"
         if scenario in {"usable", "inline_header", "preferred"}:
             assert result is None
+            assert not [r for r in caplog.records if r.name == "src.scrapers.apple"]
             assert desc in job.description and "Currently pursuing a degree." in job.requirements
             assert "Python experience." not in job.requirements
             if scenario == "preferred":
@@ -91,6 +93,18 @@ def test_apple_detail_waits_for_verified_content_without_domcontentloaded(scenar
         else:
             assert result == "JobDetailUnavailable"
             assert job.description == "Retained listing evidence" and job.requirements == "Prior requirements"
+            records = [json.loads(record.message) for record in caplog.records
+                       if record.name == "src.scrapers.apple"]
+            assert len(records) == 1
+            record = records[0]
+            assert record["posting_id"] == "200676939-0865"
+            assert record["content_verified"] is False
+            assert record["timeout_ms"] == 1800 and record["elapsed_ms"] >= 0
+            assert len(json.dumps(record)) < 512
+            assert record["stage"] == ("navigation" if scenario == "navigation_timeout"
+                                       else "response_validation" if scenario == "http_error"
+                                       else "content_verification")
+            assert record["category"] == ("http_error" if scenario == "http_error" else "timeout")
         assert context.pages == []
         browser.close()
 
@@ -117,3 +131,45 @@ def test_apple_cleanup_does_not_mask_primary_failure_or_cancellation(primary, ca
         assert "Apple detail unavailable: TimeoutError" in caplog.text
     assert "Apple detail cleanup failed: RuntimeError" in caplog.text
     assert job.description == "Original"
+    records = [json.loads(record.message) for record in caplog.records
+               if record.name == "src.scrapers.apple"]
+    assert [record["category"] for record in records] == [
+        "cancelled" if primary is KeyboardInterrupt else "timeout", "cleanup_error"]
+    assert records[0]["stage"] == "navigation"
+
+
+def test_apple_diagnostic_never_logs_external_text_or_changes_outcome(monkeypatch, caplog):
+    from src.scrapers import apple
+    class Browser:
+        def new_page(self):
+            raise RuntimeError("PRIVATE cookie token resume https://example.test")
+    job = JobPosting(TITLE, "Apple", "Herzliya", URL + "&secret=PRIVATE", description="Original")
+    assert _enrich_job(Browser(), job, 1000) == "JobDetailUnavailable"
+    record = json.loads(next(r.message for r in caplog.records if r.name == apple.__name__))
+    assert record["stage"] == "page_creation" and record["category"] == "unexpected_error"
+    assert not record["navigation_completed"] and not record["content_verified"]
+    assert "PRIVATE" not in caplog.text and "https:" not in caplog.text
+    assert job.description == "Original"
+    class BrokenLogger:
+        def warning(self, *args):
+            raise RuntimeError("handler failed")
+    # Direct helper verifies the new instrumentation is best effort.
+    with monkeypatch.context() as patch:
+        patch.setattr(apple.logging, "getLogger", lambda *_: BrokenLogger())
+        apple.report_failure(job.job_url, dict(stage="navigation", navigation_completed=False,
+                                             content_verified=False), 0, 1000, "timeout")
+
+
+def test_non_apple_failure_has_no_apple_diagnostic(caplog):
+    class Page:
+        def goto(self, *args, **kwargs):
+            raise TimeoutError("unrelated employer")
+        def close(self):
+            pass
+    class Browser:
+        def new_page(self):
+            return Page()
+    job = JobPosting(TITLE, "Other", "Israel", "https://example.test/job", description="Original")
+    assert _enrich_job(Browser(), job, 1000) == "JobDetailUnavailable"
+    assert job.description == "Original"
+    assert not [r for r in caplog.records if r.name == "src.scrapers.apple"]

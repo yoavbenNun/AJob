@@ -2,6 +2,8 @@
 
 import re
 import time
+import json
+import logging
 from urllib.parse import urlsplit
 
 
@@ -36,16 +38,46 @@ def read_links(page):
     )
 
 
-def read_detail(page, job, timeout_ms):
+def report_failure(job_url, state, started, timeout_ms, category):
+    """Best-effort fixed-schema diagnostics; never serialize external text."""
+    try:
+        identity = job_id(job_url)
+        record = {
+            "event": "apple_detail_failure",
+            "posting_id": identity if identity and len(identity) <= 40 else "unknown",
+            "stage": state["stage"],
+            "category": category,
+            "elapsed_ms": min(86_400_000, max(0, int((time.monotonic() - started) * 1000))),
+            "timeout_ms": min(86_400_000, max(0, int(timeout_ms))),
+            "navigation_completed": state["navigation_completed"],
+            "content_verified": state["content_verified"],
+            "http_status": state.get("http_status"),
+        }
+        logging.getLogger(__name__).warning("%s", json.dumps(record, sort_keys=True))
+    except Exception:
+        # A failed logging handler must not change persistence or cancellation.
+        pass
+
+
+def read_detail(page, job, timeout_ms, *, diagnostic=None):
     """Wait for a complete, matching posting, not unrelated page assets."""
     identity = job_id(job.job_url)
     deadline = time.monotonic() + timeout_ms / 1000
+    if diagnostic is not None:
+        diagnostic["stage"] = "navigation"
     response = page.goto(job.job_url, wait_until="commit", timeout=timeout_ms)
+    if diagnostic is not None:
+        diagnostic.update(stage="response_validation", navigation_completed=True,
+                          http_status=response.status if response is not None else None)
     if response is None or not response.ok or job_id(page.url) != identity:
         raise ValueError("Apple detail navigation did not return the requested posting")
     remaining = int((deadline - time.monotonic()) * 1000)
+    if diagnostic is not None:
+        diagnostic["stage"] = "detail_deadline"
     if remaining <= 0:
         raise TimeoutError("Apple detail budget exhausted")
+    if diagnostic is not None:
+        diagnostic["stage"] = "content_verification"
     snapshot = page.wait_for_function(
         r"""({title, identity}) => {
             const normalize = text => text.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -110,6 +142,10 @@ def read_detail(page, job, timeout_ms):
         arg={"title": job.title, "identity": identity},
         timeout=remaining,
     ).json_value()
+    if diagnostic is not None:
+        diagnostic["stage"] = "final_validation"
     if time.monotonic() >= deadline or job_id(page.url) != identity:
         raise ValueError("Apple detail changed or exceeded its budget")
+    if diagnostic is not None:
+        diagnostic["content_verified"] = True
     return snapshot, response.status

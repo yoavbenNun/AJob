@@ -31,6 +31,9 @@
   ambiguous snapshots instead of truncating them and treating them as verified.
 - A listing snippet is not verified detail. Carry enrichment validity through
   the worker event and SQL upsert; do not infer it from nonempty text.
+- Apple timeout diagnostics must identify the posting and phase without logging
+  URLs or exception messages. A content-verification timeout establishes no
+  specific failed DOM invariant; do not infer closure or relax validation from it.
 
 - Historical relevance recovery must compare the reviewed source snapshot and
   lifecycle status before writing. Relevance is not personal eligibility, and
