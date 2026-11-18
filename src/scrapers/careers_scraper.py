@@ -680,7 +680,10 @@ def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> str | Non
             failure_category = ("timeout" if isinstance(error, (TimeoutError, PlaywrightTimeoutError))
                                 else "http_error" if diagnostic.get("http_status", 0) and diagnostic["http_status"] >= 400
                                 else "validation_error" if isinstance(error, ValueError) else "unexpected_error")
-            logging.getLogger(__name__).warning("Apple detail unavailable: %s", type(error).__name__)
+            try:
+                logging.getLogger(__name__).warning("Apple detail unavailable: %s", type(error).__name__)
+            except Exception:
+                pass  # Logging must not replace the detail-fetch outcome.
         return 'JobDetailUnavailable'
     except BaseException:
         failure_category = "cancelled"
@@ -696,7 +699,10 @@ def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> str | Non
                     raise
                 diagnostic["stage"] = "cleanup"
                 apple.report_failure(job.job_url, diagnostic, detail_started, timeout_ms, "cleanup_error")
-                logging.getLogger(__name__).warning("Apple detail cleanup failed: %s", type(error).__name__)
+                try:
+                    logging.getLogger(__name__).warning("Apple detail cleanup failed: %s", type(error).__name__)
+                except Exception:
+                    pass  # Preserve any result or cancellation already in flight.
 
 
 def extract_requirements(description: str) -> str:

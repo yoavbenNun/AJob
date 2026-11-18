@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import logging
 
 import pytest
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
@@ -173,3 +174,38 @@ def test_non_apple_failure_has_no_apple_diagnostic(caplog):
     assert _enrich_job(Browser(), job, 1000) == "JobDetailUnavailable"
     assert job.description == "Original"
     assert not [r for r in caplog.records if r.name == "src.scrapers.apple"]
+
+
+@pytest.mark.parametrize("primary", [TimeoutError, KeyboardInterrupt])
+def test_enrich_job_throwing_warning_handler_preserves_outcome(primary):
+    class ThrowingHandler(logging.Handler):
+        def emit(self, record):
+            raise RuntimeError("warning handler failed")
+
+    class Page:
+        def goto(self, *args, **kwargs):
+            raise primary()
+        def close(self):
+            raise RuntimeError("cleanup failed")
+
+    class Browser:
+        def new_page(self):
+            return Page()
+
+    logger = logging.getLogger("src.scrapers.careers_scraper")
+    handler = ThrowingHandler()
+    previous_level = logger.level
+    logger.setLevel(logging.WARNING)
+    logger.addHandler(handler)
+    job = JobPosting(TITLE, "Apple", "Herzliya", URL,
+                     description="Verified description", requirements="Verified requirements")
+    try:
+        if primary is KeyboardInterrupt:
+            with pytest.raises(KeyboardInterrupt):
+                _enrich_job(Browser(), job, 1000)
+        else:
+            assert _enrich_job(Browser(), job, 1000) == "JobDetailUnavailable"
+        assert (job.description, job.requirements) == ("Verified description", "Verified requirements")
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(previous_level)
