@@ -1,5 +1,9 @@
 # Project Best Practices
 
+- An encrypted backup still needs completeness checks: require the AJob table
+  inventory, let inaccessible/RLS-filtered dumps fail, and certify recovery only
+  after an error-free isolated restore. Never retain plaintext dump artifacts.
+
 - Treat a backslash between adjacent bachelor and master degree labels as a
   source-specific alternative; unrelated path separators cannot change a
   mandatory postgraduate requirement.
