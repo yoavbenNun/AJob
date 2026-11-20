@@ -68,8 +68,10 @@ No claim of exactly-once GitHub notification delivery is made.
    always fails, even if another incident has a confirmed receipt.
 5. Missing/corrupt receipts, schema/version, database, context, token or API
    failure: fail closed. Restore loss causes re-alerting rather than silence.
-6. Seven-day aging remains separate: only expired scan-only incidents with sent
-   mail qualify. Unknown, lease and unfinished/uncertain delivery stay actionable.
+6. Seven-day business scope remains separate. With the opt-in ledger active,
+   even aged scan-only incidents require a verified failure receipt before
+   duplicate suppression. Unknown, lease and unfinished/uncertain delivery stay
+   actionable. Initial activation may re-alert unreceipted old incidents.
 
 Receipts persist in PostgreSQL across hosted runners and restarts, with composite
 PK and short transactions. Two unconfirmed concurrent runs may both fail:
