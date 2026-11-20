@@ -1,5 +1,9 @@
 # Project Best Practices
 
+- Pass PostgreSQL connection URIs explicitly to clients, not via PGDATABASE.
+  Use BEGIN READ ONLY for inventory checks rather than assuming session-pooler
+  support for PGOPTIONS. Verify dump/restore commands on disposable PG17.
+
 - Backup inventory checks must distinguish mandatory storage from optional
   migrations; schema-wide dumps must still include optional tables when present.
 

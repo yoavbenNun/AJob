@@ -16,6 +16,13 @@ an RLS-filtered export. PostgreSQL 17 tools cannot dump newer major servers.
 If denied, do not create users, grant permissions, omit tables or retry with
 --enable-row-security: stop and report the blocker.
 
+The URI is passed explicitly with --dbname inside each container; PGDATABASE is
+not used to carry a URI. Inventory runs BEGIN READ ONLY, independent of pooler
+startup options. No PGOPTIONS read-only guarantee is assumed. The URI exists in
+the private client process arguments inside the ephemeral runner container, not
+host Docker arguments; shell tracing and raw client stderr remain disabled.
+Do not enable debug tracing or collect process listings.
+
 Preflight requires eight core scan/job/notification tables. The closure audit
 table job_closure_dismissals and alert receipt tables are optional, not inventory
 requirements. Schema-wide pg_dump still includes them whenever present, and fails
@@ -71,7 +78,7 @@ until docker exec ajob-restore-check pg_isready -U postgres -d ajob_restore; do 
 set -o pipefail
 age -d -i ajob-recovery.key database.dump.age | \
   docker exec -i ajob-restore-check pg_restore -U postgres -d ajob_restore \
-    --no-owner --no-acl --single-transaction --exit-on-error
+    --no-owner --no-acl --clean --if-exists --single-transaction --exit-on-error
 docker exec ajob-restore-check psql -U postgres -d ajob_restore -v ON_ERROR_STOP=1 \
   -c "SELECT count(*) FROM public.job_postings;" \
   -c "SELECT status,count(*) FROM public.scan_windows GROUP BY status;" \

@@ -31,13 +31,13 @@ jobs:
           test -n "$DATABASE_URL"
           [[ "$RECIPIENT" =~ ^age1[0-9a-z]{58}$ ]] || { echo "Invalid age public recipient"; exit 1; }
           mkdir -p "$RUNNER_TEMP/ajob-backup"
-          export PGDATABASE="$DATABASE_URL"
           export PGCONNECT_TIMEOUT=15
-          export PGOPTIONS="-c default_transaction_read_only=on"
-          if ! inventory=$(docker run --rm -e PGDATABASE -e PGCONNECT_TIMEOUT -e PGOPTIONS \
+          # Expand the URI inside the container, never in host Docker arguments.
+          # Explicit READ ONLY does not depend on pooler startup-option support.
+          if ! inventory=$(docker run --rm -e DATABASE_URL -e PGCONNECT_TIMEOUT \
             postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24 \
-            psql -X -v ON_ERROR_STOP=1 -Atc \
-            "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('job_postings','scan_runs','scan_source_metrics','scan_windows','delivery_leases','dispatcher_state','notification_batches','notification_outbox')" \
+            sh -c 'exec psql -X --dbname="$DATABASE_URL" -v ON_ERROR_STOP=1 -Atq -c "$1"' sh \
+            "BEGIN READ ONLY; SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('job_postings','scan_runs','scan_source_metrics','scan_windows','delivery_leases','dispatcher_state','notification_batches','notification_outbox'); COMMIT;" \
             2>/dev/null); then
             echo "::error::Backup preflight connection or inventory query failed; inspect connection privately."
             exit 1
@@ -50,9 +50,9 @@ jobs:
           # includes them whenever present. No existing table is excluded.
           # pg_dump fails on inaccessible/RLS-filtered tables; never use
           # --enable-row-security or selectively omit failed tables.
-          if ! docker run --rm -e PGDATABASE -e PGCONNECT_TIMEOUT -e PGOPTIONS \
+          if ! docker run --rm -e DATABASE_URL -e PGCONNECT_TIMEOUT \
             postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24 \
-            pg_dump --format=custom --no-owner --no-acl --schema=public --schema='ajob_*' \
+            sh -c 'exec pg_dump --dbname="$DATABASE_URL" --format=custom --no-owner --no-acl --schema=public --schema="ajob_*"' \
             2>/dev/null | age -r "$RECIPIENT" -o "$RUNNER_TEMP/ajob-backup/database.dump.age"; then
             rm -f "$RUNNER_TEMP/ajob-backup/database.dump.age"
             echo "::error::Complete application dump or encryption failed. Check connection reachability, SELECT/RLS rights and server compatibility privately; no partial backup retained."

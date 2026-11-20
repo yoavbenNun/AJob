@@ -19,10 +19,13 @@ def test_manual_backup_is_encrypted_scoped_and_fail_closed():
     steps = job["steps"]
     export = steps[1]["run"]
     assert "set -euo pipefail" in export
-    assert "default_transaction_read_only=on" in export
+    assert "BEGIN READ ONLY;" in export and "COMMIT;" in export
+    assert "PGDATABASE=" not in export and "PGOPTIONS=" not in export
+    assert export.count('--dbname="$DATABASE_URL"') == 2
+    assert export.count("-e DATABASE_URL -e PGCONNECT_TIMEOUT") == 2
     assert '[[ "$inventory" != "8" ]]' in export
-    assert "pg_dump --format=custom --no-owner --no-acl" in export
-    assert "--schema=public --schema='ajob_*'" in export
+    assert 'pg_dump --dbname="$DATABASE_URL" --format=custom --no-owner --no-acl' in export
+    assert '--schema=public --schema="ajob_*"' in export
     assert '2>/dev/null | age -r "$RECIPIENT"' in export
     assert "--enable-row-security" not in export.split("# pg_dump")[0]
     upload = steps[2]
@@ -36,7 +39,7 @@ def test_manual_backup_is_encrypted_scoped_and_fail_closed():
 @pytest.mark.parametrize("missing", [False, True])
 def test_backup_inventory_requires_only_mandatory_tables(optional, missing):
     raw = Path(".github/workflows/manual-backup.yml").read_text()
-    query = re.search(r'"(SELECT count\(\*\) FROM information_schema.tables[^"]+)"', raw)[1]
+    query = re.search(r'BEGIN READ ONLY; (SELECT count\(\*\) FROM information_schema.tables[^;]+); COMMIT;', raw)[1]
     mandatory = ["job_postings", "scan_runs", "scan_source_metrics", "scan_windows",
                  "delivery_leases", "dispatcher_state", "notification_batches", "notification_outbox"]
     with sqlite3.connect(":memory:") as db:
