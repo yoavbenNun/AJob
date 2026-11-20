@@ -79,6 +79,27 @@ NON_ENGINEERING_ROLE_TERMS = (
     "sales",
 )
 
+# Headings, rather than qualification prose, delimit duty evidence.  Keep
+# unqualified "Experience" ambiguous: it can describe the role itself.
+QUALIFICATION_BOUNDARY = (
+    r"minimum qualifications|basic qualifications|preferred qualifications|"
+    r"^[ \t]*:?[ \t]*(?:"
+    r"(?:(?:job|minimum|basic|preferred|required)[ \t]+)?"
+    r"(?:requirements(?:[ \t]+and[ \t]+qualifications)?|qualifications(?:[ \t]+and[ \t]+requirements)?)|"
+    r"(?:experience|education|skills)[ \t]+(?:required|requirements|qualifications)|"
+    r"(?:required|minimum|basic|preferred)[ \t]+(?:experience|education|skills)"
+    r"(?:[ \t]+(?:requirements|qualifications))?|"
+    r"(?:(?:required|minimum|basic|preferred)[ \t]+)?"
+    r"(?:skills|experience|education|qualifications|requirements)"
+    r"(?:(?:[ \t]+and[ \t]+|[ \t]*[&/][ \t]*)"
+    r"(?:skills|experience|education|qualifications|requirements))+"
+    r"(?:[ \t]+(?:required|requirements))?|"
+    r"what you(?:'|’)ll (?:need|bring)|what you will (?:need|bring)|"
+    r"what we(?:'|’)re looking for|what we are looking for|what we look for|"
+    r"your (?:experience|skills|qualifications|education)"
+    r")[ \t]*(?::|$)|\brequirements\s*:"
+)
+
 
 @dataclass(frozen=True, slots=True)
 class FilterDecision:
@@ -107,11 +128,8 @@ def classify_job(job: JobPosting) -> FilterDecision:
     process_quality_title = _contains_phrase(title, "software quality")
     if not software_title or hardware_focused_title or process_quality_title:
         responsibility_text = re.split(
-            r"minimum qualifications|basic qualifications|preferred qualifications|"
-            r"^\s*:?\s*(?:(?:job|minimum|basic|preferred|required)\s+)?"
-            r"(?:requirements(?:\s+and\s+qualifications)?|qualifications(?:\s+and\s+requirements)?)"
-            r"\s*(?::|$)|\brequirements\s*:",
-            job.description, maxsplit=1, flags=re.IGNORECASE | re.MULTILINE,
+            QUALIFICATION_BOUNDARY, job.description, maxsplit=1,
+            flags=re.IGNORECASE | re.MULTILINE,
         )[0]
         responsibilities = _normalize(responsibility_text)
         develops_code = any(
@@ -146,6 +164,18 @@ def classify_job(job: JobPosting) -> FilterDecision:
         develops_software = any(
             any(_positive_software_phrase(clause, term) for term in detail_terms)
             for clause in software_clauses
+        )
+        develops_software = develops_software or any(
+            _positive_software_phrase(clause, match.group('duty'))
+            and not re.match(r'(?:\s+|\s*:\s*)(?:(?:is|are)\s+)?(?:(?:a|an)\s+)?'
+                             r'(?:required|preferred|experience|qualification|prerequisite|skill)\b',
+                             clause[match.end():])
+            for clause in software_clauses
+            for match in [re.match(
+                r'^(?:[-*•]\s*)?(?:(?:you will(?: be)?|you are expected to|'
+                r'in this role you will|your responsibilities include)\s+)?'
+                r'(?P<duty>(?:build|building|develop|developing)\s+(?:a\s+)?full[- ]stack\s+applications?)\b', clause)]
+            if match
         )
         if process_quality_title:
             # Preserve genuine coded-test work when the quality title alone no
