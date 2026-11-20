@@ -1,0 +1,65 @@
+name: One-time encrypted AJob backup
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipient:
+        description: "age public recipient (age1...); keep the private key offline"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Install encryption tool
+        run: sudo apt-get update -qq && sudo apt-get install -y age
+      - name: Export application schemas directly into encryption
+        shell: bash
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RECIPIENT: ${{ inputs.recipient }}
+        run: |
+          set +x
+          set -euo pipefail
+          umask 077
+          test -n "$DATABASE_URL"
+          [[ "$RECIPIENT" =~ ^age1[0-9a-z]{58}$ ]] || { echo "Invalid age public recipient"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/ajob-backup"
+          export PGDATABASE="$DATABASE_URL"
+          export PGCONNECT_TIMEOUT=15
+          export PGOPTIONS="-c default_transaction_read_only=on"
+          if ! docker run --rm -e PGDATABASE -e PGCONNECT_TIMEOUT -e PGOPTIONS \
+            postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24 \
+            psql -X -v ON_ERROR_STOP=1 -Atc \
+            "SELECT 1 / CASE WHEN count(*) = 9 THEN 1 ELSE 0 END FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('job_postings','scan_runs','scan_source_metrics','scan_windows','delivery_leases','dispatcher_state','notification_batches','notification_outbox','job_closure_dismissals')" \
+            >/dev/null 2>&1; then
+            echo "::error::Required AJob tables are missing or inaccessible; backup aborted."
+            exit 1
+          fi
+          # pg_dump fails on inaccessible/RLS-filtered tables; never use
+          # --enable-row-security or selectively omit failed tables.
+          if ! docker run --rm -e PGDATABASE -e PGCONNECT_TIMEOUT -e PGOPTIONS \
+            postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24 \
+            pg_dump --format=custom --no-owner --no-acl --schema=public --schema='ajob_*' \
+            2>/dev/null | age -r "$RECIPIENT" -o "$RUNNER_TEMP/ajob-backup/database.dump.age"; then
+            rm -f "$RUNNER_TEMP/ajob-backup/database.dump.age"
+            echo "::error::Complete application dump or encryption failed. Check connection reachability, SELECT/RLS rights and server compatibility privately; no partial backup retained."
+            exit 1
+          fi
+          cd "$RUNNER_TEMP/ajob-backup"
+          sha256sum database.dump.age > database.dump.age.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ajob-encrypted-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/ajob-backup/
+          retention-days: 1
+          if-no-files-found: error
+      - name: Remove encrypted runner copy
+        if: always()
+        run: rm -f "$RUNNER_TEMP/ajob-backup/database.dump.age" "$RUNNER_TEMP/ajob-backup/database.dump.age.sha256"
