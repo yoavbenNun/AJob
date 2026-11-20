@@ -16,6 +16,12 @@ an RLS-filtered export. PostgreSQL 17 tools cannot dump newer major servers.
 If denied, do not create users, grant permissions, omit tables or retry with
 --enable-row-security: stop and report the blocker.
 
+Preflight requires eight core scan/job/notification tables. The closure audit
+table job_closure_dismissals and alert receipt tables are optional, not inventory
+requirements. Schema-wide pg_dump still includes them whenever present, and fails
+if any included table cannot be read. A connection/query failure is distinguished
+from a missing/inaccessible mandatory inventory without printing raw SQL errors.
+
 One custom-format pg_dump transaction includes schema, data and sequences from
 public and all ajob_* schemas, including job history, scan runs/source metrics,
 windows, delivery leases, dispatcher state, notification outbox/batches and optional
