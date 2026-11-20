@@ -34,14 +34,20 @@ jobs:
           export PGDATABASE="$DATABASE_URL"
           export PGCONNECT_TIMEOUT=15
           export PGOPTIONS="-c default_transaction_read_only=on"
-          if ! docker run --rm -e PGDATABASE -e PGCONNECT_TIMEOUT -e PGOPTIONS \
+          if ! inventory=$(docker run --rm -e PGDATABASE -e PGCONNECT_TIMEOUT -e PGOPTIONS \
             postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24 \
             psql -X -v ON_ERROR_STOP=1 -Atc \
-            "SELECT 1 / CASE WHEN count(*) = 9 THEN 1 ELSE 0 END FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('job_postings','scan_runs','scan_source_metrics','scan_windows','delivery_leases','dispatcher_state','notification_batches','notification_outbox','job_closure_dismissals')" \
-            >/dev/null 2>&1; then
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('job_postings','scan_runs','scan_source_metrics','scan_windows','delivery_leases','dispatcher_state','notification_batches','notification_outbox')" \
+            2>/dev/null); then
+            echo "::error::Backup preflight connection or inventory query failed; inspect connection privately."
+            exit 1
+          fi
+          if [[ "$inventory" != "8" ]]; then
             echo "::error::Required AJob tables are missing or inaccessible; backup aborted."
             exit 1
           fi
+          # Optional closure/alert tables are not required, but schema-wide dump
+          # includes them whenever present. No existing table is excluded.
           # pg_dump fails on inaccessible/RLS-filtered tables; never use
           # --enable-row-security or selectively omit failed tables.
           if ! docker run --rm -e PGDATABASE -e PGCONNECT_TIMEOUT -e PGOPTIONS \

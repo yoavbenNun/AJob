@@ -1,5 +1,8 @@
 # Project Best Practices
 
+- Backup inventory checks must distinguish mandatory storage from optional
+  migrations; schema-wide dumps must still include optional tables when present.
+
 - An encrypted backup still needs completeness checks: require the AJob table
   inventory, let inaccessible/RLS-filtered dumps fail, and certify recovery only
   after an error-free isolated restore. Never retain plaintext dump artifacts.
