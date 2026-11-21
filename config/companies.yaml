@@ -1,4 +1,12 @@
 companies:
+  - name: Earnix
+    # Complete official search snapshot; scoped details retain academic requirements.
+    careers_url: https://earnix.com/our-story/careers/
+    enabled: true
+    job_url_patterns:
+      - /career/
+    allowed_job_hosts:
+      - earnix.com
   - name: Stratasys
     careers_url: https://careers.stratasys.com/search/
     enabled: true

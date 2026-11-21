@@ -623,6 +623,20 @@ def _listing_signature(page: Page) -> tuple[str, ...]:
 
 def _enrich_job(browser: Browser, job: JobPosting, timeout_ms: int) -> str | None:
     """Populate full page text and a focused requirements excerpt, best effort."""
+    if urlsplit(job.source).hostname == "earnix.com":
+        if job.description:
+            return None
+        try:
+            from src.scrapers.earnix import extract_detail
+            from src.scrapers.official_sources import _read
+            description = extract_detail(job, _read(job.job_url, max(1, timeout_ms // 1000)))
+            job.description = description
+            job.requirements = extract_requirements(description)
+            return None
+        except Exception:
+            # Keep this failure local to the posting. The worker continues other
+            # discoveries and reports incomplete coverage through its error event.
+            return 'JobDetailUnavailable'
     if '.myworkdayjobs.com/' in job.source:
         try:
             detail = fetch_workday_detail(job.source, job.job_url, job.title,
