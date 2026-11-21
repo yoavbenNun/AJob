@@ -143,6 +143,20 @@ def classify_job(job: JobPosting) -> FilterDecision:
             _normalize(re.sub(r"\bnot only\b", "", part, flags=re.IGNORECASE))
             for part in re.split(r"[.;!\n]|\bbut\b", responsibility_text, flags=re.IGNORECASE)
         )
+        # Coded tests in an existing framework are software work too. Keep the
+        # action, language and framework in one affirmative duty clause so a
+        # manual testing role's separate Python qualification cannot qualify it.
+        if _contains_phrase(title, "automation"):
+            develops_automation = develops_automation or any(
+                _positive_software_phrase(clause, match.group())
+                and any(_contains_phrase(clause, language) for language in
+                        ("python", "java", "c#", "c++", "javascript", "typescript"))
+                and re.search(r"\b(?:integration\s+)?test(?:ing)?\s+framework\b", clause)
+                for clause in software_clauses
+                for match in re.finditer(
+                    r"\b(?:develop(?:ing)?|extend(?:ing)?|writ(?:e|ing)|implement(?:ing)?)\b"
+                    r"[^.;!\n]{0,70}\bautomated tests?\b", clause)
+            )
         develops_software = any(
             any(_positive_software_phrase(clause, term) for term in detail_terms)
             for clause in software_clauses

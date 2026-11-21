@@ -15,7 +15,7 @@ from src.urls import canonical_url
 
 def supported(company: Company) -> bool:
     host = urlsplit(company.careers_url).hostname
-    return host in {"www.taboola.com", "www.fiverr.com", "careers.lightricks.com", "elbitsystemscareer.com", "careers.qualcomm.com", "careers.stratasys.com", "careers.meliopayments.com"}
+    return host in {"www.taboola.com", "www.fiverr.com", "careers.lightricks.com", "elbitsystemscareer.com", "careers.qualcomm.com", "careers.stratasys.com", "careers.meliopayments.com", "earnix.com"}
 
 
 def _read(url, timeout):
@@ -96,7 +96,10 @@ def fetch_jobs(company, timeout_ms):
     metrics = dict(raw_listings=0, invalid_listing=0, duplicates_avoided=0,
                    page_limit_reached=False, location_filter_status="not_applied")
     host = urlsplit(company.careers_url).hostname
-    if host == "elbitsystemscareer.com":
+    if host == "earnix.com":
+        from src.scrapers.earnix import extract_jobs
+        jobs = extract_jobs(company, _read(company.careers_url, timeout), metrics)
+    elif host == "elbitsystemscareer.com":
         # One complete snapshot, advertised by the employer's own search page;
         # no 25-card browser pagination or per-posting detail requests.
         items = json.loads(_read("https://elbitsystemscareer.com/cron/jobs.json", timeout))

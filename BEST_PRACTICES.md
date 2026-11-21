@@ -448,6 +448,12 @@ reusable lesson appears.
 
 ## Career platform adapters
 
+- Earnix embeds its complete search cards in hidden markup. Verify their unique
+  count against the advertised total, retain explicit card locations, and bind
+  scoped description/requirements to the canonical URL, title and Comeet ID.
+  A coded-test duty in an existing Python framework can establish software work;
+  separate manual testing and qualification-only language cannot establish it.
+
 - A healthy empty retired ATS can hide an employer's recruiting migration.
   Follow the employer's current official careers links to verify the replacement;
   preserve old rows/statuses and do not infer closure or cross-ATS identity matches.

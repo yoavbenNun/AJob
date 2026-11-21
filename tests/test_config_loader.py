@@ -74,7 +74,11 @@ def test_default_company_sources_use_safe_enabled_and_disabled_entries() -> None
     assert companies["Wix"].enabled is True
     assert companies["AppsFlyer"].enabled is True
     assert companies["SAP"].enabled is True
-    assert sum(company.enabled for company in loaded) == 51
+    assert companies["Earnix"].enabled is True
+    assert companies["Earnix"].careers_url == "https://earnix.com/our-story/careers/"
+    assert companies["Earnix"].allowed_job_hosts == ("earnix.com",)
+    assert companies["Earnix"].job_url_patterns == ("/career/",)
+    assert sum(company.enabled for company in loaded) == 52
     assert companies["Stratasys"].careers_url == "https://careers.stratasys.com/search/"
     for name in (
         "Similarweb", "Cisco", "Palo Alto Networks / CyberArk (Idira)", "Taboola", "Fiverr",
