@@ -86,6 +86,8 @@ reusable lesson appears.
   recognize only a structurally verified posting header, never a city mentioned
   in general prose. Keep missing graduation or completed-semester evidence
   reviewable rather than assuming eligibility.
+  Mobileye Algorithms student headers use both Hybrid and On-Site. Retain the
+  explicit country, bounded header position and adjacent apply control checks.
 
 - Test mobile note editing against visualViewport changes as well as layout
   resizes; virtual keyboards and pinch zoom can otherwise hide the editor.

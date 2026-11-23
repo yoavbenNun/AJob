@@ -115,7 +115,7 @@ def resolve_job_destination(location: str, description: str) -> str:
     # adjacent apply control; a mention of Israel in prose is not a location.
     for index, line in enumerate(lines[:12]):
         header = re.fullmatch(
-            r"([A-Za-z][A-Za-z .'-]{1,60},\s*Israel)R&D\s*[–-]\s*Software\s*/Student\s*/On-Site",
+            r"([A-Za-z][A-Za-z .'-]{1,60},\s*Israel)R&D\s*[–-]\s*(?:Software|Algorithms)\s*/Student\s*/(?:On-Site|Hybrid)",
             line, flags=re.IGNORECASE,
         )
         if header and index + 1 < len(lines) and lines[index + 1].casefold() == "apply for this job":
